@@ -33,6 +33,12 @@
       "_uiHints": {
         "conf": {},
         "schema": {}
+      },
+      "_confDescriptions": {
+        "timeout": "Max seconds the Python block may run before being killed.",
+        "max_output_lines": "Cap on captured stdout/stderr lines; extra lines are truncated.",
+        "max_output_bytes": "Cap on captured stdout/stderr bytes; returns truncated:true when hit.",
+        "python_bin": "Python interpreter to invoke (e.g. python3, /usr/bin/python3.11)."
       }
     },
     {
@@ -85,6 +91,24 @@
         "schema": {
           "notebook_path": { "kind": "dropdown", "source": "notebookFiles", "dependsOn": "conf.workspace_key" }
         }
+      },
+      "_confDescriptions": {
+        "region": "OCI region. Auto-filled from aidp-deploy.config.json. (e.g. us-ashburn-1)",
+        "aidp_endpoint": "AIDP control-plane endpoint. Auto-derived from region (readonly).",
+        "lake_ocid": "Data Lake OCID. Auto-filled from aidp-deploy.config.json.",
+        "ws_host": "AIDP workspace host (ws/wss URL for kernel connection). Auto-derived from region/workspace.",
+        "workspace_key": "AIDP workspace UUID. Auto-filled from aidp-deploy.config.json.",
+        "cluster_key": "Cluster UUID for kernel execution. AIDP Console -> Compute -> click cluster -> URL.",
+        "oci_config_profile": "OCI config profile to use from ~/.oci/config (default DEFAULT).",
+        "execution_timeout": "Max seconds to wait for a single notebook cell to finish.",
+        "connect_timeout": "Seconds to wait when opening the workspace/kernel websocket connection.",
+        "max_cells": "Cap on number of code cells executed from the notebook.",
+        "max_output_chars": "Per-cell output character cap; extra is truncated.",
+        "max_notebook_bytes": "Cap on .ipynb size read from workspace; larger files are rejected.",
+        "ws_retries": "Number of websocket reconnect attempts on transient kernel errors.",
+        "default_notebook_path": "Fallback Workspace notebook path used when schema notebook_path is empty.",
+        "api_version": "AIDP REST API version. Auto-filled (default 20260430).",
+        "service_path": "AIDP REST service path (default aiDataPlatforms)."
       }
     }
   ]

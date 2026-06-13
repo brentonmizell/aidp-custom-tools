@@ -27,6 +27,11 @@
         {"name": "output_path", "type": "string", "description": "Workspace path to write to. Required for parquet/excel output."}
       ],
       "conf": {"base_dir": "/workspace", "max_rows": 100000, "max_bytes": 104857600},
+      "_confDescriptions": {
+        "base_dir": "Root workspace directory for resolving input_path/output_path. Paths outside this dir are rejected (default /workspace).",
+        "max_rows": "Maximum number of rows to read/write; returns truncated:true when hit (default 100000).",
+        "max_bytes": "Cap on response/file bytes; returns truncated:true when hit (default 104857600 = 100MB)."
+      },
       "_uiHints": {
         "conf": {
           "base_dir": {"kind": "readonly"},

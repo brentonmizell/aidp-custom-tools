@@ -12,7 +12,10 @@
           "name": "operation",
           "type": "string",
           "description": "'get' (default) to read a file, or 'list' to list a volume/folder.",
-          "enum": ["get", "list"],
+          "enum": [
+            "get",
+            "list"
+          ],
           "default": "get"
         },
         {
@@ -43,7 +46,7 @@
       ],
       "conf": {
         "region": "us-ashburn-1",
-        "data_lake_ocid": "",
+        "data_lake_ocid": "ocid1.aidataplatform.oc1.iad.amaaaaaawah6xyqaic64ra5oaflf6hx6lnbuybhxxukkejoa2huz7iyq4tzq",
         "api_version": "20260430",
         "catalog": "",
         "schema": "",
@@ -52,9 +55,9 @@
         "timeout": 30,
         "max_bytes": 5000000,
         "auth_mode": "resource_principal",
-        "tenancy_ocid": "",
-        "user_ocid": "",
-        "fingerprint": "",
+        "tenancy_ocid": "ocid1.tenancy.oc1..aaaaaaaapbfjybybo2ry37rdu2brudxyo3vgy6zwysu352cls5hrc57eil7q",
+        "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
+        "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
         "pass_phrase": "",
         "service_path": "aiDataPlatforms"
@@ -64,23 +67,94 @@
       },
       "_uiHints": {
         "conf": {
-          "region": { "kind": "dropdown", "source": "regions" },
-          "data_lake_ocid": { "kind": "dropdown", "source": "dataLakes" },
-          "catalog": { "kind": "dropdown", "source": "catalogs" },
-          "schema": { "kind": "dropdown", "source": "schemas", "dependsOn": "catalog" },
-          "volume": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" },
-          "volume_key": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" },
-          "auth_mode": { "kind": "enum", "values": ["resource_principal", "user_principal", "instance_principal"] },
-          "private_key_content": { "kind": "secret" },
-          "pass_phrase": { "kind": "secret" }
+          "region": {
+            "kind": "dropdown",
+            "source": "regions"
+          },
+          "data_lake_ocid": {
+            "kind": "dropdown",
+            "source": "dataLakes"
+          },
+          "catalog": {
+            "kind": "dropdown",
+            "source": "catalogs"
+          },
+          "schema": {
+            "kind": "dropdown",
+            "source": "schemas",
+            "dependsOn": "catalog"
+          },
+          "volume": {
+            "kind": "dropdown",
+            "source": "volumes",
+            "dependsOn": "schema"
+          },
+          "volume_key": {
+            "kind": "dropdown",
+            "source": "volumes",
+            "dependsOn": "schema"
+          },
+          "auth_mode": {
+            "kind": "enum",
+            "values": [
+              "resource_principal",
+              "user_principal",
+              "instance_principal"
+            ]
+          },
+          "private_key_content": {
+            "kind": "secret"
+          },
+          "pass_phrase": {
+            "kind": "secret"
+          }
         },
         "schema": {
-          "operation": { "kind": "enum", "values": ["get", "list"] },
-          "catalog": { "kind": "dropdown", "source": "catalogs" },
-          "schema": { "kind": "dropdown", "source": "schemas", "dependsOn": "catalog" },
-          "volume": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" },
-          "volume_key": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" }
+          "operation": {
+            "kind": "enum",
+            "values": [
+              "get",
+              "list"
+            ]
+          },
+          "catalog": {
+            "kind": "dropdown",
+            "source": "catalogs"
+          },
+          "schema": {
+            "kind": "dropdown",
+            "source": "schemas",
+            "dependsOn": "catalog"
+          },
+          "volume": {
+            "kind": "dropdown",
+            "source": "volumes",
+            "dependsOn": "schema"
+          },
+          "volume_key": {
+            "kind": "dropdown",
+            "source": "volumes",
+            "dependsOn": "schema"
+          }
         }
+      },
+      "_confDescriptions": {
+        "region": "OCI region. Auto-filled from aidp-deploy.config.json. (e.g. us-ashburn-1)",
+        "data_lake_ocid": "AIDP Data Lake OCID. Auto-filled from aidp-deploy.config.json. AIDP Console -> top-right -> Workspace info.",
+        "api_version": "AIDP REST API version. Auto-filled (default 20260430).",
+        "catalog": "Standard catalog NAME. AIDP Console -> Catalogs -> Standard catalogs. Leave blank if using volume_key.",
+        "schema": "Schema NAME within the catalog. AIDP Console -> Catalogs -> <catalog> -> Schemas. Leave blank if using volume_key.",
+        "volume": "Volume NAME within the schema. AIDP Console -> Catalogs -> <catalog> -> <schema> -> Volumes. Leave blank if using volume_key.",
+        "volume_key": "Volume UUID. AIDP Console -> Volumes -> click -> URL contains the key. Alternative to catalog/schema/volume names.",
+        "timeout": "HTTP timeout in seconds.",
+        "max_bytes": "Cap on response/file bytes; returns truncated:true when hit.",
+        "auth_mode": "Auth flavor: resource_principal (default, on-cluster), user_principal, or instance_principal.",
+        "tenancy_ocid": "OCI Tenancy OCID. Auto-filled from ~/.oci/config.",
+        "user_ocid": "OCI User OCID. Auto-filled from ~/.oci/config.",
+        "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
+        "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
+        "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
+        "service_path": "AIDP REST service path (default aiDataPlatforms)."
       }
     },
     {
@@ -122,7 +196,7 @@
       ],
       "conf": {
         "region": "us-ashburn-1",
-        "data_lake_ocid": "",
+        "data_lake_ocid": "ocid1.aidataplatform.oc1.iad.amaaaaaawah6xyqaic64ra5oaflf6hx6lnbuybhxxukkejoa2huz7iyq4tzq",
         "api_version": "20260430",
         "catalog": "",
         "schema": "",
@@ -130,9 +204,9 @@
         "volume_key": "",
         "timeout": 30,
         "auth_mode": "resource_principal",
-        "tenancy_ocid": "",
-        "user_ocid": "",
-        "fingerprint": "",
+        "tenancy_ocid": "ocid1.tenancy.oc1..aaaaaaaapbfjybybo2ry37rdu2brudxyo3vgy6zwysu352cls5hrc57eil7q",
+        "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
+        "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
         "pass_phrase": "",
         "service_path": "aiDataPlatforms"
@@ -142,22 +216,86 @@
       },
       "_uiHints": {
         "conf": {
-          "region": { "kind": "dropdown", "source": "regions" },
-          "data_lake_ocid": { "kind": "dropdown", "source": "dataLakes" },
-          "catalog": { "kind": "dropdown", "source": "catalogs" },
-          "schema": { "kind": "dropdown", "source": "schemas", "dependsOn": "catalog" },
-          "volume": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" },
-          "volume_key": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" },
-          "auth_mode": { "kind": "enum", "values": ["resource_principal", "user_principal", "instance_principal"] },
-          "private_key_content": { "kind": "secret" },
-          "pass_phrase": { "kind": "secret" }
+          "region": {
+            "kind": "dropdown",
+            "source": "regions"
+          },
+          "data_lake_ocid": {
+            "kind": "dropdown",
+            "source": "dataLakes"
+          },
+          "catalog": {
+            "kind": "dropdown",
+            "source": "catalogs"
+          },
+          "schema": {
+            "kind": "dropdown",
+            "source": "schemas",
+            "dependsOn": "catalog"
+          },
+          "volume": {
+            "kind": "dropdown",
+            "source": "volumes",
+            "dependsOn": "schema"
+          },
+          "volume_key": {
+            "kind": "dropdown",
+            "source": "volumes",
+            "dependsOn": "schema"
+          },
+          "auth_mode": {
+            "kind": "enum",
+            "values": [
+              "resource_principal",
+              "user_principal",
+              "instance_principal"
+            ]
+          },
+          "private_key_content": {
+            "kind": "secret"
+          },
+          "pass_phrase": {
+            "kind": "secret"
+          }
         },
         "schema": {
-          "catalog": { "kind": "dropdown", "source": "catalogs" },
-          "schema": { "kind": "dropdown", "source": "schemas", "dependsOn": "catalog" },
-          "volume": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" },
-          "volume_key": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" }
+          "catalog": {
+            "kind": "dropdown",
+            "source": "catalogs"
+          },
+          "schema": {
+            "kind": "dropdown",
+            "source": "schemas",
+            "dependsOn": "catalog"
+          },
+          "volume": {
+            "kind": "dropdown",
+            "source": "volumes",
+            "dependsOn": "schema"
+          },
+          "volume_key": {
+            "kind": "dropdown",
+            "source": "volumes",
+            "dependsOn": "schema"
+          }
         }
+      },
+      "_confDescriptions": {
+        "region": "OCI region. Auto-filled from aidp-deploy.config.json. (e.g. us-ashburn-1)",
+        "data_lake_ocid": "AIDP Data Lake OCID. Auto-filled from aidp-deploy.config.json. AIDP Console -> top-right -> Workspace info.",
+        "api_version": "AIDP REST API version. Auto-filled (default 20260430).",
+        "catalog": "Standard catalog NAME. AIDP Console -> Catalogs -> Standard catalogs. Leave blank if using volume_key.",
+        "schema": "Schema NAME within the catalog. AIDP Console -> Catalogs -> <catalog> -> Schemas. Leave blank if using volume_key.",
+        "volume": "Volume NAME within the schema. AIDP Console -> Catalogs -> <catalog> -> <schema> -> Volumes. Leave blank if using volume_key.",
+        "volume_key": "Volume UUID. AIDP Console -> Volumes -> click -> URL contains the key. Alternative to catalog/schema/volume names.",
+        "timeout": "HTTP timeout in seconds.",
+        "auth_mode": "Auth flavor: resource_principal (default, on-cluster), user_principal, or instance_principal.",
+        "tenancy_ocid": "OCI Tenancy OCID. Auto-filled from ~/.oci/config.",
+        "user_ocid": "OCI User OCID. Auto-filled from ~/.oci/config.",
+        "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
+        "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
+        "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
+        "service_path": "AIDP REST service path (default aiDataPlatforms)."
       }
     },
     {
@@ -170,7 +308,14 @@
           "name": "list",
           "type": "string",
           "description": "What to list: catalogs, schemas, tables, volumes, knowledgeBases, or 'table' to describe one.",
-          "enum": ["catalogs", "schemas", "tables", "volumes", "knowledgeBases", "table"],
+          "enum": [
+            "catalogs",
+            "schemas",
+            "tables",
+            "volumes",
+            "knowledgeBases",
+            "table"
+          ],
           "default": "catalogs"
         },
         {
@@ -191,13 +336,13 @@
       ],
       "conf": {
         "region": "us-ashburn-1",
-        "data_lake_ocid": "",
+        "data_lake_ocid": "ocid1.aidataplatform.oc1.iad.amaaaaaawah6xyqaic64ra5oaflf6hx6lnbuybhxxukkejoa2huz7iyq4tzq",
         "api_version": "20260430",
         "timeout": 30,
         "auth_mode": "resource_principal",
-        "tenancy_ocid": "",
-        "user_ocid": "",
-        "fingerprint": "",
+        "tenancy_ocid": "ocid1.tenancy.oc1..aaaaaaaapbfjybybo2ry37rdu2brudxyo3vgy6zwysu352cls5hrc57eil7q",
+        "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
+        "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
         "pass_phrase": "",
         "service_path": "aiDataPlatforms"
@@ -207,18 +352,69 @@
       },
       "_uiHints": {
         "conf": {
-          "region": { "kind": "dropdown", "source": "regions" },
-          "data_lake_ocid": { "kind": "dropdown", "source": "dataLakes" },
-          "auth_mode": { "kind": "enum", "values": ["resource_principal", "user_principal", "instance_principal"] },
-          "private_key_content": { "kind": "secret" },
-          "pass_phrase": { "kind": "secret" }
+          "region": {
+            "kind": "dropdown",
+            "source": "regions"
+          },
+          "data_lake_ocid": {
+            "kind": "dropdown",
+            "source": "dataLakes"
+          },
+          "auth_mode": {
+            "kind": "enum",
+            "values": [
+              "resource_principal",
+              "user_principal",
+              "instance_principal"
+            ]
+          },
+          "private_key_content": {
+            "kind": "secret"
+          },
+          "pass_phrase": {
+            "kind": "secret"
+          }
         },
         "schema": {
-          "list": { "kind": "enum", "values": ["catalogs", "schemas", "tables", "volumes", "knowledgeBases", "table"] },
-          "catalog_key": { "kind": "dropdown", "source": "catalogs" },
-          "schema_key": { "kind": "dropdown", "source": "schemas", "dependsOn": "catalog_key" },
-          "table_key": { "kind": "dropdown", "source": "tables", "dependsOn": "schema_key" }
+          "list": {
+            "kind": "enum",
+            "values": [
+              "catalogs",
+              "schemas",
+              "tables",
+              "volumes",
+              "knowledgeBases",
+              "table"
+            ]
+          },
+          "catalog_key": {
+            "kind": "dropdown",
+            "source": "catalogs"
+          },
+          "schema_key": {
+            "kind": "dropdown",
+            "source": "schemas",
+            "dependsOn": "catalog_key"
+          },
+          "table_key": {
+            "kind": "dropdown",
+            "source": "tables",
+            "dependsOn": "schema_key"
+          }
         }
+      },
+      "_confDescriptions": {
+        "region": "OCI region. Auto-filled from aidp-deploy.config.json. (e.g. us-ashburn-1)",
+        "data_lake_ocid": "AIDP Data Lake OCID. Auto-filled from aidp-deploy.config.json. AIDP Console -> top-right -> Workspace info.",
+        "api_version": "AIDP REST API version. Auto-filled (default 20260430).",
+        "timeout": "HTTP timeout in seconds.",
+        "auth_mode": "Auth flavor: resource_principal (default, on-cluster), user_principal, or instance_principal.",
+        "tenancy_ocid": "OCI Tenancy OCID. Auto-filled from ~/.oci/config.",
+        "user_ocid": "OCI User OCID. Auto-filled from ~/.oci/config.",
+        "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
+        "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
+        "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
+        "service_path": "AIDP REST service path (default aiDataPlatforms)."
       }
     },
     {
@@ -231,7 +427,10 @@
           "name": "operation",
           "type": "string",
           "description": "'list_jobs' (default) to see jobs, or 'trigger' to start a run.",
-          "enum": ["list_jobs", "trigger"],
+          "enum": [
+            "list_jobs",
+            "trigger"
+          ],
           "default": "list_jobs"
         },
         {
@@ -252,14 +451,14 @@
       ],
       "conf": {
         "region": "us-ashburn-1",
-        "data_lake_ocid": "",
+        "data_lake_ocid": "ocid1.aidataplatform.oc1.iad.amaaaaaawah6xyqaic64ra5oaflf6hx6lnbuybhxxukkejoa2huz7iyq4tzq",
         "api_version": "20260430",
         "kb_key": "",
         "timeout": 30,
         "auth_mode": "resource_principal",
-        "tenancy_ocid": "",
-        "user_ocid": "",
-        "fingerprint": "",
+        "tenancy_ocid": "ocid1.tenancy.oc1..aaaaaaaapbfjybybo2ry37rdu2brudxyo3vgy6zwysu352cls5hrc57eil7q",
+        "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
+        "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
         "pass_phrase": "",
         "service_path": "aiDataPlatforms"
@@ -269,18 +468,65 @@
       },
       "_uiHints": {
         "conf": {
-          "region": { "kind": "dropdown", "source": "regions" },
-          "data_lake_ocid": { "kind": "dropdown", "source": "dataLakes" },
-          "kb_key": { "kind": "dropdown", "source": "knowledgeBases" },
-          "auth_mode": { "kind": "enum", "values": ["resource_principal", "user_principal", "instance_principal"] },
-          "private_key_content": { "kind": "secret" },
-          "pass_phrase": { "kind": "secret" }
+          "region": {
+            "kind": "dropdown",
+            "source": "regions"
+          },
+          "data_lake_ocid": {
+            "kind": "dropdown",
+            "source": "dataLakes"
+          },
+          "kb_key": {
+            "kind": "dropdown",
+            "source": "knowledgeBases"
+          },
+          "auth_mode": {
+            "kind": "enum",
+            "values": [
+              "resource_principal",
+              "user_principal",
+              "instance_principal"
+            ]
+          },
+          "private_key_content": {
+            "kind": "secret"
+          },
+          "pass_phrase": {
+            "kind": "secret"
+          }
         },
         "schema": {
-          "operation": { "kind": "enum", "values": ["list_jobs", "trigger"] },
-          "kb_key": { "kind": "dropdown", "source": "knowledgeBases" },
-          "job_key": { "kind": "dropdown", "source": "jobs", "dependsOn": "kb_key" }
+          "operation": {
+            "kind": "enum",
+            "values": [
+              "list_jobs",
+              "trigger"
+            ]
+          },
+          "kb_key": {
+            "kind": "dropdown",
+            "source": "knowledgeBases"
+          },
+          "job_key": {
+            "kind": "dropdown",
+            "source": "jobs",
+            "dependsOn": "kb_key"
+          }
         }
+      },
+      "_confDescriptions": {
+        "region": "OCI region. Auto-filled from aidp-deploy.config.json. (e.g. us-ashburn-1)",
+        "data_lake_ocid": "AIDP Data Lake OCID. Auto-filled from aidp-deploy.config.json. AIDP Console -> top-right -> Workspace info.",
+        "api_version": "AIDP REST API version. Auto-filled (default 20260430).",
+        "kb_key": "Knowledge Base key (catalog.schema.kbName). AIDP Console -> Knowledge Bases -> URL.",
+        "timeout": "HTTP timeout in seconds.",
+        "auth_mode": "Auth flavor: resource_principal (default, on-cluster), user_principal, or instance_principal.",
+        "tenancy_ocid": "OCI Tenancy OCID. Auto-filled from ~/.oci/config.",
+        "user_ocid": "OCI User OCID. Auto-filled from ~/.oci/config.",
+        "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
+        "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
+        "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
+        "service_path": "AIDP REST service path (default aiDataPlatforms)."
       }
     },
     {
@@ -293,7 +539,10 @@
           "name": "operation",
           "type": "string",
           "description": "'get' (default) to read a file, or 'list' to list a folder.",
-          "enum": ["get", "list"],
+          "enum": [
+            "get",
+            "list"
+          ],
           "default": "get"
         },
         {
@@ -304,15 +553,15 @@
       ],
       "conf": {
         "region": "us-ashburn-1",
-        "data_lake_ocid": "",
-        "workspace_id": "",
+        "data_lake_ocid": "ocid1.aidataplatform.oc1.iad.amaaaaaawah6xyqaic64ra5oaflf6hx6lnbuybhxxukkejoa2huz7iyq4tzq",
+        "workspace_id": "74effa91-f4c9-4e1a-be49-29af03e791e5",
         "api_version": "20260430",
         "timeout": 30,
         "max_bytes": 5000000,
         "auth_mode": "resource_principal",
-        "tenancy_ocid": "",
-        "user_ocid": "",
-        "fingerprint": "",
+        "tenancy_ocid": "ocid1.tenancy.oc1..aaaaaaaapbfjybybo2ry37rdu2brudxyo3vgy6zwysu352cls5hrc57eil7q",
+        "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
+        "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
         "pass_phrase": "",
         "service_path": "aiDataPlatforms"
@@ -322,16 +571,58 @@
       },
       "_uiHints": {
         "conf": {
-          "region": { "kind": "dropdown", "source": "regions" },
-          "data_lake_ocid": { "kind": "dropdown", "source": "dataLakes" },
-          "workspace_id": { "kind": "dropdown", "source": "workspaces", "dependsOn": "data_lake_ocid" },
-          "auth_mode": { "kind": "enum", "values": ["resource_principal", "user_principal", "instance_principal"] },
-          "private_key_content": { "kind": "secret" },
-          "pass_phrase": { "kind": "secret" }
+          "region": {
+            "kind": "dropdown",
+            "source": "regions"
+          },
+          "data_lake_ocid": {
+            "kind": "dropdown",
+            "source": "dataLakes"
+          },
+          "workspace_id": {
+            "kind": "dropdown",
+            "source": "workspaces",
+            "dependsOn": "data_lake_ocid"
+          },
+          "auth_mode": {
+            "kind": "enum",
+            "values": [
+              "resource_principal",
+              "user_principal",
+              "instance_principal"
+            ]
+          },
+          "private_key_content": {
+            "kind": "secret"
+          },
+          "pass_phrase": {
+            "kind": "secret"
+          }
         },
         "schema": {
-          "operation": { "kind": "enum", "values": ["get", "list"] }
+          "operation": {
+            "kind": "enum",
+            "values": [
+              "get",
+              "list"
+            ]
+          }
         }
+      },
+      "_confDescriptions": {
+        "region": "OCI region. Auto-filled from aidp-deploy.config.json. (e.g. us-ashburn-1)",
+        "data_lake_ocid": "AIDP Data Lake OCID. Auto-filled from aidp-deploy.config.json. AIDP Console -> top-right -> Workspace info.",
+        "workspace_id": "AIDP Workspace UUID. Auto-filled from aidp-deploy.config.json.",
+        "api_version": "AIDP REST API version. Auto-filled (default 20260430).",
+        "timeout": "HTTP timeout in seconds.",
+        "max_bytes": "Cap on response/file bytes; returns truncated:true when hit.",
+        "auth_mode": "Auth flavor: resource_principal (default, on-cluster), user_principal, or instance_principal.",
+        "tenancy_ocid": "OCI Tenancy OCID. Auto-filled from ~/.oci/config.",
+        "user_ocid": "OCI User OCID. Auto-filled from ~/.oci/config.",
+        "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
+        "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
+        "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
+        "service_path": "AIDP REST service path (default aiDataPlatforms)."
       }
     }
   ]

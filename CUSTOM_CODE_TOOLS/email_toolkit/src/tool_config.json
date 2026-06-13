@@ -78,6 +78,18 @@
           "content_type": { "kind": "enum", "values": ["plain", "html"] },
           "priority": { "kind": "enum", "values": ["low", "normal", "high"] }
         }
+      },
+      "_confDescriptions": {
+        "smtp_host": "SMTP server hostname (e.g. smtp.email.us-ashburn-1.oci.oraclecloud.com for OCI Email Delivery).",
+        "smtp_port": "SMTP server port. 587 for STARTTLS (default), 465 for SSL, 25 for plain.",
+        "smtp_username": "(secret) SMTP auth username. OCI Console → Identity → Users → SMTP Credentials. Provide via secret store.",
+        "smtp_password": "(secret) SMTP auth password — DO NOT commit. Provide via secret store at deploy time.",
+        "from_addr": "Sender 'From' address. Must be a verified/approved sender on your SMTP relay.",
+        "use_starttls": "If true, upgrade plaintext connection to TLS via STARTTLS (typical for port 587).",
+        "use_ssl": "If true, use implicit SSL/TLS from the start (typical for port 465). Mutually exclusive with STARTTLS.",
+        "timeout": "SMTP connection/send timeout in seconds.",
+        "max_retries": "Number of retry attempts on transient SMTP failures.",
+        "allowed_recipient_domains": "Optional comma-separated allowlist of recipient domains (e.g. 'acme.com,partner.io'). Empty = no restriction."
       }
     },
     {
@@ -141,6 +153,16 @@
           "imap_username": { "kind": "secret" }
         },
         "schema": {}
+      },
+      "_confDescriptions": {
+        "imap_host": "IMAP server hostname (e.g. imap.gmail.com, outlook.office365.com).",
+        "imap_port": "IMAP server port. 993 for SSL (default), 143 for plain/STARTTLS.",
+        "imap_username": "(secret) IMAP login (usually the full email address). Provide via secret store.",
+        "imap_password": "(secret) IMAP password or app-password — DO NOT commit. Provide via secret store at deploy time.",
+        "use_ssl": "If true, use implicit SSL/TLS (typical for port 993).",
+        "timeout": "IMAP connection/read timeout in seconds.",
+        "max_messages": "Hard cap on messages returned per call, regardless of requested limit.",
+        "max_body_bytes": "Per-message body byte cap; longer bodies are truncated with truncated:true."
       }
     }
   ]

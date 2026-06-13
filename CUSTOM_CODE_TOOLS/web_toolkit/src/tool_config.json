@@ -11,6 +11,13 @@
         {"name": "url", "type": "string", "description": "The URL to fetch."}
       ],
       "conf": {"timeout": 30, "max_chars": 20000, "max_bytes": 5242880, "return_raw_html": false, "user_agent": "AIDP-Agent/1.0"},
+      "_confDescriptions": {
+        "timeout": "HTTP timeout in seconds for the fetch request.",
+        "max_chars": "Cap on extracted readable text length; returns truncated:true when hit.",
+        "max_bytes": "Cap on raw response bytes downloaded; returns truncated:true when hit.",
+        "return_raw_html": "If true, return raw HTML alongside extracted text. Default false.",
+        "user_agent": "User-Agent header sent with the HTTP request. Default AIDP-Agent/1.0."
+      },
       "_uiHints": {
         "conf": {
           "return_raw_html": {"kind": "enum", "values": ["true", "false"]}
@@ -29,6 +36,12 @@
         {"name": "webhook_url", "type": "string", "description": "Optional override of the configured webhook URL (only used when conf.webhook_url is empty)."}
       ],
       "conf": {"webhook_url": "", "style": "slack", "method": "POST", "timeout": 30},
+      "_confDescriptions": {
+        "webhook_url": "(secret) Incoming webhook URL — DO NOT commit. Provide via secret store at deploy time. Slack/Teams app config or generic endpoint.",
+        "style": "Payload format: slack | teams | generic | generic_json. Selects how message/title are wrapped.",
+        "method": "HTTP method used to deliver the webhook: POST (default) or PUT.",
+        "timeout": "HTTP timeout in seconds for the webhook delivery."
+      },
       "_uiHints": {
         "conf": {
           "webhook_url": {"kind": "secret"},

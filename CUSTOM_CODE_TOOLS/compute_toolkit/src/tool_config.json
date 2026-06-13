@@ -40,6 +40,10 @@
         "schema": {
           "mode": { "kind": "enum", "values": ["eval", "stats"] }
         }
+      },
+      "_confDescriptions": {
+        "max_expression_length": "Max characters allowed in an arithmetic expression (eval mode). Guards against pathological inputs.",
+        "max_stats_values": "Max number of values accepted in stats mode. Caps memory/CPU for percentile + std computations."
       }
     },
     {
@@ -76,6 +80,9 @@
         "schema": {
           "mode": { "kind": "enum", "values": ["best_effort", "fail_fast"] }
         }
+      },
+      "_confDescriptions": {
+        "max_violations": "Max number of schema violations returned in best_effort mode. Prevents oversized error payloads."
       }
     }
   ]

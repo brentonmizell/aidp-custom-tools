@@ -20,6 +20,11 @@
         "max_csv_rows": 1000,
         "max_input_bytes": 26214400
       },
+      "_confDescriptions": {
+        "max_chars": "Cap on extracted text length (characters); output is truncated past this limit.",
+        "max_csv_rows": "Max number of CSV rows to render to text; extra rows are dropped with a truncation marker.",
+        "max_input_bytes": "Max input file size in bytes (decoded from content_base64). Default 26214400 (25 MiB)."
+      },
       "_uiHints": {
         "conf": {
           "max_chars": {"kind": "readonly"},

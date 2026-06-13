@@ -20,6 +20,9 @@
         {"name": "value", "type": "string", "description": "The value to compare against (not needed for is_null/not_null)."}
       ],
       "conf": {"max_results": 1000},
+      "_confDescriptions": {
+        "max_results": "Cap on the number of matching records returned. Prevents oversized payloads back to the agent."
+      },
       "_uiHints": {
         "conf": {},
         "schema": {
@@ -41,6 +44,9 @@
         {"name": "key", "type": "string", "description": "The id field used to match records across the two sets."}
       ],
       "conf": {"tolerance": 1e-9},
+      "_confDescriptions": {
+        "tolerance": "Numeric equality tolerance for float field comparisons. Values within this delta are treated as equal."
+      },
       "_uiHints": {
         "conf": {},
         "schema": {}
@@ -63,6 +69,9 @@
         {"name": "spec", "type": "string", "description": "Operation parameters as a JSON object. select:{columns:[...]}, rename:{map:{old:new}}, sort:{by:[...],ascending:true}, dedupe:{subset:[...]}, groupby:{by:[...],agg:{field:'sum'}}."}
       ],
       "conf": {"max_rows": 5000},
+      "_confDescriptions": {
+        "max_rows": "Cap on rows returned after the operation. Protects the agent context from large result sets."
+      },
       "_uiHints": {
         "conf": {},
         "schema": {

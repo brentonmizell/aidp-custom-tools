@@ -42,6 +42,19 @@
           "auth_type": { "kind": "enum", "values": ["resource_principal", "instance_principal", "api_key"] }
         },
         "schema": {}
+      },
+      "_confDescriptions": {
+        "model_id": "OCI GenAI judge model ID. See .aidp/knowledge/oci-genai-models.md (e.g. cohere.command-a-03-2025, meta.llama-3-70b-instruct, xai.grok-4).",
+        "model_provider": "cohere | generic. Auto-set from model_id family.",
+        "region": "OCI region. Auto-filled from aidp-deploy.config.json. (e.g. us-ashburn-1, us-chicago-1)",
+        "endpoint": "OCI GenAI inference endpoint. Auto-derived from region (readonly).",
+        "compartment_id": "OCI compartment OCID. OCI Console → Identity & Security → Compartments.",
+        "auth_type": "Auth flavor: resource_principal (default, on-cluster), instance_principal, or api_key.",
+        "temperature": "LLM sampling temperature (0.0 = deterministic, recommended for scoring).",
+        "max_tokens": "Max tokens for the judge response (verdict JSON).",
+        "pass_threshold": "Overall score (0-10) at or above which pass=true is returned.",
+        "max_candidate_chars": "Cap on characters of candidate text fed to the judge; longer input is truncated.",
+        "max_rubric_chars": "Cap on characters of rubric text; longer input is truncated."
       }
     },
     {
@@ -84,6 +97,19 @@
           "auth_type": { "kind": "enum", "values": ["resource_principal", "instance_principal", "api_key"] }
         },
         "schema": {}
+      },
+      "_confDescriptions": {
+        "model_id": "OCI GenAI summarizer model ID. See .aidp/knowledge/oci-genai-models.md (e.g. cohere.command-a-03-2025, xai.grok-4).",
+        "model_provider": "cohere | generic. Auto-set from model_id family.",
+        "region": "OCI region. Auto-filled from aidp-deploy.config.json. (e.g. us-ashburn-1, us-chicago-1)",
+        "endpoint": "OCI GenAI inference endpoint. Auto-derived from region (readonly).",
+        "compartment_id": "OCI compartment OCID. OCI Console → Identity & Security → Compartments.",
+        "auth_type": "Auth flavor: resource_principal (default, on-cluster), instance_principal, or api_key.",
+        "temperature": "LLM sampling temperature (0.0-1.0). Low values give more faithful summaries.",
+        "max_tokens": "Max tokens for each summarization step (per-chunk and final reduce).",
+        "chunk_chars": "Map-reduce chunk size in characters. Smaller = more chunks, finer-grained summarization.",
+        "max_chunks": "Hard cap on number of map-reduce chunks; protects against runaway costs.",
+        "max_input_chars": "Hard cap on total input characters; longer text is truncated before chunking."
       }
     },
     {
@@ -136,6 +162,18 @@
         "schema": {
           "input_type": { "kind": "enum", "values": ["search_document", "search_query", "classification", "clustering"] }
         }
+      },
+      "_confDescriptions": {
+        "model_id": "OCI GenAI embeddings model ID (e.g. cohere.embed-english-v3.0, cohere.embed-multilingual-v3.0). See .aidp/knowledge/oci-genai-models.md.",
+        "model_provider": "cohere | generic. Auto-set from model_id family.",
+        "region": "OCI region. Auto-filled from aidp-deploy.config.json. (e.g. us-ashburn-1, us-chicago-1)",
+        "endpoint": "OCI GenAI inference endpoint. Auto-derived from region (readonly).",
+        "compartment_id": "OCI compartment OCID. OCI Console → Identity & Security → Compartments.",
+        "auth_type": "Auth flavor: resource_principal (default, on-cluster), instance_principal, or api_key.",
+        "input_type": "Default embedding input type if not provided per-call: search_document, search_query, classification, or clustering (Cohere semantics).",
+        "max_texts": "Max number of strings per embed request (Cohere limit is 96).",
+        "max_text_chars": "Per-string character cap; longer strings are handled per truncate setting.",
+        "truncate": "How to handle over-length strings: NONE (error), START (drop head), or END (drop tail)."
       }
     }
   ]

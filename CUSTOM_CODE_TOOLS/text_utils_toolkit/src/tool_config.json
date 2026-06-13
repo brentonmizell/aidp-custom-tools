@@ -18,6 +18,10 @@
           "strict": {"kind": "enum", "values": ["true", "false"]}
         },
         "schema": {}
+      },
+      "_confDescriptions": {
+        "autoescape": "Jinja2 autoescape toggle. true escapes HTML-sensitive chars in output; false (default) leaves them as-is.",
+        "strict": "If true, undefined template variables raise an error. If false (default), they render as empty strings."
       }
     },
     {
@@ -40,6 +44,11 @@
         "schema": {
           "mode": {"kind": "enum", "values": ["match", "search", "findall", "sub", "split"]}
         }
+      },
+      "_confDescriptions": {
+        "ignore_case": "Case-insensitive matching (re.IGNORECASE). Default false.",
+        "multiline": "Multiline mode (re.MULTILINE): ^ and $ match at line boundaries. Default false.",
+        "max_matches": "Cap on number of matches returned by findall/split to prevent runaway output. Default 500."
       }
     },
     {
@@ -56,6 +65,10 @@
       "_uiHints": {
         "conf": {},
         "schema": {}
+      },
+      "_confDescriptions": {
+        "max_input_bytes": "Cap on input JSON size in bytes; oversized input is rejected. Default 1048576 (1 MiB).",
+        "max_results": "Cap on number of JSONPath matches returned to prevent runaway output. Default 1000."
       }
     }
   ]

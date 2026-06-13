@@ -12,31 +12,72 @@
           "name": "operation",
           "type": "string",
           "description": "One of: list, get, put, delete.",
-          "enum": ["list", "get", "put", "delete"],
+          "enum": [
+            "list",
+            "get",
+            "put",
+            "delete"
+          ],
           "default": "list"
         },
-        {"name": "name", "type": "string", "description": "Object name/key (or prefix for list)."},
-        {"name": "content", "type": "string", "description": "Text content to write (for put)."}
+        {
+          "name": "name",
+          "type": "string",
+          "description": "Object name/key (or prefix for list)."
+        },
+        {
+          "name": "content",
+          "type": "string",
+          "description": "Text content to write (for put)."
+        }
       ],
       "conf": {
         "bucket": "",
         "namespace": "",
-        "region": "",
+        "region": "us-ashburn-1",
         "prefix": "",
         "max_keys": 200,
         "max_bytes": 1048576,
         "max_retries": 3
       },
-      "auth": {"authType": "OCI_RESOURCE_PRINCIPAL"},
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
       "_uiHints": {
         "conf": {
-          "bucket":    { "kind": "dropdown", "source": "ociBuckets" },
-          "namespace": { "kind": "readonly", "placeholder": "auto-detected from get_namespace()" },
-          "region":    { "kind": "dropdown", "source": "regions" }
+          "bucket": {
+            "kind": "dropdown",
+            "source": "ociBuckets"
+          },
+          "namespace": {
+            "kind": "readonly",
+            "placeholder": "auto-detected from get_namespace()"
+          },
+          "region": {
+            "kind": "dropdown",
+            "source": "regions"
+          }
         },
         "schema": {
-          "operation": { "kind": "enum", "values": ["list", "get", "put", "delete"] }
+          "operation": {
+            "kind": "enum",
+            "values": [
+              "list",
+              "get",
+              "put",
+              "delete"
+            ]
+          }
         }
+      },
+      "_confDescriptions": {
+        "bucket": "Object Storage bucket NAME. OCI Console -> Storage -> Object Storage -> Buckets.",
+        "namespace": "OCI Object Storage namespace (auto-detected if blank). OCI Console -> top-right -> Tenancy info -> Namespace.",
+        "region": "OCI region. Auto-filled from aidp-deploy.config.json. (e.g. us-ashburn-1)",
+        "prefix": "Optional object name prefix filter for list operations (e.g. 'logs/2026/').",
+        "max_keys": "Max objects returned by list operation (default 200).",
+        "max_bytes": "Cap on response/file bytes; returns truncated:true when hit.",
+        "max_retries": "Max retry attempts for transient OCI Object Storage errors (default 3)."
       }
     }
   ]
