@@ -1,0 +1,62 @@
+{
+  "displayName": "Text Utils Toolkit",
+  "description": "Template rendering, regex, and JSONPath transforms.",
+  "tools": [
+    {
+      "toolClassName": "TemplateRenderTool",
+      "displayName": "Render Template",
+      "description": "Render a Jinja2 template using a set of variables. Use to build prompts, message bodies, or request payloads from flow data.",
+      "version": "1.1.0",
+      "schema": [
+        {"name": "template", "type": "string", "description": "The Jinja2 template text, e.g. 'Hi {{ name }}, you have {{ count }} items.'"},
+        {"name": "variables", "type": "string", "description": "Variables to render with, as a JSON object."}
+      ],
+      "conf": {"autoescape": false, "strict": false},
+      "_uiHints": {
+        "conf": {
+          "autoescape": {"kind": "enum", "values": ["true", "false"]},
+          "strict": {"kind": "enum", "values": ["true", "false"]}
+        },
+        "schema": {}
+      }
+    },
+    {
+      "toolClassName": "RegexTool",
+      "displayName": "Regex Extract/Replace",
+      "description": "Extract all matches of a regex from text, or replace matches with a substitution. Use for pulling structured fragments (emails, ids, codes) out of free text or cleaning text.",
+      "version": "1.1.0",
+      "schema": [
+        {"name": "text", "type": "string", "description": "The input text."},
+        {"name": "pattern", "type": "string", "description": "The regular expression."},
+        {"name": "mode", "type": "string", "description": "Regex operation: 'match' (anchored at start), 'search' (first match anywhere), 'findall' (all matches, default), 'sub' (replace), 'split' (split on pattern). Legacy aliases 'extract'->'findall' and 'replace'->'sub' still work.", "enum": ["match", "search", "findall", "sub", "split"], "default": "findall"},
+        {"name": "replacement", "type": "string", "description": "Replacement string when mode is 'sub'. Supports backrefs like \\1."}
+      ],
+      "conf": {"ignore_case": false, "multiline": false, "max_matches": 500},
+      "_uiHints": {
+        "conf": {
+          "ignore_case": {"kind": "enum", "values": ["true", "false"]},
+          "multiline": {"kind": "enum", "values": ["true", "false"]}
+        },
+        "schema": {
+          "mode": {"kind": "enum", "values": ["match", "search", "findall", "sub", "split"]}
+        }
+      }
+    },
+    {
+      "toolClassName": "JsonTransformTool",
+      "displayName": "JSON Transform",
+      "description": "Pull values out of JSON with a JSONPath expression, or reshape JSON into a new object using a field->path mapping. Use to extract the relevant fields from an API response.",
+      "version": "1.1.0",
+      "schema": [
+        {"name": "data", "type": "string", "description": "The JSON to read from (object/array or JSON string)."},
+        {"name": "path", "type": "string", "description": "A single JSONPath expression, e.g. '$.items[*].id'. Use this OR mapping."},
+        {"name": "mapping", "type": "string", "description": "A JSON object of {output_field: jsonpath} to build a new shape. Use this OR path."}
+      ],
+      "conf": {"max_input_bytes": 1048576, "max_results": 1000},
+      "_uiHints": {
+        "conf": {},
+        "schema": {}
+      }
+    }
+  ]
+}

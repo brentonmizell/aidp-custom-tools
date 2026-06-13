@@ -1,0 +1,11 @@
+# Pip dependencies, one per line. Examples (uncomment what you need):
+#
+#   humanize>=4.0
+#   beautifulsoup4>=4.12
+#
+# You do NOT need to list packages already on the runtime: requests, oci,
+# oracledb, numpy, pydantic, jsonschema, aiohttp, httpx, sqlalchemy,
+# cryptography, langchain-core, pyyaml, orjson.
+#
+# Test pods have no network. To use a dep with the Test button, bundle a wheel
+# in wheels/ (see README "Dependencies"). Otherwise deps install at deploy.

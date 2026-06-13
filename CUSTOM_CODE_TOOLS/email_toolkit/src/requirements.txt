@@ -1,0 +1,1 @@
+# stdlib only (smtplib, imaplib, email). No dependencies.

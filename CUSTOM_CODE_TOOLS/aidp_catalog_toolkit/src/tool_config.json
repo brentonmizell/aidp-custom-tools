@@ -1,0 +1,338 @@
+{
+  "displayName": "AIDP Catalog Toolkit",
+  "description": "Read/write Standard Catalog volume files, browse catalog metadata, and trigger KB ingestion.",
+  "tools": [
+    {
+      "toolClassName": "CatalogFileTool",
+      "displayName": "Catalog File Read",
+      "description": "Pull a specific file from a Standard Catalog volume, or list a volume's files. Provide volume_key + path, or catalog/schema/volume names + path. Use to load a known reference document an agent needs.",
+      "version": "1.1.0",
+      "schema": [
+        {
+          "name": "operation",
+          "type": "string",
+          "description": "'get' (default) to read a file, or 'list' to list a volume/folder.",
+          "enum": ["get", "list"],
+          "default": "get"
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "description": "File path within the volume for get (e.g. /safety_manual.md), or folder path for list (default /)."
+        },
+        {
+          "name": "volume_key",
+          "type": "string",
+          "description": "The volume key, if known. Otherwise provide catalog/schema/volume."
+        },
+        {
+          "name": "catalog",
+          "type": "string",
+          "description": "Catalog name (or key) when resolving by name."
+        },
+        {
+          "name": "schema",
+          "type": "string",
+          "description": "Schema name (or key) when resolving by name."
+        },
+        {
+          "name": "volume",
+          "type": "string",
+          "description": "Volume name (or key) when resolving by name."
+        }
+      ],
+      "conf": {
+        "region": "us-ashburn-1",
+        "data_lake_ocid": "",
+        "api_version": "20260430",
+        "catalog": "",
+        "schema": "",
+        "volume": "",
+        "volume_key": "",
+        "timeout": 30,
+        "max_bytes": 5000000,
+        "auth_mode": "resource_principal",
+        "tenancy_ocid": "",
+        "user_ocid": "",
+        "fingerprint": "",
+        "private_key_content": "",
+        "pass_phrase": "",
+        "service_path": "aiDataPlatforms"
+      },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
+      "_uiHints": {
+        "conf": {
+          "region": { "kind": "dropdown", "source": "regions" },
+          "data_lake_ocid": { "kind": "dropdown", "source": "dataLakes" },
+          "catalog": { "kind": "dropdown", "source": "catalogs" },
+          "schema": { "kind": "dropdown", "source": "schemas", "dependsOn": "catalog" },
+          "volume": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" },
+          "volume_key": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" },
+          "auth_mode": { "kind": "enum", "values": ["resource_principal", "user_principal", "instance_principal"] },
+          "private_key_content": { "kind": "secret" },
+          "pass_phrase": { "kind": "secret" }
+        },
+        "schema": {
+          "operation": { "kind": "enum", "values": ["get", "list"] },
+          "catalog": { "kind": "dropdown", "source": "catalogs" },
+          "schema": { "kind": "dropdown", "source": "schemas", "dependsOn": "catalog" },
+          "volume": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" },
+          "volume_key": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" }
+        }
+      }
+    },
+    {
+      "toolClassName": "VolumeWriteTool",
+      "displayName": "Catalog Volume Write",
+      "description": "Write a file into a Standard Catalog volume. Provide volume_key + path + content, or catalog/schema/volume names. Use to persist an agent's output (report, dataset, summary) back into the catalog.",
+      "version": "1.1.0",
+      "schema": [
+        {
+          "name": "path",
+          "type": "string",
+          "description": "Destination file path within the volume (e.g. /reports/summary.md)."
+        },
+        {
+          "name": "content",
+          "type": "string",
+          "description": "The file content to write."
+        },
+        {
+          "name": "volume_key",
+          "type": "string",
+          "description": "The volume key, if known. Otherwise provide catalog/schema/volume."
+        },
+        {
+          "name": "catalog",
+          "type": "string",
+          "description": "Catalog name (or key) when resolving by name."
+        },
+        {
+          "name": "schema",
+          "type": "string",
+          "description": "Schema name (or key) when resolving by name."
+        },
+        {
+          "name": "volume",
+          "type": "string",
+          "description": "Volume name (or key) when resolving by name."
+        }
+      ],
+      "conf": {
+        "region": "us-ashburn-1",
+        "data_lake_ocid": "",
+        "api_version": "20260430",
+        "catalog": "",
+        "schema": "",
+        "volume": "",
+        "volume_key": "",
+        "timeout": 30,
+        "auth_mode": "resource_principal",
+        "tenancy_ocid": "",
+        "user_ocid": "",
+        "fingerprint": "",
+        "private_key_content": "",
+        "pass_phrase": "",
+        "service_path": "aiDataPlatforms"
+      },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
+      "_uiHints": {
+        "conf": {
+          "region": { "kind": "dropdown", "source": "regions" },
+          "data_lake_ocid": { "kind": "dropdown", "source": "dataLakes" },
+          "catalog": { "kind": "dropdown", "source": "catalogs" },
+          "schema": { "kind": "dropdown", "source": "schemas", "dependsOn": "catalog" },
+          "volume": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" },
+          "volume_key": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" },
+          "auth_mode": { "kind": "enum", "values": ["resource_principal", "user_principal", "instance_principal"] },
+          "private_key_content": { "kind": "secret" },
+          "pass_phrase": { "kind": "secret" }
+        },
+        "schema": {
+          "catalog": { "kind": "dropdown", "source": "catalogs" },
+          "schema": { "kind": "dropdown", "source": "schemas", "dependsOn": "catalog" },
+          "volume": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" },
+          "volume_key": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" }
+        }
+      }
+    },
+    {
+      "toolClassName": "CatalogBrowserTool",
+      "displayName": "Catalog Browser",
+      "description": "Browse catalog metadata: list catalogs, schemas, tables, volumes, or knowledge bases, or describe a table's columns. Use so an agent can discover the right data asset before acting on it.",
+      "version": "1.1.0",
+      "schema": [
+        {
+          "name": "list",
+          "type": "string",
+          "description": "What to list: catalogs, schemas, tables, volumes, knowledgeBases, or 'table' to describe one.",
+          "enum": ["catalogs", "schemas", "tables", "volumes", "knowledgeBases", "table"],
+          "default": "catalogs"
+        },
+        {
+          "name": "catalog_key",
+          "type": "string",
+          "description": "Catalog key (required for schemas/tables/volumes/KBs)."
+        },
+        {
+          "name": "schema_key",
+          "type": "string",
+          "description": "Schema key (required for tables/volumes/KBs)."
+        },
+        {
+          "name": "table_key",
+          "type": "string",
+          "description": "Table key (required when list='table')."
+        }
+      ],
+      "conf": {
+        "region": "us-ashburn-1",
+        "data_lake_ocid": "",
+        "api_version": "20260430",
+        "timeout": 30,
+        "auth_mode": "resource_principal",
+        "tenancy_ocid": "",
+        "user_ocid": "",
+        "fingerprint": "",
+        "private_key_content": "",
+        "pass_phrase": "",
+        "service_path": "aiDataPlatforms"
+      },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
+      "_uiHints": {
+        "conf": {
+          "region": { "kind": "dropdown", "source": "regions" },
+          "data_lake_ocid": { "kind": "dropdown", "source": "dataLakes" },
+          "auth_mode": { "kind": "enum", "values": ["resource_principal", "user_principal", "instance_principal"] },
+          "private_key_content": { "kind": "secret" },
+          "pass_phrase": { "kind": "secret" }
+        },
+        "schema": {
+          "list": { "kind": "enum", "values": ["catalogs", "schemas", "tables", "volumes", "knowledgeBases", "table"] },
+          "catalog_key": { "kind": "dropdown", "source": "catalogs" },
+          "schema_key": { "kind": "dropdown", "source": "schemas", "dependsOn": "catalog_key" },
+          "table_key": { "kind": "dropdown", "source": "tables", "dependsOn": "schema_key" }
+        }
+      }
+    },
+    {
+      "toolClassName": "KBIngestTool",
+      "displayName": "KB Ingestion",
+      "description": "List a knowledge base's ingestion jobs, or trigger an ingestion run to (re)index it. Use after documents change so the KB is up to date for RAG queries.",
+      "version": "1.1.0",
+      "schema": [
+        {
+          "name": "operation",
+          "type": "string",
+          "description": "'list_jobs' (default) to see jobs, or 'trigger' to start a run.",
+          "enum": ["list_jobs", "trigger"],
+          "default": "list_jobs"
+        },
+        {
+          "name": "kb_key",
+          "type": "string",
+          "description": "Knowledge base key (e.g. catalog.schema.kbName)."
+        },
+        {
+          "name": "job_key",
+          "type": "string",
+          "description": "Job key to trigger (required for operation=trigger; find it via list_jobs)."
+        },
+        {
+          "name": "run_config",
+          "type": "object",
+          "description": "Optional run config body for operation=trigger (passed through as JSON)."
+        }
+      ],
+      "conf": {
+        "region": "us-ashburn-1",
+        "data_lake_ocid": "",
+        "api_version": "20260430",
+        "kb_key": "",
+        "timeout": 30,
+        "auth_mode": "resource_principal",
+        "tenancy_ocid": "",
+        "user_ocid": "",
+        "fingerprint": "",
+        "private_key_content": "",
+        "pass_phrase": "",
+        "service_path": "aiDataPlatforms"
+      },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
+      "_uiHints": {
+        "conf": {
+          "region": { "kind": "dropdown", "source": "regions" },
+          "data_lake_ocid": { "kind": "dropdown", "source": "dataLakes" },
+          "kb_key": { "kind": "dropdown", "source": "knowledgeBases" },
+          "auth_mode": { "kind": "enum", "values": ["resource_principal", "user_principal", "instance_principal"] },
+          "private_key_content": { "kind": "secret" },
+          "pass_phrase": { "kind": "secret" }
+        },
+        "schema": {
+          "operation": { "kind": "enum", "values": ["list_jobs", "trigger"] },
+          "kb_key": { "kind": "dropdown", "source": "knowledgeBases" },
+          "job_key": { "kind": "dropdown", "source": "jobs", "dependsOn": "kb_key" }
+        }
+      }
+    },
+    {
+      "toolClassName": "WorkspaceFileTool",
+      "displayName": "Workspace File",
+      "description": "Read or list files in the workspace (not a catalog volume). Workspace files (notebooks, scripts, text) live under /Workspace. Provide a path. Use for an agent's code/config files; for Standard Catalog volume files use Catalog File Read.",
+      "version": "1.1.0",
+      "schema": [
+        {
+          "name": "operation",
+          "type": "string",
+          "description": "'get' (default) to read a file, or 'list' to list a folder.",
+          "enum": ["get", "list"],
+          "default": "get"
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "description": "Workspace path relative to /Workspace, e.g. Notebooks/foo.ipynb (for get) or a folder for list (default /)."
+        }
+      ],
+      "conf": {
+        "region": "us-ashburn-1",
+        "data_lake_ocid": "",
+        "workspace_id": "",
+        "api_version": "20260430",
+        "timeout": 30,
+        "max_bytes": 5000000,
+        "auth_mode": "resource_principal",
+        "tenancy_ocid": "",
+        "user_ocid": "",
+        "fingerprint": "",
+        "private_key_content": "",
+        "pass_phrase": "",
+        "service_path": "aiDataPlatforms"
+      },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
+      "_uiHints": {
+        "conf": {
+          "region": { "kind": "dropdown", "source": "regions" },
+          "data_lake_ocid": { "kind": "dropdown", "source": "dataLakes" },
+          "workspace_id": { "kind": "dropdown", "source": "workspaces", "dependsOn": "data_lake_ocid" },
+          "auth_mode": { "kind": "enum", "values": ["resource_principal", "user_principal", "instance_principal"] },
+          "private_key_content": { "kind": "secret" },
+          "pass_phrase": { "kind": "secret" }
+        },
+        "schema": {
+          "operation": { "kind": "enum", "values": ["get", "list"] }
+        }
+      }
+    }
+  ]
+}

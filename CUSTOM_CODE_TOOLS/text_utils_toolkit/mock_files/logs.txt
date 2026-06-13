@@ -1,0 +1,3 @@
+2026-06-01 12:01 user=alvarez@oracle.com order=ORD-10293 status=OK
+2026-06-01 12:02 user=banerjee@oracle.com order=ORD-10294 status=FAIL
+2026-06-01 12:03 user=chen@example.org order=ORD-10295 status=OK

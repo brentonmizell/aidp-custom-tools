@@ -1,0 +1,43 @@
+{
+  "displayName": "Convert File",
+  "description": "Convert tabular data between csv, json, parquet, and excel.",
+  "tools": [
+    {
+      "toolClassName": "ConvertFileTool",
+      "displayName": "Convert File",
+      "description": "Convert tabular data between csv, json, parquet, and excel. Use inline content for csv/json text, or input_path/output_path for workspace files. Use to reshape data files between steps or prepare an export.",
+      "version": "1.1.0",
+      "schema": [
+        {
+          "name": "from_format",
+          "type": "string",
+          "description": "Source format.",
+          "enum": ["csv", "json", "jsonl", "parquet", "xlsx", "tsv", "txt"],
+          "default": "csv"
+        },
+        {
+          "name": "to_format",
+          "type": "string",
+          "description": "Target format.",
+          "enum": ["csv", "json", "jsonl", "parquet", "xlsx", "tsv", "txt"],
+          "default": "json"
+        },
+        {"name": "content", "type": "string", "description": "Inline source data (csv or json text). Use this OR input_path."},
+        {"name": "input_path", "type": "string", "description": "Workspace path to read from. Use this OR content."},
+        {"name": "output_path", "type": "string", "description": "Workspace path to write to. Required for parquet/excel output."}
+      ],
+      "conf": {"base_dir": "/workspace", "max_rows": 100000, "max_bytes": 104857600},
+      "_uiHints": {
+        "conf": {
+          "base_dir": {"kind": "readonly"},
+          "max_rows": {"kind": "readonly"},
+          "max_bytes": {"kind": "readonly"}
+        },
+        "schema": {
+          "from_format": {"kind": "enum", "values": ["csv", "json", "jsonl", "parquet", "xlsx", "tsv", "txt"]},
+          "to_format": {"kind": "enum", "values": ["csv", "json", "jsonl", "parquet", "xlsx", "tsv", "txt"]}
+        }
+      }
+    }
+  ]
+}

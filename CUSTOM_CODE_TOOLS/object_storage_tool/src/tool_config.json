@@ -1,0 +1,43 @@
+{
+  "displayName": "Object Storage",
+  "description": "List, read, write, and delete objects in an OCI Object Storage bucket.",
+  "tools": [
+    {
+      "toolClassName": "ObjectStorageTool",
+      "displayName": "Object Storage",
+      "description": "List, read, write, or delete objects in an OCI Object Storage bucket (resource-principal auth). Use to read or persist files and artifacts an agent works with.",
+      "version": "1.1.0",
+      "schema": [
+        {
+          "name": "operation",
+          "type": "string",
+          "description": "One of: list, get, put, delete.",
+          "enum": ["list", "get", "put", "delete"],
+          "default": "list"
+        },
+        {"name": "name", "type": "string", "description": "Object name/key (or prefix for list)."},
+        {"name": "content", "type": "string", "description": "Text content to write (for put)."}
+      ],
+      "conf": {
+        "bucket": "",
+        "namespace": "",
+        "region": "",
+        "prefix": "",
+        "max_keys": 200,
+        "max_bytes": 1048576,
+        "max_retries": 3
+      },
+      "auth": {"authType": "OCI_RESOURCE_PRINCIPAL"},
+      "_uiHints": {
+        "conf": {
+          "bucket":    { "kind": "dropdown", "source": "ociBuckets" },
+          "namespace": { "kind": "readonly", "placeholder": "auto-detected from get_namespace()" },
+          "region":    { "kind": "dropdown", "source": "regions" }
+        },
+        "schema": {
+          "operation": { "kind": "enum", "values": ["list", "get", "put", "delete"] }
+        }
+      }
+    }
+  ]
+}

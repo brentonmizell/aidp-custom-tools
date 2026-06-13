@@ -1,0 +1,6 @@
+# langchain-core, langchain-oci, and the OCI SDK are pre-installed on the
+# compute runtime. langchain-community provides OCIGenAIEmbeddings and may need
+# installing in the QA/deploy environment if not already present. The OCI SDK
+# is used directly by EmbeddingTool for the embed_text call.
+langchain-community>=0.3
+oci>=2.120

@@ -1,0 +1,38 @@
+{
+  "displayName": "My Tool Package",
+  "description": "Short description of what this package of tools does.",
+  "tools": [
+    {
+      "//": "EDIT: one entry per tool class. toolClassName MUST match the @register class name.",
+      "toolClassName": "MyTool",
+      "displayName": "My Tool",
+      "description": "EDIT ME — one or two sentences telling the MODEL what this tool does and WHEN to call it. This field decides whether the model picks your tool. Do not leave it blank or paste UI help text.",
+      "version": "1.0.0",
+      "schema": [
+        {
+          "//": "EDIT: one entry per input the model can pass. types: string | number | boolean",
+          "name": "name",
+          "type": "string",
+          "description": "The name to greet. Describe each input clearly — the model reads this."
+        }
+      ],
+      "conf": {
+        "//": "EDIT: your static settings. Read these in code with get_cfg(conf, key, default).",
+        "greeting": "Hello",
+        "max_length": 100
+      }
+    },
+    {
+      "//": "OPTIONAL second tool. Delete this whole object (and the MyHttpTool class) if unused.",
+      "toolClassName": "MyHttpTool",
+      "displayName": "My HTTP Tool",
+      "description": "EDIT ME — example tool that calls an external API.",
+      "version": "1.0.0",
+      "schema": [
+        {"name": "query", "type": "string", "description": "Search query passed to the API."}
+      ],
+      "conf": {"base_url": "https://httpbin.org/get", "timeout": 30},
+      "auth": {"authType": "NO_AUTH"}
+    }
+  ]
+}

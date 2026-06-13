@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {"type": "integer"},
+    "name": {"type": "string"},
+    "active": {"type": "boolean"},
+    "score": {"type": "integer", "minimum": 0, "maximum": 100}
+  },
+  "required": ["id", "name"]
+}

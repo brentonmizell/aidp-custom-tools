@@ -1,0 +1,9 @@
+# Auth-free endpoints for exercising WebFetch / WebhookSender in QA.
+# WebFetch:
+https://httpbin.org/html
+https://example.com
+# WebhookSender (POST echo - returns what you sent):
+https://httpbin.org/post
+https://postman-echo.com/post
+# Redirect handling:
+https://httpbin.org/absolute-redirect/2

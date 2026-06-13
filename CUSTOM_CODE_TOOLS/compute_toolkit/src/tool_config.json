@@ -1,0 +1,82 @@
+{
+  "displayName": "Compute Toolkit",
+  "description": "Safe math evaluation and JSON Schema validation.",
+  "tools": [
+    {
+      "toolClassName": "MathTool",
+      "displayName": "Math",
+      "description": "Evaluate an arithmetic expression exactly (no model arithmetic), or compute summary statistics (mean, median, std, percentiles) over a list of numbers. Always prefer this for any calculation.",
+      "version": "1.1.0",
+      "schema": [
+        {
+          "name": "mode",
+          "type": "string",
+          "description": "'eval' to evaluate an expression, or 'stats' for summary statistics.",
+          "enum": ["eval", "stats"],
+          "default": "eval"
+        },
+        {
+          "name": "expression",
+          "type": "string",
+          "description": "Arithmetic expression when mode is 'eval', e.g. '(1500 * 1.08) / 12'. Supports + - * / // % **, sqrt, log, sin, abs, round, min, max, sum, pi, e. Max 4000 chars.",
+          "default": ""
+        },
+        {
+          "name": "values",
+          "type": "string",
+          "description": "List of numbers when mode is 'stats' (JSON array).",
+          "default": "[]"
+        }
+      ],
+      "conf": {
+        "max_expression_length": 4000,
+        "max_stats_values": 100000
+      },
+      "_uiHints": {
+        "conf": {
+          "max_expression_length": { "kind": "readonly" },
+          "max_stats_values": { "kind": "readonly" }
+        },
+        "schema": {
+          "mode": { "kind": "enum", "values": ["eval", "stats"] }
+        }
+      }
+    },
+    {
+      "toolClassName": "SchemaValidatorTool",
+      "displayName": "Validate Schema",
+      "description": "Check that a data object conforms to a JSON Schema and list any violations. Use as a quality gate or to verify an API/tool response has the expected structure before continuing.",
+      "version": "1.1.0",
+      "schema": [
+        {
+          "name": "data",
+          "type": "string",
+          "description": "The data to validate (object/array or JSON string)."
+        },
+        {
+          "name": "schema",
+          "type": "string",
+          "description": "A JSON Schema (Draft 2020-12) describing the expected shape."
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "description": "'best_effort' returns all violations; 'fail_fast' stops at the first violation.",
+          "enum": ["best_effort", "fail_fast"],
+          "default": "best_effort"
+        }
+      ],
+      "conf": {
+        "max_violations": 500
+      },
+      "_uiHints": {
+        "conf": {
+          "max_violations": { "kind": "readonly" }
+        },
+        "schema": {
+          "mode": { "kind": "enum", "values": ["best_effort", "fail_fast"] }
+        }
+      }
+    }
+  ]
+}

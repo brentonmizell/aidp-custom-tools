@@ -1,0 +1,6 @@
+# Optional static config files your code can read at runtime.
+# This file is just an example — delete config/ if you don't need it.
+# Read it in your tool with: open(os.path.join(os.path.dirname(__file__), "config/settings.yaml"))
+defaults:
+  greeting_prefix: "Hello"
+  max_length: 100

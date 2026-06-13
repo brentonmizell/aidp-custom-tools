@@ -1,0 +1,4 @@
+# jinja2 ships with the platform stack; listed defensively. jsonpath-ng is a
+# pure-Python wheel (installs fine on QA network; bundle for offline test pods).
+jinja2>=3.0
+jsonpath-ng>=1.6

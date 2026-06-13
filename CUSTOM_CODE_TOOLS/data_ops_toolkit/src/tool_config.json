@@ -1,0 +1,77 @@
+{
+  "displayName": "Data Ops Toolkit",
+  "description": "Filter, compare, and reshape tabular records.",
+  "tools": [
+    {
+      "toolClassName": "FilterTool",
+      "displayName": "Filter Records",
+      "description": "Filter a list of records, keeping only those where a field matches a condition. Use when the agent needs a subset of data by some criteria (e.g. amount over 1000, status equals open).",
+      "version": "1.1.0",
+      "schema": [
+        {"name": "data", "type": "string", "description": "The records to filter, as a list of objects or a JSON array."},
+        {"name": "field", "type": "string", "description": "The field name to test on each record."},
+        {
+          "name": "operator",
+          "type": "string",
+          "description": "One of: eq, ne, gt, gte, lt, lte, contains, startswith, regex, in, is_null, not_null.",
+          "enum": ["eq", "ne", "gt", "gte", "lt", "lte", "contains", "startswith", "regex", "in", "is_null", "not_null"],
+          "default": "eq"
+        },
+        {"name": "value", "type": "string", "description": "The value to compare against (not needed for is_null/not_null)."}
+      ],
+      "conf": {"max_results": 1000},
+      "_uiHints": {
+        "conf": {},
+        "schema": {
+          "operator": {
+            "kind": "enum",
+            "values": ["eq", "ne", "gt", "gte", "lt", "lte", "contains", "startswith", "regex", "in", "is_null", "not_null"]
+          }
+        }
+      }
+    },
+    {
+      "toolClassName": "CompareTool",
+      "displayName": "Compare Datasets",
+      "description": "Diff two sets of records matched on a key field and report which were added, removed, and changed (with old/new values). Use to detect changes between two snapshots of data.",
+      "version": "1.1.0",
+      "schema": [
+        {"name": "left", "type": "string", "description": "The first/old record set (list of objects or JSON array)."},
+        {"name": "right", "type": "string", "description": "The second/new record set (list of objects or JSON array)."},
+        {"name": "key", "type": "string", "description": "The id field used to match records across the two sets."}
+      ],
+      "conf": {"tolerance": 1e-9},
+      "_uiHints": {
+        "conf": {},
+        "schema": {}
+      }
+    },
+    {
+      "toolClassName": "DataManipulationTool",
+      "displayName": "Manipulate Data",
+      "description": "Reshape tabular records: select or rename columns, sort, remove duplicates, or group-by and aggregate. Use for summarizing or restructuring data between flow steps.",
+      "version": "1.1.0",
+      "schema": [
+        {"name": "data", "type": "string", "description": "The records to manipulate (list of objects or JSON array)."},
+        {
+          "name": "operation",
+          "type": "string",
+          "description": "One of: select, rename, sort, dedupe, groupby.",
+          "enum": ["select", "rename", "sort", "dedupe", "groupby"],
+          "default": "select"
+        },
+        {"name": "spec", "type": "string", "description": "Operation parameters as a JSON object. select:{columns:[...]}, rename:{map:{old:new}}, sort:{by:[...],ascending:true}, dedupe:{subset:[...]}, groupby:{by:[...],agg:{field:'sum'}}."}
+      ],
+      "conf": {"max_rows": 5000},
+      "_uiHints": {
+        "conf": {},
+        "schema": {
+          "operation": {
+            "kind": "enum",
+            "values": ["select", "rename", "sort", "dedupe", "groupby"]
+          }
+        }
+      }
+    }
+  ]
+}

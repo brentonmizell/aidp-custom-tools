@@ -1,0 +1,35 @@
+{
+  "displayName": "Document Extract",
+  "description": "Extract text from a document in a specific format (PDF, DOCX, CSV, text).",
+  "tools": [
+    {
+      "toolClassName": "DocumentExtractTool",
+      "displayName": "Document Extract",
+      "description": "Extract clean text (and table text) from a document: PDF, DOCX, CSV, or plain text. Pass the file as base64 in content_base64 (or text in content) plus the format (or a filename to infer it). Use to turn a document into text for the agent or for RAG.",
+      "version": "1.1.0",
+      "schema": [
+        {"name": "content_base64", "type": "string", "description": "The file bytes, base64-encoded (for pdf/docx/binary). Use this OR content."},
+        {"name": "content", "type": "string", "description": "Plain text/CSV content directly. Use this OR content_base64."},
+        {"name": "format", "type": "string", "description": "File format.", "enum": ["pdf", "docx", "csv", "txt", "md", "json"], "default": "txt"},
+        {"name": "filename", "type": "string", "description": "Optional filename; the format is inferred from its extension if format is not given."},
+        {"name": "page_start", "type": "integer", "description": "PDF only: first page to extract (1-based, inclusive). Default 1."},
+        {"name": "page_end", "type": "integer", "description": "PDF only: last page to extract (1-based, inclusive). Default = last page."}
+      ],
+      "conf": {
+        "max_chars": 100000,
+        "max_csv_rows": 1000,
+        "max_input_bytes": 26214400
+      },
+      "_uiHints": {
+        "conf": {
+          "max_chars": {"kind": "readonly"},
+          "max_csv_rows": {"kind": "readonly"},
+          "max_input_bytes": {"kind": "readonly"}
+        },
+        "schema": {
+          "format": {"kind": "enum", "values": ["pdf", "docx", "csv", "txt", "md", "json"]}
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "displayName": "Python Runner",
+  "description": "Run a Python block locally, or run a workspace notebook on the AIDP kernel.",
+  "tools": [
+    {
+      "toolClassName": "RunPythonTool",
+      "displayName": "Run Python",
+      "description": "Run a block of Python code and return stdout, stderr, return code, and an optional structured result. Optional input is available as a variable named 'data'; set a variable named 'result' to return structured JSON. Use for ad-hoc computation or logic the other tools do not cover.",
+      "version": "1.1.0",
+      "schema": [
+        {
+          "name": "code",
+          "type": "string",
+          "description": "The Python code to run. A variable 'data' holds any input passed; assign 'result' to return structured output."
+        },
+        {
+          "name": "data",
+          "type": "string",
+          "description": "Optional input made available to the code as the variable 'data' (any JSON value)."
+        },
+        {
+          "name": "stdin",
+          "type": "string",
+          "description": "Optional text piped to the program's standard input."
+        }
+      ],
+      "conf": {
+        "timeout": 60,
+        "max_output_lines": 500,
+        "max_output_bytes": 1048576,
+        "python_bin": "python3"
+      },
+      "_uiHints": {
+        "conf": {},
+        "schema": {}
+      }
+    },
+    {
+      "toolClassName": "RunNotebookTool",
+      "displayName": "Run Notebook",
+      "description": "Run a Jupyter notebook (.ipynb) from the workspace against the AIDP kernel and return each code cell's output. Provide notebook_path (a Workspace path) or notebook_json. Use to execute an existing workspace notebook as part of a flow (it runs with the live workspace context: Spark session, datalake).",
+      "version": "1.1.0",
+      "schema": [
+        {
+          "name": "notebook_path",
+          "type": "string",
+          "description": "Workspace path to the .ipynb to run, e.g. Workspace/analysis.ipynb. Overrides default_notebook_path in config. Leave empty to use the configured default."
+        },
+        {
+          "name": "notebook_json",
+          "type": "string",
+          "description": "Raw .ipynb content as a JSON string, if not reading from a path."
+        }
+      ],
+      "conf": {
+        "region": "us-ashburn-1",
+        "aidp_endpoint": "https://aidp.us-ashburn-1.oci.oraclecloud.com",
+        "lake_ocid": "",
+        "ws_host": "<your AIDP ws host>",
+        "workspace_key": "default",
+        "cluster_key": "default_cluster",
+        "oci_config_profile": "DEFAULT",
+        "execution_timeout": 120,
+        "connect_timeout": 30,
+        "max_cells": 200,
+        "max_output_chars": 20000,
+        "max_notebook_bytes": 5242880,
+        "ws_retries": 3,
+        "default_notebook_path": "",
+        "api_version": "20260430",
+        "service_path": "aiDataPlatforms"
+      },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
+      "_uiHints": {
+        "conf": {
+          "region": { "kind": "dropdown", "source": "regions" },
+          "aidp_endpoint": { "kind": "readonly", "dependsOn": "region" },
+          "lake_ocid": { "kind": "dropdown", "source": "dataLakes" },
+          "workspace_key": { "kind": "dropdown", "source": "workspaces", "dependsOn": "lake_ocid" },
+          "cluster_key": { "kind": "dropdown", "source": "clusters", "dependsOn": "workspace_key" },
+          "oci_config_profile": { "kind": "secret" }
+        },
+        "schema": {
+          "notebook_path": { "kind": "dropdown", "source": "notebookFiles", "dependsOn": "conf.workspace_key" }
+        }
+      }
+    }
+  ]
+}

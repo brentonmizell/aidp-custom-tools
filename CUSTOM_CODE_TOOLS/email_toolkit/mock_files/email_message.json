@@ -1,0 +1,19 @@
+{
+  "notification": {
+    "to": "ops-team@oracle.com",
+    "subject": "AgentFlow run complete: weekly pipeline report",
+    "body": "The weekly pipeline report finished. West region closed 12 deals totaling $2.2M. See the attached summary in the workspace."
+  },
+  "hitl": {
+    "to": "approver@oracle.com",
+    "cc": "manager@oracle.com",
+    "subject": "Approval needed: discount over 15%",
+    "body": "A flow is paused awaiting your approval for a 20% discount on renewal ORD-10294. Reply in the portal to continue."
+  },
+  "html": {
+    "to": "exec@oracle.com",
+    "subject": "Q2 numbers",
+    "html": true,
+    "body": "<h2>Q2</h2><p>Revenue up <b>12%</b> QoQ.</p>"
+  }
+}

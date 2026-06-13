@@ -1,0 +1,13 @@
+{
+  "aggregate": {
+    "code": "total = sum(r['amount'] for r in data)\nby_status = {}\nfor r in data:\n    by_status[r['status']] = by_status.get(r['status'], 0) + r['amount']\nprint(f\"total={total}\")\nresult = {'total': total, 'by_status': by_status}",
+    "data": "[{\"amount\":500,\"status\":\"open\"},{\"amount\":900,\"status\":\"closed\"},{\"amount\":1500,\"status\":\"open\"}]"
+  },
+  "transform": {
+    "code": "result = [{'id': r['id'], 'amount_with_tax': round(r['amount']*1.08, 2)} for r in data]",
+    "data": "[{\"id\":1,\"amount\":100},{\"id\":2,\"amount\":250}]"
+  },
+  "error_demo": {
+    "code": "x = [1,2,3]\ny = x[10]"
+  }
+}

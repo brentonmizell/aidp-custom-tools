@@ -1,0 +1,142 @@
+{
+  "displayName": "GenAI Toolkit",
+  "description": "LLM-as-judge scoring, long-text summarization, and embeddings on OCI GenAI.",
+  "tools": [
+    {
+      "toolClassName": "RubricScorerTool",
+      "displayName": "Rubric Scorer",
+      "description": "Score a piece of text against a rubric and return a structured verdict (overall score, per-criterion scores, rationale, pass/fail). Use to evaluate an agent's output or as a quality gate.",
+      "version": "1.1.0",
+      "schema": [
+        {
+          "name": "candidate",
+          "type": "string",
+          "description": "The text to evaluate."
+        },
+        {
+          "name": "rubric",
+          "type": "string",
+          "description": "The criteria to score against, e.g. 'accuracy, completeness, tone'."
+        }
+      ],
+      "conf": {
+        "model_id": "cohere.command-a-03-2025",
+        "model_provider": "cohere",
+        "region": "us-chicago-1",
+        "endpoint": "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com",
+        "compartment_id": "",
+        "auth_type": "resource_principal",
+        "temperature": 0.0,
+        "max_tokens": 1500,
+        "pass_threshold": 7.0,
+        "max_candidate_chars": 60000,
+        "max_rubric_chars": 8000
+      },
+      "_uiHints": {
+        "conf": {
+          "region": { "kind": "dropdown", "source": "regions" },
+          "endpoint": { "kind": "readonly", "dependsOn": "region", "placeholder": "Auto-derived from region" },
+          "compartment_id": { "kind": "dropdown", "source": "compartments" },
+          "model_id": { "kind": "dropdown", "source": "ociGenAiModels", "dependsOn": "region" },
+          "model_provider": { "kind": "readonly", "dependsOn": "model_id", "placeholder": "Auto-set: cohere or generic based on model_id" },
+          "auth_type": { "kind": "enum", "values": ["resource_principal", "instance_principal", "api_key"] }
+        },
+        "schema": {}
+      }
+    },
+    {
+      "toolClassName": "SummarizerTool",
+      "displayName": "Summarizer",
+      "description": "Summarize long text, using map-reduce for input larger than one context window. Use to condense documents, transcripts, or aggregated search results.",
+      "version": "1.1.0",
+      "schema": [
+        {
+          "name": "text",
+          "type": "string",
+          "description": "The text to summarize."
+        },
+        {
+          "name": "instruction",
+          "type": "string",
+          "description": "Optional guidance, e.g. 'focus on action items' or 'one paragraph'."
+        }
+      ],
+      "conf": {
+        "model_id": "cohere.command-a-03-2025",
+        "model_provider": "cohere",
+        "region": "us-chicago-1",
+        "endpoint": "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com",
+        "compartment_id": "",
+        "auth_type": "resource_principal",
+        "temperature": 0.2,
+        "max_tokens": 2000,
+        "chunk_chars": 8000,
+        "max_chunks": 30,
+        "max_input_chars": 2000000
+      },
+      "_uiHints": {
+        "conf": {
+          "region": { "kind": "dropdown", "source": "regions" },
+          "endpoint": { "kind": "readonly", "dependsOn": "region", "placeholder": "Auto-derived from region" },
+          "compartment_id": { "kind": "dropdown", "source": "compartments" },
+          "model_id": { "kind": "dropdown", "source": "ociGenAiModels", "dependsOn": "region" },
+          "model_provider": { "kind": "readonly", "dependsOn": "model_id", "placeholder": "Auto-set: cohere or generic based on model_id" },
+          "auth_type": { "kind": "enum", "values": ["resource_principal", "instance_principal", "api_key"] }
+        },
+        "schema": {}
+      }
+    },
+    {
+      "toolClassName": "EmbeddingTool",
+      "displayName": "Embedding",
+      "description": "Embed one or more strings using an OCI GenAI embeddings model. Returns a list of vectors.",
+      "version": "1.1.0",
+      "schema": [
+        {
+          "name": "text",
+          "type": "string",
+          "description": "A single string to embed (use this OR texts)."
+        },
+        {
+          "name": "texts",
+          "type": "array",
+          "description": "A list of strings to embed (use this OR text)."
+        },
+        {
+          "name": "input_type",
+          "type": "string",
+          "description": "Embedding input type hint (Cohere semantics).",
+          "enum": ["search_document", "search_query", "classification", "clustering"],
+          "default": "search_document"
+        }
+      ],
+      "conf": {
+        "model_id": "cohere.embed-english-v3.0",
+        "model_provider": "cohere",
+        "region": "us-chicago-1",
+        "endpoint": "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com",
+        "compartment_id": "",
+        "auth_type": "resource_principal",
+        "input_type": "search_document",
+        "max_texts": 96,
+        "max_text_chars": 2048,
+        "truncate": "END"
+      },
+      "_uiHints": {
+        "conf": {
+          "region": { "kind": "dropdown", "source": "regions" },
+          "endpoint": { "kind": "readonly", "dependsOn": "region", "placeholder": "Auto-derived from region" },
+          "compartment_id": { "kind": "dropdown", "source": "compartments" },
+          "model_id": { "kind": "dropdown", "source": "ociGenAiModels", "dependsOn": "region" },
+          "model_provider": { "kind": "readonly", "dependsOn": "model_id", "placeholder": "Auto-set: cohere or generic based on model_id" },
+          "auth_type": { "kind": "enum", "values": ["resource_principal", "instance_principal", "api_key"] },
+          "input_type": { "kind": "enum", "values": ["search_document", "search_query", "classification", "clustering"] },
+          "truncate": { "kind": "enum", "values": ["NONE", "START", "END"] }
+        },
+        "schema": {
+          "input_type": { "kind": "enum", "values": ["search_document", "search_query", "classification", "clustering"] }
+        }
+      }
+    }
+  ]
+}

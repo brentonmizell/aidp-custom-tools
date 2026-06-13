@@ -1,0 +1,44 @@
+{
+  "displayName": "Web Toolkit",
+  "description": "Fetch readable web text and send webhook notifications.",
+  "tools": [
+    {
+      "toolClassName": "WebFetchTool",
+      "displayName": "Web Fetch",
+      "description": "Fetch a web page and return its main readable text with boilerplate removed. Use to read an article or page the user references or that an earlier step produced a link to.",
+      "version": "1.1.0",
+      "schema": [
+        {"name": "url", "type": "string", "description": "The URL to fetch."}
+      ],
+      "conf": {"timeout": 30, "max_chars": 20000, "max_bytes": 5242880, "return_raw_html": false, "user_agent": "AIDP-Agent/1.0"},
+      "_uiHints": {
+        "conf": {
+          "return_raw_html": {"kind": "enum", "values": ["true", "false"]}
+        },
+        "schema": {}
+      }
+    },
+    {
+      "toolClassName": "WebhookSenderTool",
+      "displayName": "Webhook Sender",
+      "description": "Send a notification to a webhook (Slack, Teams, or generic). Use to alert a channel or person, for example to tell a human a flow is waiting on their input.",
+      "version": "1.1.0",
+      "schema": [
+        {"name": "message", "type": "string", "description": "The message body to send."},
+        {"name": "title", "type": "string", "description": "Optional title/heading for the message."},
+        {"name": "webhook_url", "type": "string", "description": "Optional override of the configured webhook URL (only used when conf.webhook_url is empty)."}
+      ],
+      "conf": {"webhook_url": "", "style": "slack", "method": "POST", "timeout": 30},
+      "_uiHints": {
+        "conf": {
+          "webhook_url": {"kind": "secret"},
+          "style": {"kind": "enum", "values": ["slack", "teams", "generic", "generic_json"]},
+          "method": {"kind": "enum", "values": ["POST", "PUT"]}
+        },
+        "schema": {
+          "webhook_url": {"kind": "secret"}
+        }
+      }
+    }
+  ]
+}

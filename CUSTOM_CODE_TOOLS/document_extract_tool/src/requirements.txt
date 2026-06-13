@@ -1,0 +1,4 @@
+# Text/CSV need nothing. PDF and DOCX need parsers (install at deploy):
+pypdf>=4.0
+pdfplumber>=0.11
+python-docx>=1.1

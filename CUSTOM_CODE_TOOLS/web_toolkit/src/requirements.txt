@@ -1,0 +1,5 @@
+# requests is pre-installed. readability-lxml + beautifulsoup4 give clean text
+# extraction; both install in the QA networked environment. The tool degrades
+# gracefully (bs4 -> crude strip) if readability is unavailable.
+readability-lxml>=0.8
+beautifulsoup4>=4.12

@@ -1,0 +1,7 @@
+Hi {{ name }},
+
+Your {{ region }} region closed {{ closed_count }} deals this week totaling ${{ total }}.
+{% if total > 1000 %}Great work hitting target.{% else %}Let's review pipeline.{% endif %}
+
+Thanks,
+{{ sender }}

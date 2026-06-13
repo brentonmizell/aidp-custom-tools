@@ -1,0 +1,147 @@
+{
+  "displayName": "Email Toolkit",
+  "description": "Send email via SMTP (OCI Email Delivery or any relay) and read IMAP mailboxes.",
+  "tools": [
+    {
+      "toolClassName": "SmtpEmailTool",
+      "displayName": "Send Email",
+      "description": "Send an email via SMTP. Use to send notifications, reports, or alerts, or to tell a person a flow needs their input. Recipients, subject, and body are provided at call time.",
+      "version": "1.1.0",
+      "schema": [
+        {
+          "name": "to",
+          "type": "string",
+          "description": "Recipient address(es). One address or a comma/semicolon-separated list."
+        },
+        {
+          "name": "subject",
+          "type": "string",
+          "description": "Email subject line."
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "description": "Email body. Plain text by default."
+        },
+        {
+          "name": "cc",
+          "type": "string",
+          "description": "Optional CC address(es), comma/semicolon-separated."
+        },
+        {
+          "name": "bcc",
+          "type": "string",
+          "description": "Optional BCC address(es), comma/semicolon-separated."
+        },
+        {
+          "name": "html",
+          "type": "boolean",
+          "description": "Set true if the body is HTML.",
+          "default": false
+        },
+        {
+          "name": "content_type",
+          "type": "string",
+          "description": "Body content type. 'plain' for text, 'html' for HTML.",
+          "enum": ["plain", "html"],
+          "default": "plain"
+        },
+        {
+          "name": "priority",
+          "type": "string",
+          "description": "Message priority hint (sets X-Priority header).",
+          "enum": ["low", "normal", "high"],
+          "default": "normal"
+        }
+      ],
+      "conf": {
+        "smtp_host": "smtp.email.us-ashburn-1.oci.oraclecloud.com",
+        "smtp_port": 587,
+        "smtp_username": "{{smtp_username}}",
+        "smtp_password": "{{smtp_password}}",
+        "from_addr": "noreply@yourdomain.com",
+        "use_starttls": true,
+        "use_ssl": false,
+        "timeout": 30,
+        "max_retries": 2,
+        "allowed_recipient_domains": ""
+      },
+      "auth": {
+        "authType": "NO_AUTH"
+      },
+      "_uiHints": {
+        "conf": {
+          "smtp_password": { "kind": "secret" },
+          "smtp_username": { "kind": "secret" }
+        },
+        "schema": {
+          "content_type": { "kind": "enum", "values": ["plain", "html"] },
+          "priority": { "kind": "enum", "values": ["low", "normal", "high"] }
+        }
+      }
+    },
+    {
+      "toolClassName": "ImapReadTool",
+      "displayName": "Read IMAP Inbox",
+      "description": "Fetch messages from an IMAP mailbox. Supports server (host/port/ssl), credentials, folder (default INBOX), filtering (last N messages, unread only, since date), and selectable per-message fields. Returns a structured envelope with messages, count, and folder.",
+      "version": "1.1.0",
+      "schema": [
+        {
+          "name": "folder",
+          "type": "string",
+          "description": "Mailbox folder to read. Defaults to INBOX.",
+          "default": "INBOX"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "description": "Maximum number of messages to return (capped server-side).",
+          "default": 25
+        },
+        {
+          "name": "unread_only",
+          "type": "boolean",
+          "description": "If true, only return UNSEEN messages.",
+          "default": false
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "description": "Only fetch messages on/after this date. Accepts ISO-8601 (YYYY-MM-DD) or IMAP date (e.g. 01-Jan-2026)."
+        },
+        {
+          "name": "fields",
+          "type": "string",
+          "description": "Comma-separated list of fields to include per message. Allowed: uid, from, to, subject, date, body_text, body_html, headers.",
+          "default": "uid,from,to,subject,date,body_text"
+        },
+        {
+          "name": "mark_seen",
+          "type": "boolean",
+          "description": "If true, mark fetched messages as Seen. Defaults false (peek).",
+          "default": false
+        }
+      ],
+      "conf": {
+        "imap_host": "imap.gmail.com",
+        "imap_port": 993,
+        "imap_username": "{{imap_username}}",
+        "imap_password": "{{imap_password}}",
+        "use_ssl": true,
+        "timeout": 30,
+        "max_messages": 100,
+        "max_body_bytes": 65536
+      },
+      "auth": {
+        "authType": "NO_AUTH"
+      },
+      "_uiHints": {
+        "conf": {
+          "imap_password": { "kind": "secret" },
+          "imap_username": { "kind": "secret" }
+        },
+        "schema": {}
+      }
+    }
+  ]
+}

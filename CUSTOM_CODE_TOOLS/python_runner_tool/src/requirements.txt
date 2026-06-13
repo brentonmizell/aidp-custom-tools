@@ -1,0 +1,4 @@
+# RunPythonTool is stdlib only.
+# RunNotebookTool needs a WebSocket client to talk to the AIDP kernel:
+websocket-client>=1.6
+# oci and requests are pre-installed.

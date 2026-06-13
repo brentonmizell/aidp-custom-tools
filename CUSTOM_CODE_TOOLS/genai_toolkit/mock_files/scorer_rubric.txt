@@ -1,0 +1,4 @@
+Score the answer on three criteria, each 0-10:
+1. Accuracy: are the stated facts correct?
+2. Completeness: does it answer the question fully?
+3. Conciseness: is it free of filler?

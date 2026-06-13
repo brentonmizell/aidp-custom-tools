@@ -1,0 +1,8 @@
+{
+  "meta": {"page": 1, "total": 3},
+  "items": [
+    {"id": 101, "name": "Widget", "price": 9.99, "tags": ["a", "b"]},
+    {"id": 102, "name": "Gadget", "price": 19.99, "tags": ["b", "c"]},
+    {"id": 103, "name": "Gizmo", "price": 4.5, "tags": ["a"]}
+  ]
+}

@@ -1,0 +1,8 @@
+[
+  {"id": 1, "rep": "Alvarez", "region": "West", "amount": 500, "status": "open"},
+  {"id": 2, "rep": "Banerjee", "region": "East", "amount": 1500, "status": "open"},
+  {"id": 3, "rep": "Alvarez", "region": "West", "amount": 900, "status": "closed"},
+  {"id": 4, "rep": "Chen", "region": "East", "amount": 2200, "status": "open"},
+  {"id": 5, "rep": "Banerjee", "region": "East", "amount": 750, "status": "closed"},
+  {"id": 6, "rep": "Chen", "region": "West", "amount": 300, "status": "open"}
+]

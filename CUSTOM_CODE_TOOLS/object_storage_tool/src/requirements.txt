@@ -1,0 +1,1 @@
+# oci is pre-installed on the compute runtime. No extra deps.

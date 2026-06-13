@@ -1,0 +1,5 @@
+# pandas is NOT pre-installed on the base runtime. The QA networked environment
+# installs it at deploy time. For one-shot test pods without network, bundle a
+# wheel in wheels/ (pip download --platform manylinux2014_x86_64
+# --python-version 3.11 --only-binary=:all: pandas).
+pandas>=2.0

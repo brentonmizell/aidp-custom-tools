@@ -1,0 +1,6 @@
+# pandas: installed in QA/deploy (bundle wheel for offline test pods).
+# pyarrow: required for parquet. openpyxl: required for excel. Both install in
+# the QA networked environment.
+pandas>=2.0
+pyarrow>=14.0
+openpyxl>=3.1

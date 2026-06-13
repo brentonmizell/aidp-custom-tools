@@ -1,0 +1,4 @@
+# numpy and jsonschema are pre-installed on the base runtime. Listed for clarity;
+# the platform filter will skip them.
+# numpy
+# jsonschema
