@@ -127,6 +127,44 @@ oci setup config
 …and follow the prompts. The script reads the `[DEFAULT]` profile by
 default; pass `--profile <name>` if you use another.
 
+## API version & resource path (potential future migration)
+
+AIDP exposes two REST surfaces depending on tenancy:
+
+| `apiVersion` | URL resource segment (`service_path`) | Status |
+|---|---|---|
+| `20240831` | `dataLakes` | Currently live on every tenancy I've seen |
+| `20260430` | `aiDataPlatforms` | Future shape; documented in the public Oracle SDK |
+
+A tool deployed with the wrong combination returns 404 on every request:
+```
+GET /20260430/aiDataPlatforms/<lake>/volumes/<key>/...
+->  404 NotAuthorizedOrNotFound
+```
+…even when the OCID is right and auth is fine. AIDP just doesn't have the
+endpoint on your tenancy yet.
+
+`setup.py build` (and `build_with_config.py`) handle this automatically:
+
+- `api_version` is **always** overwritten with the value in
+  `~/.aidp/aidp-deploy.config.json` — even if the tool's `tool_config.json`
+  has a different default.
+- `service_path` is **derived** from `api_version` via a small lookup table
+  (`API_VERSION_TO_SERVICE_PATH` in both scripts).
+
+**If you're building a NEW custom tool**, don't hard-code `api_version` or
+`service_path` to a literal — leave them as `""` in `tool_config.json` and
+let the build inject them. That way the tool follows the platform when
+AIDP migrates to `20260430` and you don't have to re-edit every package.
+
+**If AIDP migrates your tenancy to 20260430**:
+1. Edit `~/.aidp/aidp-deploy.config.json`, set `"apiVersion": "20260430"`.
+2. Run `python setup.py build`.
+3. `service_path` flips to `aiDataPlatforms` automatically; every zip is
+   rebuilt; re-upload via the AIDP console.
+
+That's it — no per-tool editing.
+
 ## Build script flags
 
 ```

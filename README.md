@@ -108,3 +108,41 @@ Two paths:
 - Secrets are NEVER committed. The wizard always skips fields marked
   `kind: secret` in `_uiHints` (private keys, passphrases, webhook URLs,
   SMTP/IMAP passwords). Provide them per-deployment via your secret store.
+
+## Troubleshooting
+
+### 404 `NotAuthorizedOrNotFound` on every catalog/volume call
+
+AIDP currently runs the `20240831` REST API at `/dataLakes/`. The public SDK
+documents the future `20260430` API at `/aiDataPlatforms/`. If your tool was
+built with the wrong combination, every URL 404s before auth is even checked:
+
+```
+GET /20260430/aiDataPlatforms/<lake>/volumes/<key>/...
+-> 404 NotAuthorizedOrNotFound
+```
+
+Fix: re-run `python setup.py build`. The build always overwrites
+`api_version` from `~/.aidp/aidp-deploy.config.json` and derives
+`service_path` from it (`20240831 -> dataLakes`, `20260430 -> aiDataPlatforms`).
+Re-upload the rebuilt zip.
+
+If you're **writing a new tool**: leave `api_version` and `service_path`
+empty in `tool_config.json` — the build injects them. Don't hard-code
+either, or your tool breaks the next time AIDP migrates a tenancy.
+
+See **CONFIG.md → "API version & resource path"** for the full story.
+
+### `python setup.py status` shows lots of empty `todo:` fields
+
+That's normal for `catalog`, `schema`, `volume`, `kb_key`, `table_key`,
+`compartment_id`, `bucket`, `model_id`, etc. — these are workspace-specific
+and have to be picked per-deployment. Run `python setup.py configure
+--package <name>` to walk through them one tool at a time, or set them via
+the secret-store/conf at deploy time.
+
+### "No AIDP config found" on a fresh machine
+
+Run `python setup.py init`. It'll prompt for the values and write
+`~/.aidp/aidp-deploy.config.json`. Find the values via
+**AIDP Console → top-right → Workspace info**.
