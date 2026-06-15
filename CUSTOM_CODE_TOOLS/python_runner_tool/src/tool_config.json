@@ -73,7 +73,7 @@
         "max_notebook_bytes": 5242880,
         "ws_retries": 3,
         "default_notebook_path": "",
-        "api_version": "20240831"
+        "api_version": "20260430"
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"

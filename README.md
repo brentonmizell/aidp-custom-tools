@@ -113,25 +113,25 @@ Two paths:
 
 ### 404 `NotAuthorizedOrNotFound` on every catalog/volume call
 
-AIDP currently runs the `20240831` REST API at `/dataLakes/`. The public SDK
-documents the future `20260430` API at `/aiDataPlatforms/`. If your tool was
-built with the wrong combination, every URL 404s before auth is even checked:
+In our experience, this is **almost always an auth failure** — not a path or
+resource problem. OCI returns the same error string for both, which makes it
+look like the volume key or URL is wrong when really the request went out
+unsigned.
 
-```
-GET /20260430/aiDataPlatforms/<lake>/volumes/<key>/...
--> 404 NotAuthorizedOrNotFound
-```
+Most common cause: testing from the AIDP Test panel with
+`auth_mode=resource_principal`. The Test panel does NOT have a resource
+principal available — only deployed agent flows running on a cluster do.
 
-Fix: re-run `python setup.py build`. The build always overwrites
-`api_version` from `~/.aidp/aidp-deploy.config.json` and derives
-`service_path` from it (`20240831 -> dataLakes`, `20260430 -> aiDataPlatforms`).
-Re-upload the rebuilt zip.
+**Fix for Test panel testing**: change `auth_mode` to `user_principal` and
+fill in `tenancy_ocid` / `user_ocid` / `fingerprint` / `private_key_content`
+from your `~/.oci/config`. See `CONFIG.md → "Auth modes"` for the full
+walkthrough.
 
-If you're **writing a new tool**: leave `api_version` and `service_path`
-empty in `tool_config.json` — the build injects them. Don't hard-code
-either, or your tool breaks the next time AIDP migrates a tenancy.
+**Fix for deployed flows**: leave `auth_mode=resource_principal` and don't
+fill anything else. The cluster injects identity automatically.
 
-See **CONFIG.md → "API version & resource path"** for the full story.
+A real "wrong URL / wrong key" can still produce this error, but verify
+auth first — it's the answer 90% of the time.
 
 ### `python setup.py status` shows lots of empty `todo:` fields
 

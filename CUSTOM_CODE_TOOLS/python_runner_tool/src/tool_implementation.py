@@ -251,7 +251,7 @@ import time as _time
 import uuid as _uuid
 from urllib.parse import quote as _quote
 
-_API_VERSION = "20240831"   # Live AIDP REST API (uses /dataLakes/). Newer 20260430 will use /aiDataPlatforms/.
+_API_VERSION = "20260430"   # Live AIDP REST surface — /aiDataPlatforms/{lake}/...
 _WS_SUBPROTOCOL = "v1.kernel.websocket.jupyter.org"
 
 
@@ -282,12 +282,10 @@ class RunNotebookTool(CustomToolBase):
         workspace_key = get_cfg(conf, "workspace_key", "default")
         cluster_key = get_cfg(conf, "cluster_key", "default_cluster")
         oci_profile = get_cfg(conf, "oci_config_profile", "DEFAULT")
-        api_version = get_cfg(conf, "api_version", _API_VERSION)
-        # service_path is derived from api_version so the two can never
-        # drift. Explicit conf override wins for the rare custom-path case.
-        _API_TO_PATH = {"20240831": "dataLakes", "20260430": "aiDataPlatforms"}
-        explicit_sp = get_cfg(conf, "service_path", "")
-        service_path = explicit_sp or _API_TO_PATH.get(str(api_version).strip(), "dataLakes")
+        api_version = get_cfg(conf, "api_version", _API_VERSION) or _API_VERSION
+        # AIDP's live REST surface uses /aiDataPlatforms/. Override only if
+        # AIDP exposes a non-standard path on a specific tenancy.
+        service_path = get_cfg(conf, "service_path", "") or "aiDataPlatforms"
         timeout = get_cfg(conf, "execution_timeout", 120)
         connect_timeout = get_cfg(conf, "connect_timeout", 30)
         max_cells = get_cfg(conf, "max_cells", 200)
@@ -467,11 +465,7 @@ class RunNotebookTool(CustomToolBase):
                    code_cells, timeout, connect_timeout, ws_retries,
                    sign_request, make_execute_request,
                    make_kernel_info_request, decode_binary_message, max_output_chars,
-                   api_version=_API_VERSION, service_path=None):
-        # When service_path isn't provided, derive it from api_version.
-        if not service_path:
-            _API_TO_PATH = {"20240831": "dataLakes", "20260430": "aiDataPlatforms"}
-            service_path = _API_TO_PATH.get(str(api_version).strip(), "dataLakes")
+                   api_version=_API_VERSION, service_path="aiDataPlatforms"):
         import websocket
 
         req_id = str(_uuid.uuid4())

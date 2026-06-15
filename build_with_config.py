@@ -57,25 +57,16 @@ AUTO_FILL_KEYS = {
     "fingerprint":    ("oci",   "fingerprint"),
 }
 
-# Fields that ALWAYS overwrite the tool's default — these are not user choices,
-# they're the shape of the live AIDP API and must match whatever tenancy the
-# build is targeting. The "old" tenancy is on 20240831 + /dataLakes/; the new
-# public-API shape is 20260430 + /aiDataPlatforms/. A tool deployed against
-# the wrong combination 404s on every call.
-ALWAYS_FORCE_KEYS = {"api_version", "service_path"}
-
-# Mapping from apiVersion -> URL resource segment used by AIDP.
-API_VERSION_TO_SERVICE_PATH = {
-    "20240831": "dataLakes",        # current live AIDP REST surface
-    "20260430": "aiDataPlatforms",  # next-gen path documented in the public SDK
-}
-
-
-def derive_service_path(api_version: Optional[str]) -> Optional[str]:
-    """Pick the URL resource segment for a given apiVersion."""
-    if not api_version:
-        return None
-    return API_VERSION_TO_SERVICE_PATH.get(str(api_version).strip())
+# AIDP's live REST surface uses /20260430/aiDataPlatforms/{lake}/... — the
+# old probe at /20240831/dataLakes/ doesn't have the same endpoint coverage.
+# We default to the live shape and let the tool's Python code accept conf
+# overrides on the rare custom-path tenancy.
+LIVE_API_VERSION = "20260430"
+LIVE_SERVICE_PATH = "aiDataPlatforms"
+# api_version is no longer auto-flipped to whatever's in aidp-deploy.config.json
+# — the live surface is fixed. service_path is derived from api_version inside
+# the tool itself. When AIDP migrates, bump LIVE_API_VERSION here.
+ALWAYS_FORCE_KEYS: set = set()
 
 # Never touch these (user-specific or sensitive).
 SKIP_KEYS = {
@@ -155,7 +146,6 @@ def patch_conf(
     """
     out = dict(conf)
     changes = []
-    # Pass 1: regular auto-fill keys.
     for key in list(out.keys()):
         if key in SKIP_KEYS:
             continue
@@ -172,16 +162,6 @@ def patch_conf(
             continue
         out[key] = new
         changes.append((key, old, new))
-
-    # Pass 2: derived service_path. We always re-derive this from whatever
-    # api_version is now in conf so the URL matches the API surface.
-    if "service_path" in out:
-        derived = derive_service_path(out.get("api_version"))
-        if derived:
-            old = out.get("service_path", "")
-            if old != derived:
-                out["service_path"] = derived
-                changes.append(("service_path", old, derived))
     return out, changes
 
 

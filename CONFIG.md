@@ -127,43 +127,58 @@ oci setup config
 …and follow the prompts. The script reads the `[DEFAULT]` profile by
 default; pass `--profile <name>` if you use another.
 
-## API version & resource path (potential future migration)
+## API version & resource path
 
-AIDP exposes two REST surfaces depending on tenancy:
+AIDP's live REST surface for the volume / catalog / KB endpoints is:
 
-| `apiVersion` | URL resource segment (`service_path`) | Status |
+```
+/20260430/aiDataPlatforms/<dataLakeOcid>/...
+```
+
+Even when `~/.aidp/aidp-deploy.config.json` says `"apiVersion": "20240831"`
+(the Jacques `aidp-deploy` extension wrote that), the **actual** REST URL
+the tools have to hit on a production tenancy is `20260430/aiDataPlatforms/`.
+JR's reference implementation confirms this — the `dataLakes/` path is not
+where the modern endpoints live.
+
+This is hardcoded in the tool defaults; the build scripts no longer
+auto-override it. If AIDP ever exposes a non-standard path on a specific
+tenancy, set `api_version` and `service_path` explicitly in conf to
+override.
+
+## Auth modes (the part that bit us)
+
+Every catalog/volume request needs an OCI signature. The tool supports
+three `auth_mode` values:
+
+| `auth_mode` | Where the identity comes from | Use it when |
 |---|---|---|
-| `20240831` | `dataLakes` | Currently live on every tenancy I've seen |
-| `20260430` | `aiDataPlatforms` | Future shape; documented in the public Oracle SDK |
+| `resource_principal` | injected by AIDP cluster at runtime | tool is deployed in an agent flow running on AIDP compute |
+| `instance_principal` | OCI instance metadata service | running on an OCI VM with instance principals enabled |
+| `user_principal` | `tenancy_ocid` + `user_ocid` + `fingerprint` + `private_key_content` from conf | **testing from the AIDP Test panel**, or running locally |
 
-A tool deployed with the wrong combination returns 404 on every request:
-```
-GET /20260430/aiDataPlatforms/<lake>/volumes/<key>/...
-->  404 NotAuthorizedOrNotFound
-```
-…even when the OCID is right and auth is fine. AIDP just doesn't have the
-endpoint on your tenancy yet.
+**Important**: the **AIDP Test panel does NOT inject a resource principal**.
+If your tool's `auth_mode=resource_principal` and you click Test, every call
+returns `404 NotAuthorizedOrNotFound` — not because the URL is wrong but
+because the request goes out unsigned.
 
-`setup.py build` (and `build_with_config.py`) handle this automatically:
+**Two fixes**:
 
-- `api_version` is **always** overwritten with the value in
-  `~/.aidp/aidp-deploy.config.json` — even if the tool's `tool_config.json`
-  has a different default.
-- `service_path` is **derived** from `api_version` via a small lookup table
-  (`API_VERSION_TO_SERVICE_PATH` in both scripts).
+1. **Test in a deployed flow** — once the tool is added to an agent flow and
+   the flow runs on a compute cluster, resource_principal is available and
+   the tool works without any credential entry.
 
-**If you're building a NEW custom tool**, don't hard-code `api_version` or
-`service_path` to a literal — leave them as `""` in `tool_config.json` and
-let the build inject them. That way the tool follows the platform when
-AIDP migrates to `20260430` and you don't have to re-edit every package.
+2. **For Test panel testing**: set `auth_mode=user_principal` and fill in:
+   - `tenancy_ocid` — from `~/.oci/config` `tenancy=`
+   - `user_ocid` — from `~/.oci/config` `user=`
+   - `fingerprint` — from `~/.oci/config` `fingerprint=`
+   - `private_key_content` — paste the contents of the PEM file at the
+     `key_file=` path in `~/.oci/config`. Bear in mind this is a real
+     credential; the AIDP Credential Store is the cleaner production answer.
 
-**If AIDP migrates your tenancy to 20260430**:
-1. Edit `~/.aidp/aidp-deploy.config.json`, set `"apiVersion": "20260430"`.
-2. Run `python setup.py build`.
-3. `service_path` flips to `aiDataPlatforms` automatically; every zip is
-   rebuilt; re-upload via the AIDP console.
-
-That's it — no per-tool editing.
+`setup.py build` does NOT auto-fill `private_key_content` (it would commit a
+secret). You paste it manually for the Test panel; the deployed flow uses
+resource_principal and never needs it.
 
 ## Build script flags
 
