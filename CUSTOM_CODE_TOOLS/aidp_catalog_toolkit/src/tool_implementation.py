@@ -57,8 +57,13 @@ def _client(conf, context_vars):
     data_lake = (get_cfg(conf, "data_lake_ocid", "")
                  or os.environ.get("DATALAKE_ID", "")
                  or context_vars.get("datalake_id", ""))
-    api_version = get_cfg(conf, "api_version", "20260430")
-    service_path = get_cfg(conf, "service_path", "aiDataPlatforms")
+    api_version = get_cfg(conf, "api_version", "20240831")
+    # service_path is derived from api_version so the two can never drift.
+    # If the caller explicitly set service_path in conf, honor that override
+    # (covers an edge case where AIDP exposes a custom path on a tenancy).
+    _API_TO_PATH = {"20240831": "dataLakes", "20260430": "aiDataPlatforms"}
+    explicit_sp = get_cfg(conf, "service_path", "")
+    service_path = explicit_sp or _API_TO_PATH.get(str(api_version).strip(), "dataLakes")
     timeout = get_cfg(conf, "timeout", 30)
     if not region or not data_lake:
         raise ValueError("region and data_lake_ocid are required (config or OCI_REGION/DATALAKE_ID env)")

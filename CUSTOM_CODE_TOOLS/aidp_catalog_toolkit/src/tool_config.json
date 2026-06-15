@@ -59,8 +59,7 @@
         "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
         "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
-        "pass_phrase": "",
-        "service_path": "dataLakes"
+        "pass_phrase": ""
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
@@ -154,7 +153,7 @@
         "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
         "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
         "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
-        "service_path": "AIDP REST service path (default aiDataPlatforms)."
+        "service_path": "Auto-derived from api_version (20240831->dataLakes, 20260430->aiDataPlatforms). Only set if AIDP exposes a custom path."
       }
     },
     {
@@ -208,8 +207,7 @@
         "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
         "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
-        "pass_phrase": "",
-        "service_path": "dataLakes"
+        "pass_phrase": ""
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
@@ -295,7 +293,7 @@
         "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
         "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
         "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
-        "service_path": "AIDP REST service path (default aiDataPlatforms)."
+        "service_path": "Auto-derived from api_version (20240831->dataLakes, 20260430->aiDataPlatforms). Only set if AIDP exposes a custom path."
       }
     },
     {
@@ -344,8 +342,7 @@
         "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
         "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
-        "pass_phrase": "",
-        "service_path": "dataLakes"
+        "pass_phrase": ""
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
@@ -414,7 +411,7 @@
         "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
         "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
         "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
-        "service_path": "AIDP REST service path (default aiDataPlatforms)."
+        "service_path": "Auto-derived from api_version (20240831->dataLakes, 20260430->aiDataPlatforms). Only set if AIDP exposes a custom path."
       }
     },
     {
@@ -460,8 +457,7 @@
         "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
         "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
-        "pass_phrase": "",
-        "service_path": "dataLakes"
+        "pass_phrase": ""
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
@@ -526,7 +522,7 @@
         "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
         "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
         "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
-        "service_path": "AIDP REST service path (default aiDataPlatforms)."
+        "service_path": "Auto-derived from api_version (20240831->dataLakes, 20260430->aiDataPlatforms). Only set if AIDP exposes a custom path."
       }
     },
     {
@@ -563,8 +559,7 @@
         "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
         "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
-        "pass_phrase": "",
-        "service_path": "dataLakes"
+        "pass_phrase": ""
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
@@ -622,7 +617,7 @@
         "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
         "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
         "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
-        "service_path": "AIDP REST service path (default aiDataPlatforms)."
+        "service_path": "Auto-derived from api_version (20240831->dataLakes, 20260430->aiDataPlatforms). Only set if AIDP exposes a custom path."
       }
     }
   ]

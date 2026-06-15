@@ -73,8 +73,7 @@
         "max_notebook_bytes": 5242880,
         "ws_retries": 3,
         "default_notebook_path": "",
-        "api_version": "20240831",
-        "service_path": "dataLakes"
+        "api_version": "20240831"
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
@@ -131,7 +130,7 @@
         "ws_retries": "Number of websocket reconnect attempts on transient kernel errors.",
         "default_notebook_path": "Fallback Workspace notebook path used when schema notebook_path is empty.",
         "api_version": "AIDP REST API version. Auto-filled (default 20260430).",
-        "service_path": "AIDP REST service path (default aiDataPlatforms)."
+        "service_path": "Auto-derived from api_version (20240831->dataLakes, 20260430->aiDataPlatforms). Only set if AIDP exposes a custom path."
       }
     }
   ]
