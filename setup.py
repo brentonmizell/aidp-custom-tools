@@ -62,6 +62,21 @@ AUTO_FILL_KEYS = {
     "fingerprint":    ("oci",   "fingerprint"),
 }
 
+# These two must match the live AIDP API surface and are always overwritten,
+# even when there's an existing tool default. 20240831 -> /dataLakes/,
+# 20260430 -> /aiDataPlatforms/. A mismatch 404s on every call.
+ALWAYS_FORCE_KEYS = {"api_version", "service_path"}
+
+API_VERSION_TO_SERVICE_PATH = {
+    "20240831": "dataLakes",
+    "20260430": "aiDataPlatforms",
+}
+
+def derive_service_path(api_version: Optional[str]) -> Optional[str]:
+    if not api_version:
+        return None
+    return API_VERSION_TO_SERVICE_PATH.get(str(api_version).strip())
+
 # Fields the wizard prompts for interactively (workspace-specific, no auto-fill).
 PROMPTABLE_KEYS = {
     "catalog", "schema", "volume", "volume_key",
@@ -595,6 +610,7 @@ def _autofill_one(path: Path, aidp: Dict, oci: Dict, force: bool, dry_run: bool)
         conf = tool.get("conf")
         if not isinstance(conf, dict):
             continue
+        # Pass 1: regular auto-fill.
         for key in list(conf.keys()):
             if key not in AUTO_FILL_KEYS:
                 continue
@@ -604,7 +620,8 @@ def _autofill_one(path: Path, aidp: Dict, oci: Dict, force: bool, dry_run: bool)
             if not val:
                 continue
             current = conf.get(key, "")
-            if current and not force:
+            force_this = force or key in ALWAYS_FORCE_KEYS
+            if current and not force_this:
                 continue
             if str(current) == str(val):
                 continue
@@ -612,6 +629,14 @@ def _autofill_one(path: Path, aidp: Dict, oci: Dict, force: bool, dry_run: bool)
             total += 1
             old = current or "(empty)"
             print(f"  {pkg:24} {tool.get('toolClassName','?'):22} {key:18} {str(old)[:20]:>20} -> {str(val)[:24]}")
+        # Pass 2: derive service_path from api_version (always).
+        if "service_path" in conf:
+            derived = derive_service_path(conf.get("api_version"))
+            if derived and str(conf.get("service_path", "")) != derived:
+                old = conf.get("service_path", "") or "(empty)"
+                conf["service_path"] = derived
+                total += 1
+                print(f"  {pkg:24} {tool.get('toolClassName','?'):22} {'service_path':18} {str(old)[:20]:>20} -> {derived}")
     if total > 0 and not dry_run:
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return total

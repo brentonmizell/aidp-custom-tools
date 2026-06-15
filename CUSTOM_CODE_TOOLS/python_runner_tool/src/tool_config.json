@@ -61,7 +61,7 @@
       "conf": {
         "region": "us-ashburn-1",
         "aidp_endpoint": "https://aidp.us-ashburn-1.oci.oraclecloud.com",
-        "lake_ocid": "",
+        "lake_ocid": "ocid1.aidataplatform.oc1.iad.amaaaaaawah6xyqaic64ra5oaflf6hx6lnbuybhxxukkejoa2huz7iyq4tzq",
         "ws_host": "<your AIDP ws host>",
         "workspace_key": "default",
         "cluster_key": "default_cluster",
@@ -73,23 +73,46 @@
         "max_notebook_bytes": 5242880,
         "ws_retries": 3,
         "default_notebook_path": "",
-        "api_version": "20260430",
-        "service_path": "aiDataPlatforms"
+        "api_version": "20240831",
+        "service_path": "dataLakes"
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
       },
       "_uiHints": {
         "conf": {
-          "region": { "kind": "dropdown", "source": "regions" },
-          "aidp_endpoint": { "kind": "readonly", "dependsOn": "region" },
-          "lake_ocid": { "kind": "dropdown", "source": "dataLakes" },
-          "workspace_key": { "kind": "dropdown", "source": "workspaces", "dependsOn": "lake_ocid" },
-          "cluster_key": { "kind": "dropdown", "source": "clusters", "dependsOn": "workspace_key" },
-          "oci_config_profile": { "kind": "secret" }
+          "region": {
+            "kind": "dropdown",
+            "source": "regions"
+          },
+          "aidp_endpoint": {
+            "kind": "readonly",
+            "dependsOn": "region"
+          },
+          "lake_ocid": {
+            "kind": "dropdown",
+            "source": "dataLakes"
+          },
+          "workspace_key": {
+            "kind": "dropdown",
+            "source": "workspaces",
+            "dependsOn": "lake_ocid"
+          },
+          "cluster_key": {
+            "kind": "dropdown",
+            "source": "clusters",
+            "dependsOn": "workspace_key"
+          },
+          "oci_config_profile": {
+            "kind": "secret"
+          }
         },
         "schema": {
-          "notebook_path": { "kind": "dropdown", "source": "notebookFiles", "dependsOn": "conf.workspace_key" }
+          "notebook_path": {
+            "kind": "dropdown",
+            "source": "notebookFiles",
+            "dependsOn": "conf.workspace_key"
+          }
         }
       },
       "_confDescriptions": {

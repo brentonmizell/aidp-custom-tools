@@ -57,6 +57,26 @@ AUTO_FILL_KEYS = {
     "fingerprint":    ("oci",   "fingerprint"),
 }
 
+# Fields that ALWAYS overwrite the tool's default — these are not user choices,
+# they're the shape of the live AIDP API and must match whatever tenancy the
+# build is targeting. The "old" tenancy is on 20240831 + /dataLakes/; the new
+# public-API shape is 20260430 + /aiDataPlatforms/. A tool deployed against
+# the wrong combination 404s on every call.
+ALWAYS_FORCE_KEYS = {"api_version", "service_path"}
+
+# Mapping from apiVersion -> URL resource segment used by AIDP.
+API_VERSION_TO_SERVICE_PATH = {
+    "20240831": "dataLakes",        # current live AIDP REST surface
+    "20260430": "aiDataPlatforms",  # next-gen path documented in the public SDK
+}
+
+
+def derive_service_path(api_version: Optional[str]) -> Optional[str]:
+    """Pick the URL resource segment for a given apiVersion."""
+    if not api_version:
+        return None
+    return API_VERSION_TO_SERVICE_PATH.get(str(api_version).strip())
+
 # Never touch these (user-specific or sensitive).
 SKIP_KEYS = {
     "catalog", "schema", "volume", "volume_key",
@@ -127,9 +147,15 @@ def patch_conf(
     oci: Dict,
     force: bool,
 ) -> Tuple[Dict, list]:
-    """Return a (new conf, list of (key, old, new) tuples for the changes)."""
+    """Return a (new conf, list of (key, old, new) tuples for the changes).
+
+    ALWAYS_FORCE_KEYS override the tool's default even if `force=False`. They
+    have to match the live AIDP API shape (api_version -> service_path) or
+    every request 404s.
+    """
     out = dict(conf)
     changes = []
+    # Pass 1: regular auto-fill keys.
     for key in list(out.keys()):
         if key in SKIP_KEYS:
             continue
@@ -139,12 +165,23 @@ def patch_conf(
         if new is None:
             continue
         old = out.get(key, "")
-        if old and not force:
+        force_this = force or key in ALWAYS_FORCE_KEYS
+        if old and not force_this:
             continue
         if old == new:
             continue
         out[key] = new
         changes.append((key, old, new))
+
+    # Pass 2: derived service_path. We always re-derive this from whatever
+    # api_version is now in conf so the URL matches the API surface.
+    if "service_path" in out:
+        derived = derive_service_path(out.get("api_version"))
+        if derived:
+            old = out.get("service_path", "")
+            if old != derived:
+                out["service_path"] = derived
+                changes.append(("service_path", old, derived))
     return out, changes
 
 

@@ -47,7 +47,7 @@
       "conf": {
         "region": "us-ashburn-1",
         "data_lake_ocid": "ocid1.aidataplatform.oc1.iad.amaaaaaawah6xyqaic64ra5oaflf6hx6lnbuybhxxukkejoa2huz7iyq4tzq",
-        "api_version": "20260430",
+        "api_version": "20240831",
         "catalog": "",
         "schema": "",
         "volume": "",
@@ -60,7 +60,7 @@
         "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
         "pass_phrase": "",
-        "service_path": "aiDataPlatforms"
+        "service_path": "dataLakes"
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
@@ -197,7 +197,7 @@
       "conf": {
         "region": "us-ashburn-1",
         "data_lake_ocid": "ocid1.aidataplatform.oc1.iad.amaaaaaawah6xyqaic64ra5oaflf6hx6lnbuybhxxukkejoa2huz7iyq4tzq",
-        "api_version": "20260430",
+        "api_version": "20240831",
         "catalog": "",
         "schema": "",
         "volume": "",
@@ -209,7 +209,7 @@
         "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
         "pass_phrase": "",
-        "service_path": "aiDataPlatforms"
+        "service_path": "dataLakes"
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
@@ -337,7 +337,7 @@
       "conf": {
         "region": "us-ashburn-1",
         "data_lake_ocid": "ocid1.aidataplatform.oc1.iad.amaaaaaawah6xyqaic64ra5oaflf6hx6lnbuybhxxukkejoa2huz7iyq4tzq",
-        "api_version": "20260430",
+        "api_version": "20240831",
         "timeout": 30,
         "auth_mode": "resource_principal",
         "tenancy_ocid": "ocid1.tenancy.oc1..aaaaaaaapbfjybybo2ry37rdu2brudxyo3vgy6zwysu352cls5hrc57eil7q",
@@ -345,7 +345,7 @@
         "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
         "pass_phrase": "",
-        "service_path": "aiDataPlatforms"
+        "service_path": "dataLakes"
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
@@ -452,7 +452,7 @@
       "conf": {
         "region": "us-ashburn-1",
         "data_lake_ocid": "ocid1.aidataplatform.oc1.iad.amaaaaaawah6xyqaic64ra5oaflf6hx6lnbuybhxxukkejoa2huz7iyq4tzq",
-        "api_version": "20260430",
+        "api_version": "20240831",
         "kb_key": "",
         "timeout": 30,
         "auth_mode": "resource_principal",
@@ -461,7 +461,7 @@
         "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
         "pass_phrase": "",
-        "service_path": "aiDataPlatforms"
+        "service_path": "dataLakes"
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
@@ -555,7 +555,7 @@
         "region": "us-ashburn-1",
         "data_lake_ocid": "ocid1.aidataplatform.oc1.iad.amaaaaaawah6xyqaic64ra5oaflf6hx6lnbuybhxxukkejoa2huz7iyq4tzq",
         "workspace_id": "74effa91-f4c9-4e1a-be49-29af03e791e5",
-        "api_version": "20260430",
+        "api_version": "20240831",
         "timeout": 30,
         "max_bytes": 5000000,
         "auth_mode": "resource_principal",
@@ -564,7 +564,7 @@
         "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
         "pass_phrase": "",
-        "service_path": "aiDataPlatforms"
+        "service_path": "dataLakes"
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
