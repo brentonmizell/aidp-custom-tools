@@ -7,13 +7,20 @@ AIDP console (or your local files) to find each value.
 ## TL;DR
 
 ```
-# One-time: make sure these files exist (see "Generating the configs" below).
-~/.aidp/aidp-deploy.config.json    # AIDP workspace details
-~/.oci/config                       # standard OCI CLI config
+# Easiest path — interactive wizard that does init + configure + build:
+python setup.py
 
-# Each build:
-python build_with_config.py        # fills defaults + rebuilds every .zip
+# Non-interactive (assumes ~/.aidp + ~/.oci already exist):
+python setup.py build
 ```
+
+`setup.py` is the recommended entry point. It walks you through generating
+the configs below if missing, then prompts you for the workspace-specific
+values (catalog / schema / volume / KB / etc.) per tool, then rebuilds the
+zips. See `README.md` for the full subcommand list.
+
+`build_with_config.py` is the old, non-interactive build (equivalent to
+`python setup.py build`).
 
 Then `git add . && git commit && git push`, or upload the rebuilt zips
 directly via the AIDP console / VS Code extension.
