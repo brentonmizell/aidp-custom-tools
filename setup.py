@@ -588,8 +588,21 @@ def cmd_build(args) -> int:
         total += n
     print(f"\n[summary] {total} field(s) updated across {files} tool_config.json file(s)" +
           (" (dry-run; no writes)" if args.dry_run else ""))
-    if not args.dry_run and not args.no_zip:
-        _rebuild_zips()
+    if args.dry_run or args.no_zip:
+        return 0
+
+    # Optional user-principal credential embedding for Test-panel testing.
+    creds = None
+    test_creds_requested = getattr(args, "test_creds", False)
+    if test_creds_requested:
+        profile = args.profile or "DEFAULT"
+        creds = _load_user_principal_creds(profile)
+        if not creds:
+            print(yellow("[skip] not embedding credentials (config read failed)"))
+        else:
+            _warn_test_creds()
+            print(f"[creds] profile=[{profile}] tenancy={creds['tenancy'][:32]}... key={len(creds['private_key'])} bytes")
+    _rebuild_zips(creds=creds)
     return 0
 
 def _autofill_one(path: Path, aidp: Dict, oci: Dict, force: bool, dry_run: bool) -> int:
@@ -668,27 +681,117 @@ def cmd_status(args) -> int:
 # Zip rebuilds
 # ---------------------------------------------------------------------------
 
-def _rebuild_zips() -> None:
-    print(f"\n{bold('Rebuilding .zip artifacts...')}")
+def _rebuild_zips(creds: Optional[Dict] = None) -> None:
+    label = " (with user-principal credentials embedded)" if creds else ""
+    print(f"\n{bold('Rebuilding .zip artifacts...' + label)}")
     for pkg in sorted(TOOLS_DIR.iterdir()):
         if pkg.is_dir():
-            _rebuild_one(pkg)
+            _rebuild_one(pkg, creds)
 
-def _rebuild_one(pkg_dir: Path) -> None:
+
+def _rebuild_one(pkg_dir: Path, creds: Optional[Dict] = None) -> None:
+    """Build the package zip. When `creds` is provided, patch tool_config.json
+    IN THE ZIP (not on disk) with user_principal credentials. Source stays
+    clean; the zip is the only artifact that ever sees the secrets."""
     src = pkg_dir / "src"
     if not src.is_dir():
         return
     zip_path = pkg_dir / f"{pkg_dir.name}.zip"
     if zip_path.exists():
         zip_path.unlink()
+    patched_tools = 0
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for entry in src.rglob("*"):
             if entry.is_dir():
                 continue
             if "__pycache__" in entry.parts or entry.suffix == ".pyc":
                 continue
-            zf.write(entry, entry.relative_to(src).as_posix())
-    print(f"  {green('rebuilt')} {zip_path.name} ({zip_path.stat().st_size:>7,} bytes)")
+            rel = entry.relative_to(src).as_posix()
+            if creds and rel == "tool_config.json":
+                data = json.loads(entry.read_text(encoding="utf-8"))
+                patched_tools += _inject_credentials(data, creds)
+                zf.writestr(rel, json.dumps(data, indent=2) + "\n")
+                continue
+            zf.write(entry, rel)
+    tag = green("rebuilt") if not creds else yellow("rebuilt+creds")
+    extra = f" [auth on {patched_tools} tool(s)]" if creds and patched_tools else ""
+    print(f"  {tag} {zip_path.name} ({zip_path.stat().st_size:>7,} bytes){extra}")
+
+
+def _inject_credentials(tool_config: Dict, creds: Dict) -> int:
+    """Mutate tool_config so every tool whose conf already declares user-
+    principal fields has them filled in + auth_mode flipped to user_principal.
+    Returns the number of tools touched."""
+    touched = 0
+    for tool in tool_config.get("tools") or []:
+        conf = tool.get("conf")
+        if not isinstance(conf, dict):
+            continue
+        # Only patch tools that even know about user-principal auth — others
+        # (e.g. compute_toolkit MathTool) are unaffected by these fields.
+        if not any(k in conf for k in ("tenancy_ocid", "user_ocid", "fingerprint",
+                                       "private_key_content", "auth_mode")):
+            continue
+        if "tenancy_ocid" in conf:        conf["tenancy_ocid"] = creds["tenancy"]
+        if "user_ocid" in conf:           conf["user_ocid"] = creds["user"]
+        if "fingerprint" in conf:         conf["fingerprint"] = creds["fingerprint"]
+        if "private_key_content" in conf: conf["private_key_content"] = creds["private_key"]
+        if "pass_phrase" in conf and creds.get("pass_phrase"):
+            conf["pass_phrase"] = creds["pass_phrase"]
+        if "auth_mode" in conf:           conf["auth_mode"] = "user_principal"
+        touched += 1
+    return touched
+
+
+def _load_user_principal_creds(profile: str) -> Optional[Dict]:
+    """Read ~/.oci/config + the PEM file. Return a dict with tenancy / user /
+    fingerprint / private_key / pass_phrase, or None on failure."""
+    cfg_path = Path.home() / ".oci" / "config"
+    if not cfg_path.is_file():
+        print(red(f"[err] {cfg_path} not found"))
+        return None
+    cp = configparser.ConfigParser()
+    cp.read(cfg_path)
+    if profile not in cp:
+        print(red(f"[err] profile [{profile}] not found in {cfg_path}"))
+        print(dim(f"      available: {', '.join(cp.sections())}"))
+        return None
+    section = cp[profile]
+    tenancy = section.get("tenancy", "").strip()
+    user = section.get("user", "").strip()
+    fingerprint = section.get("fingerprint", "").strip()
+    key_file = section.get("key_file", "").strip()
+    pass_phrase = section.get("pass_phrase", "").strip() or None
+    if not (tenancy and user and fingerprint and key_file):
+        print(red(f"[err] profile [{profile}] is missing one of tenancy/user/fingerprint/key_file"))
+        return None
+    pem_path = Path(key_file).expanduser()
+    if not pem_path.is_file():
+        print(red(f"[err] PEM key file not found at {pem_path}"))
+        return None
+    pem = pem_path.read_text(encoding="utf-8")
+    # Strip the trailing OCI_API_KEY marker line if present — some signer libs
+    # trip on extra content after END PRIVATE KEY.
+    if pem.rstrip().endswith("OCI_API_KEY"):
+        pem = pem[: pem.rfind("-----END PRIVATE KEY-----") + len("-----END PRIVATE KEY-----")] + "\n"
+    return {
+        "tenancy": tenancy, "user": user, "fingerprint": fingerprint,
+        "private_key": pem, "pass_phrase": pass_phrase,
+        "_profile": profile,
+    }
+
+
+def _warn_test_creds() -> None:
+    """One-time loud warning before embedding a private key in the zips."""
+    print()
+    print(yellow(bold("===========================================================")))
+    print(yellow(bold("  WARNING — building zips with credentials embedded.")))
+    print(yellow(bold("  The .zip artifacts will contain your OCI private key.")))
+    print(yellow(bold("  Treat them as secrets: don't share, don't commit.")))
+    print(yellow(bold("  Source files under CUSTOM_CODE_TOOLS/<pkg>/src/ are")))
+    print(yellow(bold("  NEVER modified by this flag — only the zip output.")))
+    print(yellow(bold("===========================================================")))
+    print()
 
 # ---------------------------------------------------------------------------
 # Default wizard (init -> configure -> build)
@@ -708,6 +811,16 @@ def cmd_wizard(args) -> int:
     rc = cmd_configure(args)
     if rc:
         return rc
+    # Offer to embed user-principal credentials in the zips for AIDP Test
+    # panel testing. The panel doesn't have resource_principal available, so
+    # without credentials embedded every test returns 404 NotAuthorizedOrNotFound.
+    if not getattr(args, "test_creds", False):
+        print()
+        print(dim("The AIDP Test panel can't use resource_principal — it runs locally."))
+        print(dim("If you want to test from the panel, the zips need user-principal credentials"))
+        print(dim("baked in (from ~/.oci/config). Source files are not touched; only the .zip."))
+        if ask_yes_no("Embed user-principal credentials in the zip output?", default=False):
+            args.test_creds = True
     rc = cmd_build(args)
     return rc
 
@@ -728,6 +841,8 @@ def main(argv: List[str]) -> int:
     p.add_argument("--force", action="store_true", help="overwrite existing non-empty conf values")
     p.add_argument("--dry-run", action="store_true", help="don't write")
     p.add_argument("--no-zip", action="store_true", help="don't rebuild zips")
+    p.add_argument("--test-creds", action="store_true",
+                   help="embed your OCI user-principal credentials in the zips so the AIDP Test panel can authenticate; source files stay clean")
 
     p = sub.add_parser("init", help="generate / verify ~/.aidp + ~/.oci config")
     p.add_argument("--re-prompt", action="store_true")
@@ -742,6 +857,8 @@ def main(argv: List[str]) -> int:
     p.add_argument("--force", action="store_true")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--no-zip", action="store_true")
+    p.add_argument("--test-creds", action="store_true",
+                   help="embed OCI user-principal credentials in the zips (zip-only; source untouched)")
 
     p = sub.add_parser("status", help="show what's filled vs blank across all tools")
 
@@ -751,9 +868,9 @@ def main(argv: List[str]) -> int:
     cmd = args.cmd or "wizard"
     if cmd in ("wizard",):
         # Ensure all attrs the sub-handlers reference exist.
-        for attr in ("re_prompt", "all", "package", "force", "dry_run", "no_zip"):
+        for attr in ("re_prompt", "all", "package", "force", "dry_run", "no_zip", "test_creds"):
             if not hasattr(args, attr):
-                setattr(args, attr, False if attr in ("re_prompt", "all", "force", "dry_run", "no_zip") else None)
+                setattr(args, attr, False if attr in ("re_prompt", "all", "force", "dry_run", "no_zip", "test_creds") else None)
 
     handlers = {
         "wizard": cmd_wizard,

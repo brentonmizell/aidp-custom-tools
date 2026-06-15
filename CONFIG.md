@@ -176,9 +176,30 @@ because the request goes out unsigned.
      `key_file=` path in `~/.oci/config`. Bear in mind this is a real
      credential; the AIDP Credential Store is the cleaner production answer.
 
-`setup.py build` does NOT auto-fill `private_key_content` (it would commit a
-secret). You paste it manually for the Test panel; the deployed flow uses
-resource_principal and never needs it.
+`setup.py build` does NOT touch `private_key_content` by default — it would
+commit a secret. But for AIDP Test panel testing there's a one-flag answer:
+
+```
+python setup.py build --test-creds
+```
+
+This reads your `~/.oci/config` + the PEM at `key_file=`, **patches the
+zip artifacts** with `auth_mode=user_principal` + the four credential
+fields, and prints a big warning. **Source files on disk are NEVER
+modified** — only the `.zip` output. That means:
+
+- The zip you upload to the AIDP Test panel works end-to-end.
+- Your repo and `tool_config.json` stay clean — no secrets in git.
+- Re-run `python setup.py build` (without `--test-creds`) to produce clean
+  zips for production deploy.
+
+Use `--profile <name>` to pick an OCI profile other than `DEFAULT`. The
+interactive `python setup.py wizard` asks you whether to embed credentials
+after the configure phase, so you can pick per-run.
+
+The `--test-creds` flow does NOT support session tokens (`security_token_file`
+in `~/.oci/config`) — only API key profiles. The PEM at `key_file=` must
+exist and be readable.
 
 ## Build script flags
 

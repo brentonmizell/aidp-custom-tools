@@ -53,6 +53,11 @@ python setup.py init --re-prompt
 
 # Build against a different OCI profile:
 python setup.py build --profile aidp-session
+
+# Build zips with your OCI user-principal credentials baked in so you can
+# test from the AIDP Test panel (source files stay clean — only the .zip
+# contains the secrets):
+python setup.py build --test-creds
 ```
 
 ## What's here
@@ -122,10 +127,14 @@ Most common cause: testing from the AIDP Test panel with
 `auth_mode=resource_principal`. The Test panel does NOT have a resource
 principal available — only deployed agent flows running on a cluster do.
 
-**Fix for Test panel testing**: change `auth_mode` to `user_principal` and
-fill in `tenancy_ocid` / `user_ocid` / `fingerprint` / `private_key_content`
-from your `~/.oci/config`. See `CONFIG.md → "Auth modes"` for the full
-walkthrough.
+**Fix for Test panel testing** (one command):
+```
+python setup.py build --test-creds
+```
+This embeds your `~/.oci/config` credentials directly into the **zip
+artifacts only** (source files stay clean — nothing committed). Re-upload
+the rebuilt zip and the Test panel works. See `CONFIG.md → "Auth modes"`
+for the full walkthrough.
 
 **Fix for deployed flows**: leave `auth_mode=resource_principal` and don't
 fill anything else. The cluster injects identity automatically.
