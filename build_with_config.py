@@ -38,6 +38,7 @@ import argparse
 import configparser
 import json
 import os
+import shutil
 import sys
 import zipfile
 from pathlib import Path
@@ -45,6 +46,13 @@ from typing import Dict, Iterable, Optional, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parent
 TOOLS_DIR = REPO_ROOT / "CUSTOM_CODE_TOOLS"
+
+# Canonical source for the shared aidp_io helper. The zip-build step copies
+# this into each package's src/utils/aidp_io.py before zipping so the deployed
+# package is self-contained, and ALSO writes it onto disk under each package
+# so local dev imports (e.g. `from utils.aidp_io import ...`) keep working
+# without a build step.
+SHARED_AIDP_IO_SRC = REPO_ROOT / "aidp_io" / "aidp_io.py"
 
 # Conf keys we'll touch (and the source of their value).
 AUTO_FILL_KEYS = {
@@ -228,6 +236,46 @@ def _strip_extension_only_keys(tool_config: Dict) -> bool:
     return stripped
 
 
+def sync_shared_module(tools_dir: Path) -> int:
+    """Copy the canonical aidp_io.py into each package's src/utils/aidp_io.py.
+
+    Runs ONCE per build (before the per-package zip loop):
+      - so the zip contains a self-contained aidp_io.py inside src/utils/,
+      - and so dev-time imports from CUSTOM_CODE_TOOLS/<pkg>/src/utils/aidp_io.py
+        keep working without an explicit build step.
+
+    Missing canonical source -> warn and continue (no fatal error). Returns
+    the number of packages successfully synced.
+    """
+    if not SHARED_AIDP_IO_SRC.is_file():
+        print(f"  [warn] canonical aidp_io.py not found at {SHARED_AIDP_IO_SRC} — skipping sync",
+              file=sys.stderr)
+        return 0
+    if not tools_dir.is_dir():
+        print(f"  [warn] {tools_dir} not found — skipping sync", file=sys.stderr)
+        return 0
+    synced = 0
+    for pkg in sorted(tools_dir.iterdir()):
+        if not pkg.is_dir():
+            continue
+        src_dir = pkg / "src"
+        if not src_dir.is_dir():
+            continue
+        utils_dir = src_dir / "utils"
+        utils_dir.mkdir(parents=True, exist_ok=True)
+        init_py = utils_dir / "__init__.py"
+        if not init_py.exists():
+            init_py.write_text("", encoding="utf-8")
+        dest = utils_dir / "aidp_io.py"
+        try:
+            shutil.copyfile(SHARED_AIDP_IO_SRC, dest)
+            synced += 1
+        except OSError as e:
+            print(f"  [warn] could not copy aidp_io.py into {pkg.name}: {e}", file=sys.stderr)
+    print(f"[shared] aidp_io.py synced to {synced} packages")
+    return synced
+
+
 def rebuild_zips(tools_dir: Path) -> None:
     """Re-zip every package's src/ into <pkg>/<pkg>.zip. tool_config.json is
     sanitized into the zip — sidecar keys stripped so AIDP's Pydantic model
@@ -300,6 +348,11 @@ def main(argv: list[str]) -> int:
 
     if not args.dry_run and not args.no_zip:
         print(f"\n[zip] rebuilding artifacts in {TOOLS_DIR}")
+        # Sync the shared aidp_io helper ONCE before the per-package zip loop.
+        # This writes the canonical source onto disk under each package's
+        # src/utils/aidp_io.py (dev imports work) AND ensures the zip step
+        # picks it up (it walks src/).
+        sync_shared_module(TOOLS_DIR)
         rebuild_zips(TOOLS_DIR)
 
     return 0

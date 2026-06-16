@@ -6,9 +6,9 @@
       "toolClassName": "FilterTool",
       "displayName": "Filter Records",
       "description": "Filter a list of records, keeping only those where a field matches a condition. Use when the agent needs a subset of data by some criteria (e.g. amount over 1000, status equals open).",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "schema": [
-        {"name": "data", "type": "string", "description": "The records to filter, as a list of objects or a JSON array."},
+        {"name": "data", "type": "string", "description": "The records to filter, as a list of objects or a JSON array. Ignored when source_uri is set."},
         {"name": "field", "type": "string", "description": "The field name to test on each record."},
         {
           "name": "operator",
@@ -17,11 +17,15 @@
           "enum": ["eq", "ne", "gt", "gte", "lt", "lte", "contains", "startswith", "regex", "in", "is_null", "not_null"],
           "default": "eq"
         },
-        {"name": "value", "type": "string", "description": "The value to compare against (not needed for is_null/not_null)."}
+        {"name": "value", "type": "string", "description": "The value to compare against (not needed for is_null/not_null)."},
+        {"name": "source_uri", "type": "string", "description": "Optional AIDP URI to read input records from. Overrides the inline 'data' field. Format: master:<catalog>.<schema>.<volume>:/<path> or workspace:/<path>. File extension drives parsing: .json/.jsonl/.csv."},
+        {"name": "dest_uri", "type": "string", "description": "Optional AIDP URI to write the filter result to. Same URI format as source_uri. Extension drives serialization (.json full envelope, .jsonl/.csv just the matched rows). The structured envelope is still returned to the caller."}
       ],
       "conf": {"max_results": 1000},
       "_confDescriptions": {
-        "max_results": "Cap on the number of matching records returned. Prevents oversized payloads back to the agent."
+        "max_results": "Cap on the number of matching records returned. Prevents oversized payloads back to the agent.",
+        "source_uri": "Optional AIDP URI to read input records from instead of the inline 'data' field. Supports master:<catalog>.<schema>.<volume>:/<path> and workspace:/<path>.",
+        "dest_uri": "Optional AIDP URI to write the filter result to. Extension (.json/.jsonl/.csv) controls the serialization."
       },
       "_uiHints": {
         "conf": {},
@@ -37,15 +41,21 @@
       "toolClassName": "CompareTool",
       "displayName": "Compare Datasets",
       "description": "Diff two sets of records matched on a key field and report which were added, removed, and changed (with old/new values). Use to detect changes between two snapshots of data.",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "schema": [
-        {"name": "left", "type": "string", "description": "The first/old record set (list of objects or JSON array)."},
-        {"name": "right", "type": "string", "description": "The second/new record set (list of objects or JSON array)."},
-        {"name": "key", "type": "string", "description": "The id field used to match records across the two sets."}
+        {"name": "left", "type": "string", "description": "The first/old record set (list of objects or JSON array). Ignored when left_uri or a paired source_uri is set."},
+        {"name": "right", "type": "string", "description": "The second/new record set (list of objects or JSON array). Ignored when right_uri or a paired source_uri is set."},
+        {"name": "key", "type": "string", "description": "The id field used to match records across the two sets."},
+        {"name": "source_uri", "type": "string", "description": "Optional AIDP URI to a JSON document of the form {\"left\": [...], \"right\": [...]}. Format: master:<catalog>.<schema>.<volume>:/<path> or workspace:/<path>."},
+        {"name": "left_uri", "type": "string", "description": "Optional AIDP URI to read the left/old record set from. Takes precedence over both source_uri and inline 'left'."},
+        {"name": "right_uri", "type": "string", "description": "Optional AIDP URI to read the right/new record set from. Takes precedence over both source_uri and inline 'right'."},
+        {"name": "dest_uri", "type": "string", "description": "Optional AIDP URI to write the diff to. .json writes the full envelope (added/removed/changed/summary); .jsonl/.csv writes the 'changed' rows. The structured envelope is still returned to the caller."}
       ],
       "conf": {"tolerance": 1e-9},
       "_confDescriptions": {
-        "tolerance": "Numeric equality tolerance for float field comparisons. Values within this delta are treated as equal."
+        "tolerance": "Numeric equality tolerance for float field comparisons. Values within this delta are treated as equal.",
+        "source_uri": "Optional AIDP URI to a paired {left, right} JSON document. Use left_uri/right_uri instead for split inputs.",
+        "dest_uri": "Optional AIDP URI to write the diff output to. Extension (.json/.jsonl/.csv) controls the serialization."
       },
       "_uiHints": {
         "conf": {},
@@ -56,9 +66,9 @@
       "toolClassName": "DataManipulationTool",
       "displayName": "Manipulate Data",
       "description": "Reshape tabular records: select or rename columns, sort, remove duplicates, or group-by and aggregate. Use for summarizing or restructuring data between flow steps.",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "schema": [
-        {"name": "data", "type": "string", "description": "The records to manipulate (list of objects or JSON array)."},
+        {"name": "data", "type": "string", "description": "The records to manipulate (list of objects or JSON array). Ignored when source_uri is set."},
         {
           "name": "operation",
           "type": "string",
@@ -66,11 +76,15 @@
           "enum": ["select", "rename", "sort", "dedupe", "groupby"],
           "default": "select"
         },
-        {"name": "spec", "type": "string", "description": "Operation parameters as a JSON object. select:{columns:[...]}, rename:{map:{old:new}}, sort:{by:[...],ascending:true}, dedupe:{subset:[...]}, groupby:{by:[...],agg:{field:'sum'}}."}
+        {"name": "spec", "type": "string", "description": "Operation parameters as a JSON object. select:{columns:[...]}, rename:{map:{old:new}}, sort:{by:[...],ascending:true}, dedupe:{subset:[...]}, groupby:{by:[...],agg:{field:'sum'}}."},
+        {"name": "source_uri", "type": "string", "description": "Optional AIDP URI to read input records from. Overrides the inline 'data' field. Format: master:<catalog>.<schema>.<volume>:/<path> or workspace:/<path>. File extension drives parsing: .json/.jsonl/.csv."},
+        {"name": "dest_uri", "type": "string", "description": "Optional AIDP URI to write the reshaped rows to. Extension drives serialization (.json full envelope, .jsonl/.csv just the rows). The structured envelope is still returned to the caller."}
       ],
       "conf": {"max_rows": 5000},
       "_confDescriptions": {
-        "max_rows": "Cap on rows returned after the operation. Protects the agent context from large result sets."
+        "max_rows": "Cap on rows returned after the operation. Protects the agent context from large result sets.",
+        "source_uri": "Optional AIDP URI to read input records from instead of the inline 'data' field. Supports master:<catalog>.<schema>.<volume>:/<path> and workspace:/<path>.",
+        "dest_uri": "Optional AIDP URI to write the reshaped rows to. Extension (.json/.jsonl/.csv) controls the serialization."
       },
       "_uiHints": {
         "conf": {},

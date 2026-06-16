@@ -50,13 +50,103 @@ except ImportError:  # pragma: no cover
 # A small runner that execs the user's file with `data` predefined and captures
 # a `result` variable if the user sets one. Keeping the user code in its own
 # file (compiled with its real path) means tracebacks show correct line numbers.
+#
+# The runner also exposes AIDP file-IO helpers in the exec namespace:
+#   aidp_read(uri)         -> bytes
+#   aidp_read_text(uri)    -> str
+#   aidp_write(uri, b)     -> dict
+#   aidp_write_text(uri, s) -> dict
+#   aidp_list(uri)         -> list[dict]
+# Each is a closure over the tool's conf + context_vars (loaded from
+# TOOL_CONF_PATH / TOOL_CTX_PATH). The aidp_io module + config_utils helper
+# are staged in the runner's tmpdir so `import aidp_io` resolves without
+# depending on the parent package layout.
+#
+# If `files` URIs were supplied, the runner pre-reads them into a dict named
+# `files` keyed by the user's alias (or the URI's basename if no alias is
+# provided) and exposes it in the namespace too.
 _RUNNER = r'''
 import json, os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 _g = {"__name__": "__main__", "__file__": os.environ["USER_CODE"]}
 try:
     _g["data"] = json.loads(os.environ.get("TOOL_INPUT", "null"))
 except Exception:
     _g["data"] = None
+
+# Load conf + context_vars passed in from the tool (JSON files written by the
+# parent process). They drive the auth/region used by aidp_io.
+def _load_json(env_key, default):
+    p = os.environ.get(env_key, "")
+    if not p:
+        return default
+    try:
+        with open(p, "r") as f:
+            return json.load(f)
+    except Exception:
+        return default
+
+_conf = _load_json("TOOL_CONF_PATH", {})
+_ctx = _load_json("TOOL_CTX_PATH", {})
+
+# Bind AIDP IO helpers to the exec namespace as closures over (conf, ctx).
+try:
+    import aidp_io as _aidp_io
+
+    def _bind_read(uri):
+        return _aidp_io.read_file(uri, _conf, _ctx)
+    def _bind_read_text(uri):
+        return _aidp_io.read_text(uri, _conf, _ctx)
+    def _bind_write(uri, content_bytes):
+        return _aidp_io.write_file(uri, content_bytes, _conf, _ctx)
+    def _bind_write_text(uri, content_str):
+        return _aidp_io.write_text(uri, content_str, _conf, _ctx)
+    def _bind_list(uri):
+        return _aidp_io.list_files(uri, _conf, _ctx)
+
+    _g["aidp_read"] = _bind_read
+    _g["aidp_read_text"] = _bind_read_text
+    _g["aidp_write"] = _bind_write
+    _g["aidp_write_text"] = _bind_write_text
+    _g["aidp_list"] = _bind_list
+except Exception as _io_err:
+    # Surface the import error lazily — user code that doesn't call these
+    # helpers should still run. Calling any of them raises with the real cause.
+    def _io_unavailable(*a, **k):
+        raise RuntimeError(f"aidp_io is not available: {_io_err}")
+    _g["aidp_read"] = _io_unavailable
+    _g["aidp_read_text"] = _io_unavailable
+    _g["aidp_write"] = _io_unavailable
+    _g["aidp_write_text"] = _io_unavailable
+    _g["aidp_list"] = _io_unavailable
+
+# Pre-read any `files` URIs the caller requested into a {alias: bytes} dict.
+_files = {}
+_files_spec = _load_json("TOOL_FILES_PATH", [])
+if isinstance(_files_spec, list):
+    for _entry in _files_spec:
+        if isinstance(_entry, str):
+            _uri, _alias = _entry, None
+        elif isinstance(_entry, dict):
+            _uri = _entry.get("uri") or _entry.get("path") or ""
+            _alias = _entry.get("alias") or _entry.get("name")
+        else:
+            continue
+        if not _uri:
+            continue
+        if not _alias:
+            # Derive an alias from the URI's basename (after the final '/').
+            _tail = _uri.rsplit("/", 1)[-1]
+            _alias = _tail or _uri
+        try:
+            _files[_alias] = _g["aidp_read"](_uri)
+        except Exception as _e:
+            # Record the read error so the user can detect it without aborting
+            # the whole run — they may have provided multiple files.
+            _files[_alias] = {"_error": str(_e), "_uri": _uri}
+_g["files"] = _files
+
 with open(os.environ["USER_CODE"], "r") as _f:
     _src = _f.read()
 _code = compile(_src, os.environ["USER_CODE"], "exec")
@@ -90,6 +180,7 @@ class RunPythonTool(CustomToolBase):
 
         stdin_data = runtime_params.get("stdin", "")
         input_data = runtime_params.get("data")
+        files_spec = runtime_params.get("files")
         timeout = get_cfg(conf, "timeout", 60)
         max_lines = get_cfg(conf, "max_output_lines", 500)
         max_bytes = get_cfg(conf, "max_output_bytes", 1048576)
@@ -112,20 +203,44 @@ class RunPythonTool(CustomToolBase):
             except Exception:
                 tool_input = "null"
 
+        # Normalize files_spec to a list[dict|str] for the subprocess.
+        files_list = _normalize_files_spec(files_spec)
+
         tmpdir = tempfile.mkdtemp(prefix="pyrun_")
         user_path = os.path.join(tmpdir, "user_code.py")
         runner_path = os.path.join(tmpdir, "_runner.py")
         result_path = os.path.join(tmpdir, "result.json")
+        conf_path = os.path.join(tmpdir, "conf.json")
+        ctx_path = os.path.join(tmpdir, "ctx.json")
+        files_path = os.path.join(tmpdir, "files.json")
+        # Stage aidp_io + config_utils next to the runner so `import aidp_io`
+        # works in the subprocess without depending on the parent package.
+        aidp_io_stage = os.path.join(tmpdir, "aidp_io.py")
+        config_utils_stage = os.path.join(tmpdir, "config_utils.py")
         try:
             with open(user_path, "w") as f:
                 f.write(code)
             with open(runner_path, "w") as f:
                 f.write(_RUNNER)
+            try:
+                _stage_io_modules(aidp_io_stage, config_utils_stage)
+            except Exception as e:
+                debug_warn(f"RunPythonTool: aidp_io stage failed: {e}")
+            # Conf + context vars: serialize what's JSON-safe; drop the rest.
+            with open(conf_path, "w") as f:
+                json.dump(_jsonable(conf), f, default=str)
+            with open(ctx_path, "w") as f:
+                json.dump(_jsonable(context_vars), f, default=str)
+            with open(files_path, "w") as f:
+                json.dump(files_list, f, default=str)
 
             env = dict(os.environ)
             env["USER_CODE"] = user_path
             env["TOOL_INPUT"] = tool_input
             env["TOOL_RESULT_PATH"] = result_path
+            env["TOOL_CONF_PATH"] = conf_path
+            env["TOOL_CTX_PATH"] = ctx_path
+            env["TOOL_FILES_PATH"] = files_path
 
             # Clean stdout/stderr capture via subprocess pipes (no shared
             # namespace dict, no in-process exec). Tracebacks remain accurate
@@ -190,7 +305,9 @@ class RunPythonTool(CustomToolBase):
             debug_error(f"RunPythonTool: unexpected error: {e}")
             return DebugLog.embed(err(str(e), type(e).__name__))
         finally:
-            for p in (user_path, runner_path, result_path):
+            for p in (user_path, runner_path, result_path,
+                      conf_path, ctx_path, files_path,
+                      aidp_io_stage, config_utils_stage):
                 try:
                     os.remove(p)
                 except Exception:
@@ -202,6 +319,87 @@ class RunPythonTool(CustomToolBase):
 
 
 # --------------------------------------------------------------------------- #
+def _normalize_files_spec(files):
+    """Coerce the `files` runtime param into a list[dict|str] for the subprocess.
+
+    Accepts:
+      - list of URIs (str)
+      - list of {"uri"/"path", optional "alias"/"name"} dicts
+      - dict of {alias: uri}
+      - a JSON-string encoding any of the above
+    Returns [] for None / unrecognized input.
+    """
+    if files is None or files == "":
+        return []
+    if isinstance(files, str):
+        try:
+            files = json.loads(files)
+        except Exception:
+            # Comma-separated fallback for plain string lists.
+            return [u.strip() for u in files.split(",") if u.strip()]
+    if isinstance(files, dict):
+        out = []
+        for alias, uri in files.items():
+            if isinstance(uri, str) and uri:
+                out.append({"alias": alias, "uri": uri})
+        return out
+    if isinstance(files, list):
+        out = []
+        for entry in files:
+            if isinstance(entry, str):
+                if entry.strip():
+                    out.append(entry.strip())
+            elif isinstance(entry, dict):
+                uri = entry.get("uri") or entry.get("path")
+                if uri:
+                    item = {"uri": uri}
+                    alias = entry.get("alias") or entry.get("name")
+                    if alias:
+                        item["alias"] = alias
+                    out.append(item)
+        return out
+    return []
+
+
+def _jsonable(value):
+    """Drop non-JSON-serializable entries from a dict so json.dump won't fail.
+    Preserves the keys auth/region/etc. that aidp_io reads."""
+    if not isinstance(value, dict):
+        try:
+            json.dumps(value, default=str)
+            return value
+        except Exception:
+            return {}
+    out = {}
+    for k, v in value.items():
+        try:
+            json.dumps(v, default=str)
+            out[k] = v
+        except Exception:
+            # Skip handles, signers, file objects, etc.
+            continue
+    return out
+
+
+def _stage_io_modules(aidp_io_stage, config_utils_stage):
+    """Copy aidp_io.py + config_utils.py from this package's utils/ into the
+    runner's tmpdir so `import aidp_io` resolves in the subprocess."""
+    import shutil
+    here = os.path.dirname(os.path.abspath(__file__))
+    src_io = os.path.join(here, "utils", "aidp_io.py")
+    src_cfg = os.path.join(here, "utils", "config_utils.py")
+    shutil.copyfile(src_io, aidp_io_stage)
+    shutil.copyfile(src_cfg, config_utils_stage)
+    # The staged aidp_io uses 'from .config_utils import get_cfg' — rewrite to
+    # a flat import since the staged copy isn't inside a package.
+    with open(aidp_io_stage, "r") as f:
+        src = f.read()
+    src = src.replace("from .config_utils import get_cfg",
+                      "from config_utils import get_cfg")
+    with open(aidp_io_stage, "w") as f:
+        f.write(src)
+
+
 def _truncate(text, max_lines, max_bytes=None):
     """Truncate by both line count and total byte size. Returns
     (truncated_text, was_truncated)."""

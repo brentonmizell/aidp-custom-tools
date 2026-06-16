@@ -5,34 +5,164 @@
     {
       "toolClassName": "DocumentExtractTool",
       "displayName": "Document Extract",
-      "description": "Extract clean text (and table text) from a document: PDF, DOCX, CSV, or plain text. Pass the file as base64 in content_base64 (or text in content) plus the format (or a filename to infer it). Use to turn a document into text for the agent or for RAG.",
-      "version": "1.1.0",
+      "description": "Extract clean text (and table text) from a document: PDF, DOCX, CSV, or plain text. Read the file from an AIDP source_uri (master volume or workspace), from base64 bytes (content_base64), or from inline text (content). Optionally write the extracted text back to dest_uri. Use to turn a document into text for the agent or for RAG.",
+      "version": "1.2.0",
       "schema": [
-        {"name": "content_base64", "type": "string", "description": "The file bytes, base64-encoded (for pdf/docx/binary). Use this OR content."},
-        {"name": "content", "type": "string", "description": "Plain text/CSV content directly. Use this OR content_base64."},
-        {"name": "format", "type": "string", "description": "File format.", "enum": ["pdf", "docx", "csv", "txt", "md", "json"], "default": "txt"},
-        {"name": "filename", "type": "string", "description": "Optional filename; the format is inferred from its extension if format is not given."},
-        {"name": "page_start", "type": "integer", "description": "PDF only: first page to extract (1-based, inclusive). Default 1."},
-        {"name": "page_end", "type": "integer", "description": "PDF only: last page to extract (1-based, inclusive). Default = last page."}
+        {
+          "name": "content_base64",
+          "type": "string",
+          "description": "The file bytes, base64-encoded (for pdf/docx/binary). Use this OR content OR source_uri."
+        },
+        {
+          "name": "content",
+          "type": "string",
+          "description": "Plain text/CSV content directly. Use this OR content_base64 OR source_uri."
+        },
+        {
+          "name": "source_uri",
+          "type": "string",
+          "description": "AIDP URI to read the document from. Formats: master:<catalog>.<schema>.<volume>:/path, workspace:/path, or <catalog>.<schema>.<volume>:/path (treated as master:). Use this OR content_base64 OR content."
+        },
+        {
+          "name": "dest_uri",
+          "type": "string",
+          "description": "Optional AIDP URI to write the extracted text (or raw CSV) to. Same URI formats as source_uri. Best-effort: write errors surface in the response data and do not fail extraction."
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "description": "File format. Inferred from source_uri or filename when omitted.",
+          "enum": [
+            "pdf",
+            "docx",
+            "csv",
+            "txt",
+            "md",
+            "json"
+          ],
+          "default": "txt"
+        },
+        {
+          "name": "filename",
+          "type": "string",
+          "description": "Optional filename; the format is inferred from its extension if format is not given."
+        },
+        {
+          "name": "page_start",
+          "type": "integer",
+          "description": "PDF only: first page to extract (1-based, inclusive). Default 1."
+        },
+        {
+          "name": "page_end",
+          "type": "integer",
+          "description": "PDF only: last page to extract (1-based, inclusive). Default = last page."
+        }
       ],
       "conf": {
         "max_chars": 100000,
         "max_csv_rows": 1000,
-        "max_input_bytes": 26214400
+        "max_input_bytes": 26214400,
+        "region": "us-ashburn-1",
+        "data_lake_ocid": "ocid1.aidataplatform.oc1.iad.amaaaaaawah6xyqaic64ra5oaflf6hx6lnbuybhxxukkejoa2huz7iyq4tzq",
+        "workspace_id": "74effa91-f4c9-4e1a-be49-29af03e791e5",
+        "api_version": "20260430",
+        "service_path": "aiDataPlatforms",
+        "auth_mode": "resource_principal",
+        "tenancy_ocid": "ocid1.tenancy.oc1..aaaaaaaapbfjybybo2ry37rdu2brudxyo3vgy6zwysu352cls5hrc57eil7q",
+        "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
+        "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
+        "private_key_content": "",
+        "pass_phrase": "",
+        "timeout": 30
       },
       "_confDescriptions": {
         "max_chars": "Cap on extracted text length (characters); output is truncated past this limit.",
         "max_csv_rows": "Max number of CSV rows to render to text; extra rows are dropped with a truncation marker.",
-        "max_input_bytes": "Max input file size in bytes (decoded from content_base64). Default 26214400 (25 MiB)."
+        "max_input_bytes": "Max input file size in bytes (decoded from content_base64 or read from source_uri). Default 26214400 (25 MiB).",
+        "region": "OCI region for AIDP file IO (e.g. us-chicago-1). Required when using source_uri / dest_uri with master: URIs. Falls back to OCI_REGION env var.",
+        "data_lake_ocid": "AIDP data lake OCID for file IO. Required when using source_uri / dest_uri with master: URIs. Falls back to DATALAKE_ID env var or context_vars.datalake_id.",
+        "workspace_id": "AIDP workspace ID, required when using source_uri / dest_uri with workspace: URIs.",
+        "api_version": "AIDP API version segment in the base URL. Default 20260430 (do NOT use 20240831 \u2014 that path lacks the volume/workspace IO endpoints).",
+        "service_path": "AIDP service path segment in the base URL. Default aiDataPlatforms (do NOT use dataLakes \u2014 it lacks the IO endpoints).",
+        "auth_mode": "OCI auth mode for AIDP file IO: resource_principal (default), instance_principal, or user_principal.",
+        "tenancy_ocid": "OCI tenancy OCID. Required when auth_mode is user_principal.",
+        "user_ocid": "OCI user OCID. Required when auth_mode is user_principal.",
+        "fingerprint": "OCI API key fingerprint. Required when auth_mode is user_principal.",
+        "private_key_content": "OCI API private key (PEM). Required when auth_mode is user_principal.",
+        "pass_phrase": "Optional passphrase for the OCI API private key.",
+        "timeout": "HTTP timeout (seconds) for AIDP file IO calls. Default 30."
       },
       "_uiHints": {
         "conf": {
-          "max_chars": {"kind": "readonly"},
-          "max_csv_rows": {"kind": "readonly"},
-          "max_input_bytes": {"kind": "readonly"}
+          "max_chars": {
+            "kind": "readonly"
+          },
+          "max_csv_rows": {
+            "kind": "readonly"
+          },
+          "max_input_bytes": {
+            "kind": "readonly"
+          },
+          "region": {
+            "kind": "string"
+          },
+          "data_lake_ocid": {
+            "kind": "string"
+          },
+          "workspace_id": {
+            "kind": "string"
+          },
+          "api_version": {
+            "kind": "string"
+          },
+          "service_path": {
+            "kind": "string"
+          },
+          "auth_mode": {
+            "kind": "enum",
+            "values": [
+              "resource_principal",
+              "instance_principal",
+              "user_principal"
+            ]
+          },
+          "tenancy_ocid": {
+            "kind": "string"
+          },
+          "user_ocid": {
+            "kind": "string"
+          },
+          "fingerprint": {
+            "kind": "string"
+          },
+          "private_key_content": {
+            "kind": "secret"
+          },
+          "pass_phrase": {
+            "kind": "secret"
+          },
+          "timeout": {
+            "kind": "readonly"
+          }
         },
         "schema": {
-          "format": {"kind": "enum", "values": ["pdf", "docx", "csv", "txt", "md", "json"]}
+          "format": {
+            "kind": "enum",
+            "values": [
+              "pdf",
+              "docx",
+              "csv",
+              "txt",
+              "md",
+              "json"
+            ]
+          },
+          "source_uri": {
+            "kind": "string"
+          },
+          "dest_uri": {
+            "kind": "string"
+          }
         }
       }
     }

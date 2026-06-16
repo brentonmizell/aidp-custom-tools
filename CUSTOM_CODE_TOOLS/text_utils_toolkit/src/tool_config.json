@@ -6,10 +6,12 @@
       "toolClassName": "TemplateRenderTool",
       "displayName": "Render Template",
       "description": "Render a Jinja2 template using a set of variables. Use to build prompts, message bodies, or request payloads from flow data.",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "schema": [
-        {"name": "template", "type": "string", "description": "The Jinja2 template text, e.g. 'Hi {{ name }}, you have {{ count }} items.'"},
-        {"name": "variables", "type": "string", "description": "Variables to render with, as a JSON object."}
+        {"name": "template", "type": "string", "description": "The Jinja2 template text, e.g. 'Hi {{ name }}, you have {{ count }} items.' Ignored when source_uri is provided."},
+        {"name": "variables", "type": "string", "description": "Variables to render with, as a JSON object."},
+        {"name": "source_uri", "type": "string", "description": "Optional URI to read the template body from. Overrides 'template' when set. Formats: master:<catalog>.<schema>.<volume>:/<path>, workspace:/<path>, or <catalog>.<schema>.<volume>:/<path>."},
+        {"name": "dest_uri", "type": "string", "description": "Optional URI to write the rendered text to. Same URI formats as source_uri. The rendered text is still returned in the response envelope."}
       ],
       "conf": {"autoescape": false, "strict": false},
       "_uiHints": {
@@ -21,19 +23,23 @@
       },
       "_confDescriptions": {
         "autoescape": "Jinja2 autoescape toggle. true escapes HTML-sensitive chars in output; false (default) leaves them as-is.",
-        "strict": "If true, undefined template variables raise an error. If false (default), they render as empty strings."
+        "strict": "If true, undefined template variables raise an error. If false (default), they render as empty strings.",
+        "source_uri": "Optional input URI for the template body. Accepts master:<catalog>.<schema>.<volume>:/<path>, workspace:/<path>, or the bare <catalog>.<schema>.<volume>:/<path> alias. When set, overrides the inline 'template' parameter.",
+        "dest_uri": "Optional output URI for the rendered text. Accepts the same URI formats as source_uri. Writing the destination does not suppress the rendered text in the response envelope."
       }
     },
     {
       "toolClassName": "RegexTool",
       "displayName": "Regex Extract/Replace",
       "description": "Extract all matches of a regex from text, or replace matches with a substitution. Use for pulling structured fragments (emails, ids, codes) out of free text or cleaning text.",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "schema": [
-        {"name": "text", "type": "string", "description": "The input text."},
+        {"name": "text", "type": "string", "description": "The input text. Ignored when source_uri is provided."},
         {"name": "pattern", "type": "string", "description": "The regular expression."},
         {"name": "mode", "type": "string", "description": "Regex operation: 'match' (anchored at start), 'search' (first match anywhere), 'findall' (all matches, default), 'sub' (replace), 'split' (split on pattern). Legacy aliases 'extract'->'findall' and 'replace'->'sub' still work.", "enum": ["match", "search", "findall", "sub", "split"], "default": "findall"},
-        {"name": "replacement", "type": "string", "description": "Replacement string when mode is 'sub'. Supports backrefs like \\1."}
+        {"name": "replacement", "type": "string", "description": "Replacement string when mode is 'sub'. Supports backrefs like \\1."},
+        {"name": "source_uri", "type": "string", "description": "Optional URI to read the haystack text from. Overrides 'text' when set. Formats: master:<catalog>.<schema>.<volume>:/<path>, workspace:/<path>, or <catalog>.<schema>.<volume>:/<path>."},
+        {"name": "dest_uri", "type": "string", "description": "Optional URI to write the match results to as JSON. Same URI formats as source_uri. Results are still returned in the response envelope."}
       ],
       "conf": {"ignore_case": false, "multiline": false, "max_matches": 500},
       "_uiHints": {
@@ -48,18 +54,22 @@
       "_confDescriptions": {
         "ignore_case": "Case-insensitive matching (re.IGNORECASE). Default false.",
         "multiline": "Multiline mode (re.MULTILINE): ^ and $ match at line boundaries. Default false.",
-        "max_matches": "Cap on number of matches returned by findall/split to prevent runaway output. Default 500."
+        "max_matches": "Cap on number of matches returned by findall/split to prevent runaway output. Default 500.",
+        "source_uri": "Optional input URI for the haystack text. Accepts master:<catalog>.<schema>.<volume>:/<path>, workspace:/<path>, or the bare <catalog>.<schema>.<volume>:/<path> alias. When set, overrides the inline 'text' parameter.",
+        "dest_uri": "Optional output URI for the match results (serialized as pretty JSON). Accepts the same URI formats as source_uri. Writing the destination does not suppress results in the response envelope."
       }
     },
     {
       "toolClassName": "JsonTransformTool",
       "displayName": "JSON Transform",
       "description": "Pull values out of JSON with a JSONPath expression, or reshape JSON into a new object using a field->path mapping. Use to extract the relevant fields from an API response.",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "schema": [
-        {"name": "data", "type": "string", "description": "The JSON to read from (object/array or JSON string)."},
+        {"name": "data", "type": "string", "description": "The JSON to read from (object/array or JSON string). Ignored when source_uri is provided."},
         {"name": "path", "type": "string", "description": "A single JSONPath expression, e.g. '$.items[*].id'. Use this OR mapping."},
-        {"name": "mapping", "type": "string", "description": "A JSON object of {output_field: jsonpath} to build a new shape. Use this OR path."}
+        {"name": "mapping", "type": "string", "description": "A JSON object of {output_field: jsonpath} to build a new shape. Use this OR path."},
+        {"name": "source_uri", "type": "string", "description": "Optional URI to read the input JSON from. Overrides 'data' when set. Formats: master:<catalog>.<schema>.<volume>:/<path>, workspace:/<path>, or <catalog>.<schema>.<volume>:/<path>."},
+        {"name": "dest_uri", "type": "string", "description": "Optional URI to write the transformed JSON output to. Same URI formats as source_uri. The output is still returned in the response envelope."}
       ],
       "conf": {"max_input_bytes": 1048576, "max_results": 1000},
       "_uiHints": {
@@ -68,7 +78,9 @@
       },
       "_confDescriptions": {
         "max_input_bytes": "Cap on input JSON size in bytes; oversized input is rejected. Default 1048576 (1 MiB).",
-        "max_results": "Cap on number of JSONPath matches returned to prevent runaway output. Default 1000."
+        "max_results": "Cap on number of JSONPath matches returned to prevent runaway output. Default 1000.",
+        "source_uri": "Optional input URI for the JSON document. Accepts master:<catalog>.<schema>.<volume>:/<path>, workspace:/<path>, or the bare <catalog>.<schema>.<volume>:/<path> alias. When set, overrides the inline 'data' parameter.",
+        "dest_uri": "Optional output URI for the transformed JSON (pretty-printed). Accepts the same URI formats as source_uri. Writing the destination does not suppress the result in the response envelope."
       }
     }
   ]

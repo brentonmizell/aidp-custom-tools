@@ -30,6 +30,11 @@ REPO_ROOT = Path(__file__).resolve().parent
 TOOLS_DIR = REPO_ROOT / "CUSTOM_CODE_TOOLS"
 TEMPLATE_DIR = REPO_ROOT / "CUSTOM_CODE_TEMPLATE"
 
+# Canonical source for the shared aidp_io helper. The build step copies this
+# into each package's src/utils/aidp_io.py so the zip is self-contained AND so
+# `python -m` style dev imports keep working.
+SHARED_AIDP_IO_SRC = REPO_ROOT / "aidp_io" / "aidp_io.py"
+
 # ---------------------------------------------------------------------------
 # ANSI colors (auto-disabled when stdout isn't a TTY)
 # ---------------------------------------------------------------------------
@@ -563,6 +568,8 @@ def cmd_new_tool(args) -> int:
             profile=args.profile, all=False, package=[pkg],
         ))
     if ask_yes_no("Build the .zip now?", default=True):
+        # Make sure the shared helper is in place before the one-off rebuild.
+        _sync_shared_module()
         _rebuild_one(pkg_dir)
     return 0
 
@@ -678,12 +685,58 @@ def cmd_status(args) -> int:
     return 0
 
 # ---------------------------------------------------------------------------
+# Shared module sync
+# ---------------------------------------------------------------------------
+
+def _sync_shared_module() -> int:
+    """Copy the canonical aidp_io.py into each package's src/utils/aidp_io.py.
+
+    This runs ONCE per build (before the per-package zip loop) so:
+      - the zip contains a self-contained aidp_io.py inside src/utils/,
+      - dev imports from CUSTOM_CODE_TOOLS/<pkg>/src/utils/aidp_io.py keep
+        working without a build step.
+
+    Missing canonical source -> warn and continue (no fatal error). Returns
+    the number of packages successfully synced.
+    """
+    if not SHARED_AIDP_IO_SRC.is_file():
+        print(yellow(f"[shared] canonical aidp_io.py not found at {SHARED_AIDP_IO_SRC} — skipping sync"))
+        return 0
+    if not TOOLS_DIR.is_dir():
+        print(yellow(f"[shared] {TOOLS_DIR} not found — skipping sync"))
+        return 0
+    synced = 0
+    for pkg in sorted(TOOLS_DIR.iterdir()):
+        if not pkg.is_dir():
+            continue
+        src_dir = pkg / "src"
+        if not src_dir.is_dir():
+            continue
+        utils_dir = src_dir / "utils"
+        utils_dir.mkdir(parents=True, exist_ok=True)
+        init_py = utils_dir / "__init__.py"
+        if not init_py.exists():
+            init_py.write_text("", encoding="utf-8")
+        dest = utils_dir / "aidp_io.py"
+        try:
+            shutil.copyfile(SHARED_AIDP_IO_SRC, dest)
+            synced += 1
+        except OSError as e:
+            print(yellow(f"[shared] could not copy into {pkg.name}: {e}"))
+    print(f"[shared] aidp_io.py synced to {synced} packages")
+    return synced
+
+# ---------------------------------------------------------------------------
 # Zip rebuilds
 # ---------------------------------------------------------------------------
 
 def _rebuild_zips(creds: Optional[Dict] = None) -> None:
     label = " (with user-principal credentials embedded)" if creds else ""
     print(f"\n{bold('Rebuilding .zip artifacts...' + label)}")
+    # Sync the shared aidp_io helper ONCE before the loop — both onto disk
+    # under each package's src/utils/ (so dev imports work) and indirectly into
+    # the zip (since the zip step walks src/).
+    _sync_shared_module()
     for pkg in sorted(TOOLS_DIR.iterdir()):
         if pkg.is_dir():
             _rebuild_one(pkg, creds)

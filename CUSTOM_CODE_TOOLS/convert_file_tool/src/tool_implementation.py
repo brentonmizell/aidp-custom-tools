@@ -3,9 +3,17 @@ Convert File Tool
 =================
 Convert tabular data between CSV, JSON, JSONL, Parquet, Excel, TSV, and TXT.
 
-Two modes:
+Three modes:
   - Inline:  pass 'content' (text for csv/json/jsonl/tsv/txt) and get converted text back.
-  - File:    pass 'input_path' / 'output_path' to read and write workspace files.
+  - File:    pass 'input_path' / 'output_path' to read and write workspace files
+             relative to the configured base_dir (legacy behavior).
+  - URI:     pass 'source_uri' / 'dest_uri' to read/write via the shared
+             aidp_io module. URIs use the uniform AIDP scheme:
+                 master:<catalog>.<schema>.<volume>:/<path>
+                 workspace:/<path>
+                 <catalog>.<schema>.<volume>:/<path>     (alias for master:)
+             When source_uri is supplied and from_format is not explicitly set,
+             from_format is detected from the URI's path extension.
 
 Parquet needs pyarrow and Excel needs openpyxl. Those imports are deferred to
 the actual conversion paths so that this module imports cleanly even if those
@@ -31,9 +39,32 @@ except ImportError:
         def embed(result):
             return result
 
+# Shared file-IO module — guarded so the tool still imports when running in a
+# runtime that doesn't ship aidp_io (the inline + workspace-path modes keep
+# working in that case).
+try:
+    import aidp_io  # type: ignore
+except ImportError:  # pragma: no cover
+    aidp_io = None  # type: ignore
+
 _FORMATS = {"csv", "json", "jsonl", "parquet", "excel", "xlsx", "tsv", "txt"}
 _TEXT_FORMATS = {"csv", "json", "jsonl", "tsv", "txt"}
 _BINARY_FORMATS = {"parquet", "excel", "xlsx"}
+
+# Map common file extensions to the tool's format names.
+_EXT_TO_FMT = {
+    "csv": "csv",
+    "tsv": "tsv",
+    "txt": "txt",
+    "json": "json",
+    "jsonl": "jsonl",
+    "ndjson": "jsonl",
+    "parquet": "parquet",
+    "pq": "parquet",
+    "xlsx": "xlsx",
+    "xls": "excel",
+    "xlsm": "xlsx",
+}
 
 
 def _ok(data):
@@ -50,18 +81,53 @@ def _err(msg, error_type="ToolError"):
     return {"ok": False, "error": str(msg), "error_type": error_type, "isError": True}
 
 
+def _ext_from_uri(uri):
+    """Extract a lowercase extension (without the dot) from a URI's path part.
+    Returns '' when no extension can be found."""
+    if not uri:
+        return ""
+    s = str(uri)
+    # Strip query string / fragment if any.
+    for sep in ("?", "#"):
+        if sep in s:
+            s = s.split(sep, 1)[0]
+    # The path part is whatever follows the last ':/' if present, otherwise
+    # the whole string.
+    path_part = s
+    idx = s.rfind(":/")
+    if idx >= 0:
+        path_part = s[idx + 1:]  # keep the leading '/'
+    base = path_part.rsplit("/", 1)[-1]
+    if "." not in base:
+        return ""
+    return base.rsplit(".", 1)[-1].strip().lower()
+
+
 @CustomToolBase.register
 class ConvertFileTool(CustomToolBase):
     """Convert tabular data between csv, json, jsonl, parquet, excel, tsv, txt.
-    Provide either inline 'content' (for text formats) or 'input_path'/'output_path'
-    for workspace files. Use to reshape data files between flow steps or to prep
-    an export."""
+    Provide either inline 'content', 'input_path'/'output_path' for workspace
+    files relative to base_dir, or 'source_uri'/'dest_uri' to read and write via
+    the AIDP URI scheme (master:<cat>.<sch>.<vol>:/<path> or workspace:/<path>).
+    Use to reshape data files between flow steps or to prep an export."""
 
     @classmethod
     def _execute_tool(cls, conf, runtime_params, **context_vars):
         debug("ConvertFileTool._execute_tool: start", params_keys=list(runtime_params.keys()))
 
-        from_fmt = _norm(runtime_params.get("from_format", ""))
+        source_uri = (runtime_params.get("source_uri") or "").strip()
+        dest_uri = (runtime_params.get("dest_uri") or "").strip()
+
+        # Detect from_format from source_uri extension when not explicitly set.
+        raw_from = runtime_params.get("from_format", "") or ""
+        from_fmt = _norm(raw_from)
+        if not from_fmt and source_uri:
+            ext = _ext_from_uri(source_uri)
+            sniffed = _EXT_TO_FMT.get(ext, "")
+            if sniffed:
+                from_fmt = _norm(sniffed)
+                debug("from_format detected from source_uri", ext=ext, from_fmt=from_fmt)
+
         to_fmt = _norm(runtime_params.get("to_format", ""))
         if from_fmt not in _FORMATS or to_fmt not in _FORMATS:
             debug_error("invalid format", from_fmt=from_fmt, to_fmt=to_fmt)
@@ -78,7 +144,8 @@ class ConvertFileTool(CustomToolBase):
         max_bytes = get_cfg(conf, "max_bytes", 100 * 1024 * 1024)  # 100 MiB
 
         debug("config resolved", base_dir=base_dir, max_rows=max_rows, max_bytes=max_bytes,
-              from_fmt=from_fmt, to_fmt=to_fmt)
+              from_fmt=from_fmt, to_fmt=to_fmt,
+              has_source_uri=bool(source_uri), has_dest_uri=bool(dest_uri))
 
         try:
             import pandas as pd
@@ -90,7 +157,28 @@ class ConvertFileTool(CustomToolBase):
 
         try:
             # ---- read with byte/row bounds ----
-            if input_path:
+            if source_uri:
+                if aidp_io is None:
+                    debug_error("aidp_io not available")
+                    return DebugLog.embed(_err(
+                        "source_uri requires the aidp_io module, which is not available in this runtime",
+                        "DependencyError",
+                    ))
+                debug("reading via aidp_io", source_uri=source_uri)
+                raw_bytes = aidp_io.read_file(source_uri, conf, context_vars)
+                if not isinstance(raw_bytes, (bytes, bytearray)):
+                    # Some implementations may return str — coerce defensively.
+                    raw_bytes = str(raw_bytes).encode("utf-8")
+                if len(raw_bytes) > max_bytes:
+                    debug_error("source_uri bytes exceed max_bytes",
+                                size=len(raw_bytes), max_bytes=max_bytes)
+                    return DebugLog.embed(_err(
+                        f"source_uri content is {len(raw_bytes)} bytes, exceeds max_bytes={max_bytes}",
+                        "SizeLimitError",
+                    ))
+                df, read_truncated = _read_bytes(pd, from_fmt, raw_bytes,
+                                                 max_rows=max_rows, max_bytes=max_bytes)
+            elif input_path:
                 src = _safe_join(base_dir, input_path)
                 if src is None:
                     debug_error("invalid input_path", input_path=input_path)
@@ -117,7 +205,10 @@ class ConvertFileTool(CustomToolBase):
                 df, read_truncated = _read(pd, from_fmt, text=content, max_rows=max_rows, max_bytes=max_bytes)
             else:
                 debug_error("no source provided")
-                return DebugLog.embed(_err("provide either 'content' or 'input_path'", "ValidationError"))
+                return DebugLog.embed(_err(
+                    "provide one of 'source_uri', 'input_path', or 'content'",
+                    "ValidationError",
+                ))
 
             truncated = truncated or read_truncated
 
@@ -130,6 +221,39 @@ class ConvertFileTool(CustomToolBase):
             debug("read complete", rows=len(df), cols=len(df.columns), truncated=truncated)
 
             # ---- write ----
+            if dest_uri:
+                if aidp_io is None:
+                    debug_error("aidp_io not available")
+                    return DebugLog.embed(_err(
+                        "dest_uri requires the aidp_io module, which is not available in this runtime",
+                        "DependencyError",
+                    ))
+                out_bytes = _write_bytes(df, to_fmt)
+                if len(out_bytes) > max_bytes:
+                    debug_error("converted bytes exceed max_bytes",
+                                size=len(out_bytes), max_bytes=max_bytes)
+                    return DebugLog.embed(_err(
+                        f"converted output is {len(out_bytes)} bytes, exceeds max_bytes={max_bytes}",
+                        "SizeLimitError",
+                    ))
+                debug("writing via aidp_io", dest_uri=dest_uri, bytes=len(out_bytes))
+                write_info = aidp_io.write_file(dest_uri, out_bytes, conf, context_vars) or {}
+                data = {
+                    "rows": len(df),
+                    "columns": list(df.columns),
+                    "dest_uri": dest_uri,
+                    "bytes": len(out_bytes),
+                    "from_format": from_fmt,
+                    "to_format": to_fmt,
+                    "truncated": truncated,
+                }
+                if isinstance(write_info, dict):
+                    for k in ("path", "version_id"):
+                        if k in write_info and k not in data:
+                            data[k] = write_info[k]
+                debug("write complete (uri)", rows=len(df), to_fmt=to_fmt, truncated=truncated)
+                return DebugLog.embed(_ok(data))
+
             if output_path:
                 dst = _safe_join(base_dir, output_path)
                 if dst is None:
@@ -149,24 +273,24 @@ class ConvertFileTool(CustomToolBase):
                 }
                 debug("write complete (file)", **{k: data[k] for k in ("rows", "output_path", "to_format", "truncated")})
                 return DebugLog.embed(_ok(data))
-            else:
-                if to_fmt in _BINARY_FORMATS:
-                    debug_error("binary output without output_path", to_fmt=to_fmt)
-                    return DebugLog.embed(_err(
-                        f"{to_fmt} output requires an output_path (binary format)",
-                        "ValidationError",
-                    ))
-                out_text = _write(df, to_fmt, text=True)
-                data = {
-                    "rows": len(df),
-                    "columns": list(df.columns),
-                    "content": out_text,
-                    "from_format": from_fmt,
-                    "to_format": to_fmt,
-                    "truncated": truncated,
-                }
-                debug("write complete (inline)", rows=len(df), to_fmt=to_fmt, truncated=truncated)
-                return DebugLog.embed(_ok(data))
+
+            if to_fmt in _BINARY_FORMATS:
+                debug_error("binary output without output_path/dest_uri", to_fmt=to_fmt)
+                return DebugLog.embed(_err(
+                    f"{to_fmt} output requires an output_path or dest_uri (binary format)",
+                    "ValidationError",
+                ))
+            out_text = _write(df, to_fmt, text=True)
+            data = {
+                "rows": len(df),
+                "columns": list(df.columns),
+                "content": out_text,
+                "from_format": from_fmt,
+                "to_format": to_fmt,
+                "truncated": truncated,
+            }
+            debug("write complete (inline)", rows=len(df), to_fmt=to_fmt, truncated=truncated)
+            return DebugLog.embed(_ok(data))
         except Exception as e:
             debug_error("conversion failed", err=str(e), err_type=type(e).__name__)
             return DebugLog.embed(_err(str(e), type(e).__name__))
@@ -284,6 +408,44 @@ def _read(pd, fmt, path=None, text=None, max_rows=100000, max_bytes=100 * 1024 *
     raise ValueError(f"cannot read format {fmt}")
 
 
+def _read_bytes(pd, fmt, raw, max_rows=100000, max_bytes=100 * 1024 * 1024):
+    """Read a DataFrame from an in-memory bytes payload.
+
+    Text formats are decoded as UTF-8 and routed through _read(text=...);
+    binary formats (parquet/excel) are read directly from a BytesIO buffer.
+    Returns (df, truncated).
+    """
+    truncated = False
+
+    if fmt in _TEXT_FORMATS:
+        text = raw.decode("utf-8", errors="replace") if isinstance(raw, (bytes, bytearray)) else str(raw)
+        return _read(pd, fmt, text=text, max_rows=max_rows, max_bytes=max_bytes)
+
+    if fmt == "parquet":
+        try:
+            import pyarrow  # noqa: F401
+        except ImportError as e:
+            raise RuntimeError(f"parquet requires pyarrow: {e}")
+        df = pd.read_parquet(io.BytesIO(raw))
+        if len(df) > max_rows:
+            df = df.head(max_rows)
+            truncated = True
+        return df, truncated
+
+    if fmt in ("excel", "xlsx"):
+        try:
+            import openpyxl  # noqa: F401
+        except ImportError as e:
+            raise RuntimeError(f"excel requires openpyxl: {e}")
+        df = pd.read_excel(io.BytesIO(raw), nrows=max_rows + 1)
+        if len(df) > max_rows:
+            df = df.head(max_rows)
+            truncated = True
+        return df, truncated
+
+    raise ValueError(f"cannot read format {fmt}")
+
+
 def _write(df, fmt, path=None, text=False):
     if fmt == "csv" or fmt == "tsv" or fmt == "txt":
         sep = "," if fmt == "csv" else "\t"
@@ -321,6 +483,37 @@ def _write(df, fmt, path=None, text=False):
             raise RuntimeError(f"excel requires openpyxl: {e}")
         df.to_excel(path, index=False)
         return None
+    raise ValueError(f"cannot write format {fmt}")
+
+
+def _write_bytes(df, fmt):
+    """Serialize a DataFrame to bytes for a URI write. Mirrors _write but always
+    returns bytes (text formats are UTF-8 encoded)."""
+    if fmt in ("csv", "tsv", "txt"):
+        sep = "," if fmt == "csv" else "\t"
+        return df.to_csv(index=False, sep=sep).encode("utf-8")
+    if fmt == "json":
+        records = df.to_dict(orient="records")
+        return json.dumps(records, default=str, indent=2).encode("utf-8")
+    if fmt == "jsonl":
+        records = df.to_dict(orient="records")
+        return ("\n".join(json.dumps(r, default=str) for r in records)).encode("utf-8")
+    if fmt == "parquet":
+        try:
+            import pyarrow  # noqa: F401
+        except ImportError as e:
+            raise RuntimeError(f"parquet requires pyarrow: {e}")
+        buf = io.BytesIO()
+        df.to_parquet(buf, index=False)
+        return buf.getvalue()
+    if fmt in ("excel", "xlsx"):
+        try:
+            import openpyxl  # noqa: F401
+        except ImportError as e:
+            raise RuntimeError(f"excel requires openpyxl: {e}")
+        buf = io.BytesIO()
+        df.to_excel(buf, index=False)
+        return buf.getvalue()
     raise ValueError(f"cannot write format {fmt}")
 
 

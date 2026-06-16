@@ -5,13 +5,13 @@
     {
       "toolClassName": "ConvertFileTool",
       "displayName": "Convert File",
-      "description": "Convert tabular data between csv, json, parquet, and excel. Use inline content for csv/json text, or input_path/output_path for workspace files. Use to reshape data files between steps or prepare an export.",
-      "version": "1.1.0",
+      "description": "Convert tabular data between csv, json, parquet, and excel. Use inline content for csv/json text, input_path/output_path for workspace files, or source_uri/dest_uri to read and write via the AIDP URI scheme (master:<cat>.<sch>.<vol>:/<path> or workspace:/<path>). Use to reshape data files between steps or prepare an export.",
+      "version": "1.2.0",
       "schema": [
         {
           "name": "from_format",
           "type": "string",
-          "description": "Source format.",
+          "description": "Source format. When omitted and source_uri is supplied, the format is detected from the URI's path extension.",
           "enum": ["csv", "json", "jsonl", "parquet", "xlsx", "tsv", "txt"],
           "default": "csv"
         },
@@ -22,15 +22,19 @@
           "enum": ["csv", "json", "jsonl", "parquet", "xlsx", "tsv", "txt"],
           "default": "json"
         },
-        {"name": "content", "type": "string", "description": "Inline source data (csv or json text). Use this OR input_path."},
-        {"name": "input_path", "type": "string", "description": "Workspace path to read from. Use this OR content."},
-        {"name": "output_path", "type": "string", "description": "Workspace path to write to. Required for parquet/excel output."}
+        {"name": "content", "type": "string", "description": "Inline source data (csv or json text). Use this OR input_path OR source_uri."},
+        {"name": "input_path", "type": "string", "description": "Workspace path to read from, relative to base_dir. Use this OR content OR source_uri."},
+        {"name": "output_path", "type": "string", "description": "Workspace path to write to, relative to base_dir. Required for parquet/excel output when not using dest_uri."},
+        {"name": "source_uri", "type": "string", "description": "AIDP URI to read the source file via aidp_io. Forms: master:<catalog>.<schema>.<volume>:/<path>, workspace:/<path>, or the alias <catalog>.<schema>.<volume>:/<path>. When from_format is empty, it is detected from the URI's path extension."},
+        {"name": "dest_uri", "type": "string", "description": "AIDP URI to write the converted output via aidp_io. Same forms as source_uri. Required for parquet/excel output when no output_path is given."}
       ],
       "conf": {"base_dir": "/workspace", "max_rows": 100000, "max_bytes": 104857600},
       "_confDescriptions": {
         "base_dir": "Root workspace directory for resolving input_path/output_path. Paths outside this dir are rejected (default /workspace).",
         "max_rows": "Maximum number of rows to read/write; returns truncated:true when hit (default 100000).",
-        "max_bytes": "Cap on response/file bytes; returns truncated:true when hit (default 104857600 = 100MB)."
+        "max_bytes": "Cap on response/file bytes; returns truncated:true when hit (default 104857600 = 100MB). Also applies to bytes read from source_uri and written to dest_uri.",
+        "source_uri": "AIDP URI to read the source file via the shared aidp_io module. Accepts master:<catalog>.<schema>.<volume>:/<path>, workspace:/<path>, or the alias <catalog>.<schema>.<volume>:/<path>. When from_format is not set, it is detected from the URI's path extension.",
+        "dest_uri": "AIDP URI to write the converted output via the shared aidp_io module. Same URI forms as source_uri. Required for binary outputs (parquet/excel) when no output_path is supplied."
       },
       "_uiHints": {
         "conf": {

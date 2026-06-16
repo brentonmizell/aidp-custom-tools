@@ -5,13 +5,13 @@
     {
       "toolClassName": "RunPythonTool",
       "displayName": "Run Python",
-      "description": "Run a block of Python code and return stdout, stderr, return code, and an optional structured result. Optional input is available as a variable named 'data'; set a variable named 'result' to return structured JSON. Use for ad-hoc computation or logic the other tools do not cover.",
-      "version": "1.1.0",
+      "description": "Run a block of Python code and return stdout, stderr, return code, and an optional structured result. Optional input is available as a variable named 'data'; set a variable named 'result' to return structured JSON. The exec namespace also exposes AIDP file-IO helpers: aidp_read(uri)->bytes, aidp_read_text(uri)->str, aidp_write(uri,bytes)->dict, aidp_write_text(uri,str)->dict, aidp_list(uri)->list[dict]. URIs use master:<cat>.<sch>.<vol>:/<path> for Standard Catalog volumes or workspace:/<path> for workspace files. Optionally pre-read files by listing them in the 'files' runtime param \u2014 they appear as a 'files' dict keyed by alias or basename. Use for ad-hoc computation or logic the other tools do not cover.",
+      "version": "1.2.0",
       "schema": [
         {
           "name": "code",
           "type": "string",
-          "description": "The Python code to run. A variable 'data' holds any input passed; assign 'result' to return structured output."
+          "description": "The Python code to run. A variable 'data' holds any input passed; assign 'result' to return structured output. The exec namespace also exposes aidp_read/aidp_read_text/aidp_write/aidp_write_text/aidp_list for AIDP file IO, and a 'files' dict pre-populated from the 'files' runtime param."
         },
         {
           "name": "data",
@@ -22,23 +22,54 @@
           "name": "stdin",
           "type": "string",
           "description": "Optional text piped to the program's standard input."
+        },
+        {
+          "name": "files",
+          "type": "string",
+          "description": "Optional list of AIDP URIs to pre-read before running the code. Provided to user code as a dict named 'files' keyed by alias (or URI basename) with bytes values. URI format: master:<catalog>.<schema>.<volume>:/<path> for Standard Catalog volume files, or workspace:/<path> for workspace files. Accepts a JSON array of URI strings, a JSON array of {\"uri\":..., \"alias\":...} objects, or a JSON object of {alias: uri}. The same helpers (aidp_read, aidp_read_text, aidp_write, aidp_write_text, aidp_list) are also available inside the code so files can be read/written on demand."
         }
       ],
       "conf": {
         "timeout": 60,
         "max_output_lines": 500,
         "max_output_bytes": 1048576,
-        "python_bin": "python3"
+        "python_bin": "python3",
+        "region": "us-ashburn-1",
+        "data_lake_ocid": "ocid1.aidataplatform.oc1.iad.amaaaaaawah6xyqaic64ra5oaflf6hx6lnbuybhxxukkejoa2huz7iyq4tzq",
+        "workspace_id": "74effa91-f4c9-4e1a-be49-29af03e791e5",
+        "api_version": "20260430",
+        "service_path": "aiDataPlatforms",
+        "auth_mode": "resource_principal"
       },
       "_uiHints": {
-        "conf": {},
+        "conf": {
+          "region": {
+            "kind": "dropdown",
+            "source": "regions"
+          },
+          "data_lake_ocid": {
+            "kind": "dropdown",
+            "source": "dataLakes"
+          },
+          "workspace_id": {
+            "kind": "dropdown",
+            "source": "workspaces",
+            "dependsOn": "data_lake_ocid"
+          }
+        },
         "schema": {}
       },
       "_confDescriptions": {
         "timeout": "Max seconds the Python block may run before being killed.",
         "max_output_lines": "Cap on captured stdout/stderr lines; extra lines are truncated.",
         "max_output_bytes": "Cap on captured stdout/stderr bytes; returns truncated:true when hit.",
-        "python_bin": "Python interpreter to invoke (e.g. python3, /usr/bin/python3.11)."
+        "python_bin": "Python interpreter to invoke (e.g. python3, /usr/bin/python3.11).",
+        "region": "OCI region for AIDP file-IO helpers (e.g. us-ashburn-1). Only required if user code calls aidp_read/aidp_write/aidp_list or uses the 'files' runtime param.",
+        "data_lake_ocid": "Data Lake OCID. Required for the AIDP file-IO helpers to route master: and workspace: URIs to the right tenancy.",
+        "workspace_id": "AIDP workspace UUID. Required for workspace:/<path> URIs (read/write/list of workspace files via the Jupyter Contents API).",
+        "api_version": "AIDP REST API version used by the file-IO helpers. Default 20260430.",
+        "service_path": "AIDP service path segment. Default aiDataPlatforms (the live REST surface). Only change if AIDP exposes a non-standard path on this tenancy.",
+        "auth_mode": "OCI signer mode for AIDP file IO: resource_principal (default), user_principal, or instance_principal. For user_principal also set tenancy_ocid, user_ocid, fingerprint, and private_key_content."
       }
     },
     {
