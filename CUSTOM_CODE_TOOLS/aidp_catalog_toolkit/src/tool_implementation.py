@@ -27,6 +27,15 @@ Returns a structured envelope: {"ok": true, "data": {...}, ...legacy fields}
 or {"ok": false, "error": "...", "error_type": "..."}. Legacy top-level fields
 (volume_key, path, content, etc.) are preserved alongside the envelope so
 callers reading them directly keep working.
+
+File IO delegation
+------------------
+All file IO (read/write/list against master: volumes or workspace: paths) and,
+where available, catalog browsing + KB job control delegate to the shared
+``aidp_io`` module so every custom toolkit speaks the same URI contract.
+Legacy code paths remain in this file as graceful fallbacks for the catalog
+browsing / KB helpers that aidp_io does not yet export, and for the
+name-resolution semantics (allow_auto_pick) that are specific to this toolkit.
 """
 
 import json
@@ -49,20 +58,114 @@ except ImportError:
 
 
 # --------------------------------------------------------------------------- #
-# Shared client helpers
+# Shared aidp_io import (import-guarded so partial rollouts still work)
+# --------------------------------------------------------------------------- #
+# Newer aidp_io revisions are expected to add catalog browsing + KB helpers.
+# We try to import every symbol we might use; missing ones get set to None and
+# the relevant code paths fall back to direct REST calls below.
+try:
+    from .utils.aidp_io import parse_uri as _io_parse_uri
+except Exception:  # pragma: no cover - shared module missing entirely
+    _io_parse_uri = None
+try:
+    from .utils.aidp_io import read_file as _io_read_file
+except Exception:
+    _io_read_file = None
+try:
+    from .utils.aidp_io import write_file as _io_write_file
+except Exception:
+    _io_write_file = None
+try:
+    from .utils.aidp_io import read_text as _io_read_text
+except Exception:
+    _io_read_text = None
+try:
+    from .utils.aidp_io import write_text as _io_write_text
+except Exception:
+    _io_write_text = None
+try:
+    from .utils.aidp_io import list_files as _io_list_files
+except Exception:
+    _io_list_files = None
+try:
+    from .utils.aidp_io import list_catalogs as _io_list_catalogs
+except Exception:
+    _io_list_catalogs = None
+try:
+    from .utils.aidp_io import list_schemas as _io_list_schemas
+except Exception:
+    _io_list_schemas = None
+try:
+    from .utils.aidp_io import list_tables as _io_list_tables
+except Exception:
+    _io_list_tables = None
+try:
+    from .utils.aidp_io import list_volumes as _io_list_volumes
+except Exception:
+    _io_list_volumes = None
+try:
+    from .utils.aidp_io import list_knowledge_bases as _io_list_kbs
+except Exception:
+    _io_list_kbs = None
+try:
+    from .utils.aidp_io import describe_table as _io_describe_table
+except Exception:
+    _io_describe_table = None
+try:
+    from .utils.aidp_io import list_kb_jobs as _io_list_kb_jobs
+except Exception:
+    _io_list_kb_jobs = None
+try:
+    from .utils.aidp_io import trigger_kb_job_run as _io_trigger_kb_job_run
+except Exception:
+    _io_trigger_kb_job_run = None
+try:
+    from .utils.aidp_io import resolve_volume_key as _io_resolve_volume_key_public
+except Exception:
+    _io_resolve_volume_key_public = None
+
+# Internal helpers (best effort — if the underlying module exposes them, we
+# delegate; otherwise we use our local copies that mirror them verbatim).
+try:
+    from .utils.aidp_io import _client as _io_client
+except Exception:
+    _io_client = None
+try:
+    from .utils.aidp_io import _build_signer as _io_build_signer
+except Exception:
+    _io_build_signer = None
+try:
+    from .utils.aidp_io import _resolve_volume_key as _io_resolve_volume_key_internal
+except Exception:
+    _io_resolve_volume_key_internal = None
+try:
+    from .utils.aidp_io import _get as _io_http_get
+except Exception:
+    _io_http_get = None
+try:
+    from .utils.aidp_io import _post as _io_http_post
+except Exception:
+    _io_http_post = None
+
+
+# --------------------------------------------------------------------------- #
+# Shared client helpers — thin wrappers that prefer aidp_io's implementation.
 # --------------------------------------------------------------------------- #
 def _client(conf, context_vars):
-    """Return (base_url, signer, requests, timeout) or raises with a message."""
+    """Return (base_url, signer, requests, timeout).
+
+    Delegates to aidp_io._client when available so config + signer behavior is
+    centralized. Falls back to a local mirror that is byte-for-byte equivalent
+    to the version that lives in aidp_io.py today.
+    """
+    if _io_client is not None:
+        return _io_client(conf, context_vars)
+
+    # Local fallback (mirrors aidp_io._client).
     region = get_cfg(conf, "region", "") or os.environ.get("OCI_REGION", "")
     data_lake = (get_cfg(conf, "data_lake_ocid", "")
                  or os.environ.get("DATALAKE_ID", "")
-                 or context_vars.get("datalake_id", ""))
-    # AIDP's live REST surface runs at /20260430/aiDataPlatforms/. Earlier
-    # versions of this code probed /20240831/dataLakes/ — that endpoint is
-    # NOT what the volumes/actions/downloadFileMeta and friends are wired up
-    # against on production tenancies. JR's working reference confirms the
-    # 20260430/aiDataPlatforms combination. Override via conf only if AIDP
-    # exposes a non-standard path on a specific tenancy.
+                 or (context_vars or {}).get("datalake_id", ""))
     api_version = get_cfg(conf, "api_version", "20260430") or "20260430"
     service_path = get_cfg(conf, "service_path", "") or "aiDataPlatforms"
     timeout = get_cfg(conf, "timeout", 30)
@@ -75,7 +178,13 @@ def _client(conf, context_vars):
 
 
 def _build_signer(conf):
-    """Build the OCI request signer for the configured auth_mode."""
+    """Build the OCI request signer.
+
+    Delegates to aidp_io._build_signer when available.
+    """
+    if _io_build_signer is not None:
+        return _io_build_signer(conf)
+
     import oci
     mode = (get_cfg(conf, "auth_mode", "resource_principal") or "resource_principal").lower()
     if mode in ("user", "user_principal"):
@@ -98,12 +207,18 @@ def _build_signer(conf):
 
 
 def _get(requests, signer, url, timeout):
+    """GET helper. Delegates to aidp_io._get when available."""
+    if _io_http_get is not None:
+        return _io_http_get(requests, signer, url, timeout)
     r = requests.get(url, auth=signer, timeout=timeout, headers={"Accept": "application/json"})
     r.raise_for_status()
     return r.json() if r.content else {}
 
 
 def _post(requests, signer, url, timeout, body=None, headers=None):
+    """POST helper. Delegates to aidp_io._post when available."""
+    if _io_http_post is not None:
+        return _io_http_post(requests, signer, url, timeout, body=body, headers=headers)
     h = {"Accept": "application/json", "Content-Type": "application/json"}
     if headers:
         h.update(headers)
@@ -154,10 +269,23 @@ def _resolve_volume_key(requests, signer, base, timeout, catalog, schema, volume
     When allow_auto_pick is False (destructive ops), refuse to auto-pick a
     single-item catalog/schema — the caller must name them explicitly. The
     volume itself ALWAYS requires an explicit name (no auto-pick), regardless.
+
+    Note: when allow_auto_pick=True and a public resolver is exposed by
+    aidp_io, we delegate to it. The allow_auto_pick=False path is
+    toolkit-specific (used by VolumeWriteTool) and stays local.
     """
     from urllib.parse import quote
     if not volume:
         return None, "provide volume_key, or catalog + schema + volume names"
+
+    if allow_auto_pick and _io_resolve_volume_key_public is not None:
+        try:
+            key = _io_resolve_volume_key_public(
+                requests, signer, base, timeout, catalog, schema, volume,
+            )
+            return key, None
+        except Exception as e:
+            return None, str(e)
 
     def _match(items, name):
         for it in items:
@@ -221,12 +349,29 @@ def _resolve_target(rp, conf, requests, signer, base, timeout, *, allow_auto_pic
                       "parameters (they take precedence) or in config")
 
 
+def _is_truncation_error(e):
+    """True iff an aidp_io exception represents a streaming truncation."""
+    return bool(getattr(e, "truncated", False))
+
+
+def _partial_bytes(e):
+    """Bytes streamed before truncation, when aidp_io attaches them."""
+    return getattr(e, "partial_bytes", b"") or b""
+
+
 # --------------------------------------------------------------------------- #
 # Read / list volume files
 # --------------------------------------------------------------------------- #
 @CustomToolBase.register
 class CatalogFileTool(CustomToolBase):
-    """Pull a specific file from a Standard Catalog volume, or list a volume's files."""
+    """Pull a specific file from a Standard Catalog volume, or list a volume's files.
+
+    Two routing modes:
+      * URI mode (new in 1.2.0): set ``source_uri`` to a master: or workspace:
+        URI. The tool delegates straight to aidp_io.
+      * Legacy mode: provide volume_key + path, or catalog/schema/volume names
+        + path. The tool still uses the path-based code below.
+    """
 
     @classmethod
     def _validate_config(cls, conf, runtime_params=None, **context_vars):
@@ -240,7 +385,66 @@ class CatalogFileTool(CustomToolBase):
         from urllib.parse import quote
         op = (runtime_params.get("operation", "get") or "get").lower()
         max_bytes = get_cfg(conf, "max_bytes", 5_000_000)
-        debug("CatalogFileTool._execute_tool", operation=op, max_bytes=max_bytes)
+        source_uri = (runtime_params.get("source_uri") or "").strip()
+        debug("CatalogFileTool._execute_tool", operation=op, max_bytes=max_bytes,
+              source_uri=source_uri)
+
+        # ----- URI mode: delegate everything to aidp_io ----- #
+        if source_uri:
+            if _io_parse_uri is None or _io_read_file is None or _io_list_files is None:
+                return _err(ValueError(
+                    "source_uri provided but aidp_io is not available; "
+                    "omit source_uri or update the shared aidp_io module"))
+            try:
+                parsed = _io_parse_uri(source_uri)
+            except Exception as e:
+                return _err(e)
+            resolved = {"source": "param:source_uri", "uri": source_uri, **parsed}
+
+            try:
+                if op == "list":
+                    listing = _io_list_files(source_uri, conf, context_vars)
+                    volume_key = parsed.get("volume_key", "")
+                    data = {"volume_key": volume_key,
+                            "path": parsed.get("path", "/"),
+                            "count": len(listing),
+                            "files": listing,
+                            "resolved": resolved}
+                    return DebugLog.embed(ok(data, **data))
+
+                if op == "get":
+                    try:
+                        raw = _io_read_file(source_uri, conf, context_vars)
+                        truncated = False
+                    except ValueError as e:
+                        if _is_truncation_error(e):
+                            raw = _partial_bytes(e)
+                            truncated = True
+                        else:
+                            raise
+                    total = len(raw)
+                    debug("CatalogFileTool.get (uri)", uri=source_uri, bytes=total,
+                          truncated=truncated)
+                    volume_key = parsed.get("volume_key", "")
+                    path = parsed.get("path", "")
+                    try:
+                        data = {"volume_key": volume_key, "path": path,
+                                "content": raw.decode("utf-8"),
+                                "bytes": total, "truncated": truncated,
+                                "resolved": resolved}
+                    except UnicodeDecodeError:
+                        import base64
+                        data = {"volume_key": volume_key, "path": path,
+                                "content_base64": base64.b64encode(raw).decode(),
+                                "bytes": total, "binary": True,
+                                "truncated": truncated, "resolved": resolved}
+                    return DebugLog.embed(ok(data, **data))
+
+                return _err(ValueError("operation must be 'get' or 'list'"))
+            except Exception as e:
+                return _err(e, resolved=resolved)
+
+        # ----- Legacy path-based mode (unchanged behavior) ----- #
         try:
             base, signer, requests, timeout = _client(conf, context_vars)
         except Exception as e:
@@ -253,10 +457,20 @@ class CatalogFileTool(CustomToolBase):
 
             if op == "list":
                 path = runtime_params.get("path", "/") or "/"
-                items = _get(requests, signer,
-                             f"{base}/volumes/{quote(volume_key, safe='')}/files?path={quote(path)}", timeout)
-                files = items.get("items", []) if isinstance(items, dict) else []
-                listing = [{"name": f.get("displayName"), "path": f.get("path"), "type": f.get("type")} for f in files]
+                # Prefer aidp_io.list_files via a synthesized master: URI when
+                # we have a dotted volume_key; falling back to the direct REST
+                # call otherwise.
+                listing = None
+                if _io_list_files is not None and isinstance(volume_key, str) and volume_key.count(".") == 2:
+                    try:
+                        listing = _io_list_files(f"master:{volume_key}:{path}", conf, context_vars)
+                    except Exception:
+                        listing = None
+                if listing is None:
+                    items = _get(requests, signer,
+                                 f"{base}/volumes/{quote(volume_key, safe='')}/files?path={quote(path)}", timeout)
+                    files = items.get("items", []) if isinstance(items, dict) else []
+                    listing = [{"name": f.get("displayName"), "path": f.get("path"), "type": f.get("type")} for f in files]
                 data = {"volume_key": volume_key, "path": path, "count": len(listing),
                         "files": listing, "resolved": resolved}
                 return DebugLog.embed(ok(data, **data))
@@ -314,7 +528,15 @@ class CatalogFileTool(CustomToolBase):
 # --------------------------------------------------------------------------- #
 @CustomToolBase.register
 class VolumeWriteTool(CustomToolBase):
-    """Write a file into a Standard Catalog volume."""
+    """Write a file into a Standard Catalog volume.
+
+    Two routing modes:
+      * URI mode (new in 1.2.0): set ``dest_uri`` to a master: URI. The tool
+        delegates straight to aidp_io.write_text / write_file. Workspace writes
+        go through WorkspaceFileTool, not here.
+      * Legacy mode: provide volume_key + path + content, or names + path +
+        content.
+    """
 
     @classmethod
     def _validate_config(cls, conf, runtime_params=None, **context_vars):
@@ -323,9 +545,40 @@ class VolumeWriteTool(CustomToolBase):
     @classmethod
     def _execute_tool(cls, conf, runtime_params, **context_vars):
         from urllib.parse import quote
-        path = runtime_params.get("path", "")
+        dest_uri = (runtime_params.get("dest_uri") or "").strip()
         content = runtime_params.get("content", "")
-        debug("VolumeWriteTool._execute_tool", path=path, content_len=(len(content) if content else 0))
+        debug("VolumeWriteTool._execute_tool", dest_uri=dest_uri,
+              content_len=(len(content) if content else 0))
+
+        # ----- URI mode: delegate to aidp_io ----- #
+        if dest_uri:
+            if _io_parse_uri is None or _io_write_file is None:
+                return _err(ValueError(
+                    "dest_uri provided but aidp_io is not available; "
+                    "omit dest_uri or update the shared aidp_io module"))
+            try:
+                parsed = _io_parse_uri(dest_uri)
+            except Exception as e:
+                return _err(e)
+            if parsed.get("kind") != "master":
+                return _err(ValueError(
+                    "dest_uri must be a master: URI for VolumeWriteTool; "
+                    "use WorkspaceFileTool for workspace: writes"))
+            try:
+                payload_bytes = content.encode("utf-8") if isinstance(content, str) else bytes(content)
+                result = _io_write_file(dest_uri, payload_bytes, conf, context_vars)
+                resolved = {"source": "param:dest_uri", "uri": dest_uri, **parsed}
+                payload = {"volume_key": parsed.get("volume_key", ""),
+                           "path": result.get("path", parsed.get("path", "")),
+                           "written_bytes": result.get("bytes", len(payload_bytes)),
+                           "version_id": result.get("version_id", ""),
+                           "resolved": resolved}
+                return DebugLog.embed(ok(payload, **payload))
+            except Exception as e:
+                return _err(e)
+
+        # ----- Legacy mode (unchanged behavior) ----- #
+        path = runtime_params.get("path", "")
         if not path:
             return _err(ValueError("path is required (the destination file path in the volume)"))
         try:
@@ -339,6 +592,23 @@ class VolumeWriteTool(CustomToolBase):
                 allow_auto_pick=False)
             if err:
                 return _err(ValueError(err), resolved=resolved)
+
+            # Prefer aidp_io.write_file when we have a dotted volume_key.
+            if (_io_write_file is not None and isinstance(volume_key, str)
+                    and volume_key.count(".") == 2):
+                try:
+                    payload_bytes = content.encode("utf-8") if isinstance(content, str) else bytes(content)
+                    result = _io_write_file(f"master:{volume_key}:{path}",
+                                            payload_bytes, conf, context_vars)
+                    payload = {"volume_key": volume_key, "path": path,
+                               "written_bytes": result.get("bytes", len(payload_bytes)),
+                               "version_id": result.get("version_id", ""),
+                               "resolved": resolved}
+                    return DebugLog.embed(ok(payload, **payload))
+                except Exception:
+                    # Fall through to the direct REST path on any failure so
+                    # callers still get the original error envelope shape.
+                    pass
 
             meta = _post(requests, signer,
                          f"{base}/volumes/{quote(volume_key, safe='')}/actions/uploadFileMeta?isOverwrite=true",
@@ -361,7 +631,12 @@ class VolumeWriteTool(CustomToolBase):
 # --------------------------------------------------------------------------- #
 @CustomToolBase.register
 class CatalogBrowserTool(CustomToolBase):
-    """Browse catalog metadata so an agent can discover what data exists."""
+    """Browse catalog metadata so an agent can discover what data exists.
+
+    Every list operation prefers the aidp_io.list_* helper when present and
+    falls back to a direct REST call otherwise so we don't break against the
+    current aidp_io shipping in master.
+    """
 
     @classmethod
     def _validate_config(cls, conf, runtime_params=None, **context_vars):
@@ -383,14 +658,15 @@ class CatalogBrowserTool(CustomToolBase):
 
         max_rows = get_cfg(conf, "max_rows", 1000)
 
-        def names(items, *fields):
-            out = []
+        def _normalize(rows, *fields):
+            """Apply the max_rows truncation + project (key, name, +fields)."""
             truncated = False
-            if len(items) > max_rows:
-                items = items[:max_rows]
+            if len(rows) > max_rows:
+                rows = rows[:max_rows]
                 truncated = True
-            for it in items:
-                row = {"key": it.get("key"), "name": it.get("displayName")}
+            out = []
+            for it in rows:
+                row = {"key": it.get("key"), "name": it.get("displayName") or it.get("name")}
                 for f in fields:
                     if f in it:
                         row[f] = it[f]
@@ -399,52 +675,82 @@ class CatalogBrowserTool(CustomToolBase):
 
         try:
             if what == "catalogs":
-                items = _get(requests, signer, f"{base}/catalogs", timeout).get("items", [])
-                rows, truncated = names(items, "catalogType")
+                if _io_list_catalogs is not None:
+                    items = _io_list_catalogs(conf, context_vars)
+                else:
+                    items = _get(requests, signer, f"{base}/catalogs", timeout).get("items", [])
+                rows, truncated = _normalize(items, "catalogType")
                 payload = {"count": len(rows), "catalogs": rows, "truncated": truncated}
                 return DebugLog.embed(ok(payload, **payload))
+
             if what == "schemas":
                 if not catalog_key:
                     return _err(ValueError("catalog_key is required to list schemas"))
-                items = _get(requests, signer, f"{base}/schemas?catalogKey={quote(catalog_key, safe='')}", timeout).get("items", [])
-                rows, truncated = names(items)
+                if _io_list_schemas is not None:
+                    items = _io_list_schemas(catalog_key, conf, context_vars)
+                else:
+                    items = _get(requests, signer,
+                                 f"{base}/schemas?catalogKey={quote(catalog_key, safe='')}",
+                                 timeout).get("items", [])
+                rows, truncated = _normalize(items)
                 payload = {"count": len(rows), "schemas": rows, "truncated": truncated}
                 return DebugLog.embed(ok(payload, **payload))
+
             if what == "tables":
                 if not (catalog_key and schema_key):
                     return _err(ValueError("catalog_key and schema_key are required to list tables"))
-                items = _get(requests, signer,
-                             f"{base}/tables?catalogKey={quote(catalog_key, safe='')}&schemaKey={quote(schema_key, safe='')}",
-                             timeout).get("items", [])
-                rows, truncated = names(items)
+                if _io_list_tables is not None:
+                    items = _io_list_tables(catalog_key, schema_key, conf, context_vars)
+                else:
+                    items = _get(requests, signer,
+                                 f"{base}/tables?catalogKey={quote(catalog_key, safe='')}"
+                                 f"&schemaKey={quote(schema_key, safe='')}",
+                                 timeout).get("items", [])
+                rows, truncated = _normalize(items)
                 payload = {"count": len(rows), "tables": rows, "truncated": truncated}
                 return DebugLog.embed(ok(payload, **payload))
+
             if what == "volumes":
                 if not (catalog_key and schema_key):
                     return _err(ValueError("catalog_key and schema_key are required to list volumes"))
-                items = _get(requests, signer,
-                             f"{base}/volumes?catalogKey={quote(catalog_key, safe='')}&schemaKey={quote(schema_key, safe='')}",
-                             timeout).get("items", [])
-                rows, truncated = names(items, "volumeType")
+                if _io_list_volumes is not None:
+                    items = _io_list_volumes(catalog_key, schema_key, conf, context_vars)
+                else:
+                    items = _get(requests, signer,
+                                 f"{base}/volumes?catalogKey={quote(catalog_key, safe='')}"
+                                 f"&schemaKey={quote(schema_key, safe='')}",
+                                 timeout).get("items", [])
+                rows, truncated = _normalize(items, "volumeType")
                 payload = {"count": len(rows), "volumes": rows, "truncated": truncated}
                 return DebugLog.embed(ok(payload, **payload))
+
             if what in ("knowledgebases", "kbs"):
                 if not (catalog_key and schema_key):
                     return _err(ValueError("catalog_key and schema_key are required to list knowledge bases"))
-                items = _get(requests, signer,
-                             f"{base}/knowledgeBases?catalogKey={quote(catalog_key, safe='')}&schemaKey={quote(schema_key, safe='')}&limit=1000",
-                             timeout).get("items", [])
-                rows, truncated = names(items, "lifecycleState")
+                if _io_list_kbs is not None:
+                    items = _io_list_kbs(catalog_key, schema_key, conf, context_vars)
+                else:
+                    items = _get(requests, signer,
+                                 f"{base}/knowledgeBases?catalogKey={quote(catalog_key, safe='')}"
+                                 f"&schemaKey={quote(schema_key, safe='')}&limit=1000",
+                                 timeout).get("items", [])
+                rows, truncated = _normalize(items, "lifecycleState")
                 payload = {"count": len(rows), "knowledge_bases": rows, "truncated": truncated}
                 return DebugLog.embed(ok(payload, **payload))
+
             if what == "table":
                 if not table_key:
                     return _err(ValueError("table_key is required to describe a table"))
-                detail = _get(requests, signer, f"{base}/tables/{quote(table_key, safe='')}", timeout)
+                if _io_describe_table is not None:
+                    detail = _io_describe_table(table_key, conf, context_vars)
+                else:
+                    detail = _get(requests, signer,
+                                  f"{base}/tables/{quote(table_key, safe='')}", timeout)
                 cols = detail.get("columns", detail.get("schema", []))
-                payload = {"table_key": table_key, "name": detail.get("displayName"),
+                payload = {"table_key": table_key, "name": detail.get("displayName") or detail.get("name"),
                            "columns": cols if cols else detail}
                 return DebugLog.embed(ok(payload, **payload))
+
             return _err(ValueError("list must be one of: catalogs, schemas, tables, volumes, knowledgeBases, table"))
         except Exception as e:
             return _err(e)
@@ -455,7 +761,11 @@ class CatalogBrowserTool(CustomToolBase):
 # --------------------------------------------------------------------------- #
 @CustomToolBase.register
 class KBIngestTool(CustomToolBase):
-    """List a knowledge base's ingestion jobs, or trigger an ingestion run."""
+    """List a knowledge base's ingestion jobs, or trigger an ingestion run.
+
+    Prefers aidp_io.list_kb_jobs / aidp_io.trigger_kb_job_run when available;
+    falls back to a direct REST call otherwise.
+    """
 
     @classmethod
     def _validate_config(cls, conf, runtime_params=None, **context_vars):
@@ -481,16 +791,20 @@ class KBIngestTool(CustomToolBase):
 
         try:
             if op == "list_jobs":
-                items = _get(requests, signer,
-                             f"{base}/knowledgeBases/{quote(kb_key, safe='')}/jobs", timeout).get("items", [])
+                if _io_list_kb_jobs is not None:
+                    items = _io_list_kb_jobs(kb_key, conf, context_vars)
+                else:
+                    items = _get(requests, signer,
+                                 f"{base}/knowledgeBases/{quote(kb_key, safe='')}/jobs", timeout).get("items", [])
                 truncated = False
                 if len(items) > max_rows:
                     items = items[:max_rows]
                     truncated = True
-                jobs = [{"key": j.get("key"), "name": j.get("displayName"),
-                         "state": j.get("lifecycleState")} for j in items]
+                jobs = [{"key": j.get("key"), "name": j.get("displayName") or j.get("name"),
+                         "state": j.get("lifecycleState") or j.get("state")} for j in items]
                 payload = {"kb_key": kb_key, "count": len(jobs), "jobs": jobs, "truncated": truncated}
                 return DebugLog.embed(ok(payload, **payload))
+
             if op == "trigger":
                 if not job_key:
                     return _err(ValueError("job_key is required to trigger a run (use operation=list_jobs to find it)"))
@@ -505,9 +819,12 @@ class KBIngestTool(CustomToolBase):
                         body = run_config
                     else:
                         return _err(ValueError("run_config must be a JSON object (or omitted)"))
-                run = _post(requests, signer,
-                            f"{base}/knowledgeBases/{quote(kb_key, safe='')}/jobs/{quote(job_key, safe='')}/runs",
-                            timeout, body=body)
+                if _io_trigger_kb_job_run is not None:
+                    run = _io_trigger_kb_job_run(kb_key, job_key, body, conf, context_vars)
+                else:
+                    run = _post(requests, signer,
+                                f"{base}/knowledgeBases/{quote(kb_key, safe='')}/jobs/{quote(job_key, safe='')}/runs",
+                                timeout, body=body)
                 run_key = ""
                 if isinstance(run, dict):
                     run_key = (run.get("key") or run.get("runKey") or run.get("id") or "")
@@ -524,7 +841,13 @@ class KBIngestTool(CustomToolBase):
 # --------------------------------------------------------------------------- #
 @CustomToolBase.register
 class WorkspaceFileTool(CustomToolBase):
-    """Read or list files in the workspace (not a catalog volume)."""
+    """Read or list files in the workspace (not a catalog volume).
+
+    Two routing modes:
+      * URI mode (new in 1.2.0): set ``source_uri`` / ``dest_uri`` to a
+        workspace: URI. The tool delegates straight to aidp_io.
+      * Legacy mode: provide ``path`` and rely on the configured workspace_id.
+    """
 
     @classmethod
     def _validate_config(cls, conf, runtime_params=None, **context_vars):
@@ -538,10 +861,69 @@ class WorkspaceFileTool(CustomToolBase):
         op = (runtime_params.get("operation", "get") or "get").lower()
         ws_id = get_cfg(conf, "workspace_id", "") or os.environ.get("WORKSPACE_ID", "")
         max_bytes = get_cfg(conf, "max_bytes", 5_000_000)
+        source_uri = (runtime_params.get("source_uri") or "").strip()
+        dest_uri = (runtime_params.get("dest_uri") or "").strip()
         debug("WorkspaceFileTool._execute_tool", operation=op, workspace_id=bool(ws_id),
-              max_bytes=max_bytes)
+              max_bytes=max_bytes, source_uri=source_uri, dest_uri=dest_uri)
         if not ws_id:
             return _err(ValueError("workspace_id is required in config"))
+
+        # ----- URI mode: delegate to aidp_io (workspace: only) ----- #
+        chosen_uri = source_uri or dest_uri
+        if chosen_uri:
+            if _io_parse_uri is None:
+                return _err(ValueError(
+                    "source_uri/dest_uri provided but aidp_io is not available; "
+                    "omit URI fields or update the shared aidp_io module"))
+            try:
+                parsed = _io_parse_uri(chosen_uri)
+            except Exception as e:
+                return _err(e)
+            if parsed.get("kind") != "workspace":
+                return _err(ValueError(
+                    "WorkspaceFileTool only accepts workspace: URIs; "
+                    "use CatalogFileTool / VolumeWriteTool for master: URIs"))
+            try:
+                if op == "list":
+                    if _io_list_files is None:
+                        return _err(ValueError("aidp_io.list_files is unavailable"))
+                    listing = _io_list_files(chosen_uri, conf, context_vars)
+                    payload = {"path": parsed.get("path", "/"), "count": len(listing),
+                               "files": listing, "truncated": False}
+                    return DebugLog.embed(ok(payload, **payload))
+
+                if op == "get":
+                    if _io_read_file is None:
+                        return _err(ValueError("aidp_io.read_file is unavailable"))
+                    try:
+                        raw = _io_read_file(chosen_uri, conf, context_vars)
+                        truncated = False
+                    except ValueError as e:
+                        if _is_truncation_error(e):
+                            raw = _partial_bytes(e)
+                            truncated = True
+                        else:
+                            raise
+                    try:
+                        content = raw.decode("utf-8")
+                        binary = False
+                    except UnicodeDecodeError:
+                        import base64
+                        content = base64.b64encode(raw).decode()
+                        binary = True
+                    payload = {"path": parsed.get("path", ""),
+                               "name": (parsed.get("path", "").rsplit("/", 1) or [""])[-1],
+                               "format": "base64" if binary else "text",
+                               "content": content,
+                               "bytes": len(raw),
+                               "truncated": truncated}
+                    return DebugLog.embed(ok(payload, **payload))
+
+                return _err(ValueError("operation must be 'get' or 'list'"))
+            except Exception as e:
+                return _err(e)
+
+        # ----- Legacy path-based mode (unchanged behavior) ----- #
         try:
             base, signer, requests, timeout = _client(conf, context_vars)
         except Exception as e:

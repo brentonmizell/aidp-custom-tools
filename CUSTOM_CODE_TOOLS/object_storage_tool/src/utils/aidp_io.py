@@ -27,6 +27,18 @@ PUBLIC API
     read_text(uri, ..., encoding)  -> str
     write_text(uri, ..., encoding) -> dict
 
+    # Catalog-toolkit delegation helpers
+    resolve_volume_key(conf, ctx, catalog, schema, volume, *,
+                       allow_auto_pick=True) -> str | None
+    list_catalogs(conf, ctx)                         -> list[dict]
+    list_schemas(conf, ctx, catalog_key)             -> list[dict]
+    list_tables(conf, ctx, catalog_key, schema_key)  -> list[dict]
+    list_volumes(conf, ctx, catalog_key, schema_key) -> list[dict]
+    list_knowledge_bases(conf, ctx, catalog_key, schema_key) -> list[dict]
+    describe_table(conf, ctx, table_key)             -> dict
+    list_kb_jobs(conf, ctx, kb_key)                  -> list[dict]
+    trigger_kb_job_run(conf, ctx, kb_key, job_key, run_config=None) -> dict
+
 CONFIG KEYS (conf dict, mirrors aidp_catalog_toolkit)
 -----------------------------------------------------
     region              OCI region short code (also OCI_REGION env)
@@ -577,6 +589,246 @@ def write_text(uri: str, content_str: str,
     return write_file(uri, content_str.encode(encoding), conf, context_vars)
 
 
+# ---------------------------------------------------------------------------
+# Catalog-toolkit delegation helpers
+# ---------------------------------------------------------------------------
+#
+# These public helpers let the aidp_catalog_toolkit (and any other consumer)
+# fully delegate AIDP catalog browsing, volume resolution, and knowledge-base
+# job triggering to this shared module. They all use the same internal
+# _client / _build_signer / _get / _post helpers, so auth_mode dispatch and
+# URL conventions (/{api_version}/{service_path}/{lake}/...) are consistent.
+#
+# Error contract: same as the rest of aidp_io — raise Python exceptions. Tool
+# wrappers should catch and translate to the standard {"ok": false, "error":
+# ...} envelope.
+
+
+def resolve_volume_key(conf: Optional[Dict[str, Any]],
+                       ctx: Optional[Dict[str, Any]],
+                       catalog: Optional[str] = None,
+                       schema: Optional[str] = None,
+                       volume: Optional[str] = None,
+                       *,
+                       allow_auto_pick: bool = True) -> Optional[str]:
+    """Resolve catalog/schema/volume names (or keys) to a dot-delimited key.
+
+    Walks /catalogs -> /schemas -> /volumes matching ``displayName`` or
+    ``key``, then returns ``"<catalogName>.<schemaName>.<volumeName>"`` (the
+    AIDP dot-form). Returns ``None`` if resolution fails.
+
+    When ``allow_auto_pick`` is False (destructive ops), refuses to auto-pick
+    a single-item catalog or schema — the caller must name them explicitly.
+    The volume itself ALWAYS requires an explicit name (no auto-pick),
+    regardless of the flag.
+
+    Raises:
+        ValueError if catalog / schema / volume cannot be resolved or if a
+        required name is missing under non-auto-pick semantics.
+    """
+    from urllib.parse import quote
+
+    if not volume:
+        raise ValueError("provide catalog + schema + volume names (volume is required)")
+
+    base, signer, requests_mod, timeout = _client(conf, ctx)
+
+    def _match(items, name):
+        for it in items:
+            if name in (it.get("displayName"), it.get("key")):
+                return it
+        return None
+
+    catalogs = _get(requests_mod, signer, f"{base}/catalogs", timeout).get("items", [])
+    if catalog:
+        cat = _match(catalogs, catalog)
+    elif allow_auto_pick and len(catalogs) == 1:
+        cat = catalogs[0]
+    else:
+        cat = None
+    if not cat:
+        if not catalog and not allow_auto_pick:
+            raise ValueError("catalog is required for destructive ops (no auto-pick)")
+        raise ValueError(
+            f"catalog {catalog!r} not found among "
+            f"{[c.get('displayName') for c in catalogs]}"
+        )
+
+    schemas = _get(
+        requests_mod, signer,
+        f"{base}/schemas?catalogKey={quote(cat['key'], safe='')}", timeout,
+    ).get("items", [])
+    if schema:
+        sch = _match(schemas, schema)
+    elif allow_auto_pick and len(schemas) == 1:
+        sch = schemas[0]
+    else:
+        sch = None
+    if not sch:
+        if not schema and not allow_auto_pick:
+            raise ValueError("schema is required for destructive ops (no auto-pick)")
+        raise ValueError(
+            f"schema {schema!r} not found among "
+            f"{[s.get('displayName') for s in schemas]}"
+        )
+
+    volumes = _get(
+        requests_mod, signer,
+        f"{base}/volumes?catalogKey={quote(cat['key'], safe='')}"
+        f"&schemaKey={quote(sch['key'], safe='')}", timeout,
+    ).get("items", [])
+    vol = _match(volumes, volume)
+    if not vol:
+        raise ValueError(
+            f"volume {volume!r} not found among "
+            f"{[v.get('displayName') for v in volumes]}"
+        )
+
+    cat_name = cat.get("displayName") or cat.get("key") or ""
+    sch_name = sch.get("displayName") or sch.get("key") or ""
+    vol_name = vol.get("displayName") or vol.get("key") or ""
+    return f"{cat_name}.{sch_name}.{vol_name}"
+
+
+def list_catalogs(conf: Optional[Dict[str, Any]],
+                  ctx: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """List all catalogs in the data lake.
+
+    Returns the raw item dicts as returned by GET /catalogs (each typically
+    has ``key``, ``displayName``, and ``catalogType``).
+    """
+    base, signer, requests_mod, timeout = _client(conf, ctx)
+    return _get(requests_mod, signer, f"{base}/catalogs", timeout).get("items", []) or []
+
+
+def list_schemas(conf: Optional[Dict[str, Any]],
+                 ctx: Optional[Dict[str, Any]],
+                 catalog_key: str) -> List[Dict[str, Any]]:
+    """List all schemas in a catalog.
+
+    Returns the raw item dicts as returned by GET /schemas?catalogKey=...
+    (each typically has ``key`` and ``displayName``).
+    """
+    if not catalog_key:
+        raise ValueError("catalog_key is required")
+    from urllib.parse import quote
+    base, signer, requests_mod, timeout = _client(conf, ctx)
+    url = f"{base}/schemas?catalogKey={quote(catalog_key, safe='')}"
+    return _get(requests_mod, signer, url, timeout).get("items", []) or []
+
+
+def list_tables(conf: Optional[Dict[str, Any]],
+                ctx: Optional[Dict[str, Any]],
+                catalog_key: str, schema_key: str) -> List[Dict[str, Any]]:
+    """List all tables in a (catalog, schema).
+
+    Returns the raw item dicts as returned by
+    GET /tables?catalogKey=...&schemaKey=...
+    """
+    if not catalog_key or not schema_key:
+        raise ValueError("catalog_key and schema_key are required")
+    from urllib.parse import quote
+    base, signer, requests_mod, timeout = _client(conf, ctx)
+    url = (
+        f"{base}/tables?catalogKey={quote(catalog_key, safe='')}"
+        f"&schemaKey={quote(schema_key, safe='')}"
+    )
+    return _get(requests_mod, signer, url, timeout).get("items", []) or []
+
+
+def list_volumes(conf: Optional[Dict[str, Any]],
+                 ctx: Optional[Dict[str, Any]],
+                 catalog_key: str, schema_key: str) -> List[Dict[str, Any]]:
+    """List all volumes in a (catalog, schema).
+
+    Returns the raw item dicts as returned by
+    GET /volumes?catalogKey=...&schemaKey=...
+    """
+    if not catalog_key or not schema_key:
+        raise ValueError("catalog_key and schema_key are required")
+    from urllib.parse import quote
+    base, signer, requests_mod, timeout = _client(conf, ctx)
+    url = (
+        f"{base}/volumes?catalogKey={quote(catalog_key, safe='')}"
+        f"&schemaKey={quote(schema_key, safe='')}"
+    )
+    return _get(requests_mod, signer, url, timeout).get("items", []) or []
+
+
+def list_knowledge_bases(conf: Optional[Dict[str, Any]],
+                         ctx: Optional[Dict[str, Any]],
+                         catalog_key: str, schema_key: str) -> List[Dict[str, Any]]:
+    """List all knowledge bases in a (catalog, schema).
+
+    Returns the raw item dicts as returned by
+    GET /knowledgeBases?catalogKey=...&schemaKey=...&limit=1000
+    (each typically has ``key``, ``displayName``, and ``lifecycleState``).
+    """
+    if not catalog_key or not schema_key:
+        raise ValueError("catalog_key and schema_key are required")
+    from urllib.parse import quote
+    base, signer, requests_mod, timeout = _client(conf, ctx)
+    url = (
+        f"{base}/knowledgeBases?catalogKey={quote(catalog_key, safe='')}"
+        f"&schemaKey={quote(schema_key, safe='')}&limit=1000"
+    )
+    return _get(requests_mod, signer, url, timeout).get("items", []) or []
+
+
+def describe_table(conf: Optional[Dict[str, Any]],
+                   ctx: Optional[Dict[str, Any]],
+                   table_key: str) -> Dict[str, Any]:
+    """Describe a table (returns full detail object, including columns).
+
+    Returns the raw response from GET /tables/{table_key}.
+    """
+    if not table_key:
+        raise ValueError("table_key is required")
+    from urllib.parse import quote
+    base, signer, requests_mod, timeout = _client(conf, ctx)
+    url = f"{base}/tables/{quote(table_key, safe='')}"
+    return _get(requests_mod, signer, url, timeout) or {}
+
+
+def list_kb_jobs(conf: Optional[Dict[str, Any]],
+                 ctx: Optional[Dict[str, Any]],
+                 kb_key: str) -> List[Dict[str, Any]]:
+    """List ingestion jobs registered on a knowledge base.
+
+    Returns the raw item dicts as returned by
+    GET /knowledgeBases/{kb_key}/jobs (each typically has ``key``,
+    ``displayName``, and ``lifecycleState``).
+    """
+    if not kb_key:
+        raise ValueError("kb_key is required")
+    from urllib.parse import quote
+    base, signer, requests_mod, timeout = _client(conf, ctx)
+    url = f"{base}/knowledgeBases/{quote(kb_key, safe='')}/jobs"
+    return _get(requests_mod, signer, url, timeout).get("items", []) or []
+
+
+def trigger_kb_job_run(conf: Optional[Dict[str, Any]],
+                       ctx: Optional[Dict[str, Any]],
+                       kb_key: str, job_key: str,
+                       run_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Trigger a KB ingestion job run.
+
+    POSTs to /knowledgeBases/{kb_key}/jobs/{job_key}/runs with the optional
+    ``run_config`` body. Returns the raw response (typically including
+    ``key``, ``runKey``, and/or ``id``).
+    """
+    if not kb_key or not job_key:
+        raise ValueError("kb_key and job_key are required")
+    from urllib.parse import quote
+    base, signer, requests_mod, timeout = _client(conf, ctx)
+    url = (
+        f"{base}/knowledgeBases/{quote(kb_key, safe='')}"
+        f"/jobs/{quote(job_key, safe='')}/runs"
+    )
+    body = run_config if isinstance(run_config, dict) else {}
+    return _post(requests_mod, signer, url, timeout, body=body) or {}
+
+
 __all__ = [
     "parse_uri",
     "read_file",
@@ -584,4 +836,14 @@ __all__ = [
     "list_files",
     "read_text",
     "write_text",
+    # Catalog-toolkit delegation helpers
+    "resolve_volume_key",
+    "list_catalogs",
+    "list_schemas",
+    "list_tables",
+    "list_volumes",
+    "list_knowledge_bases",
+    "describe_table",
+    "list_kb_jobs",
+    "trigger_kb_job_run",
 ]

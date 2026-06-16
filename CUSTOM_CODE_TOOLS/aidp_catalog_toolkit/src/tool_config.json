@@ -1,12 +1,12 @@
 {
   "displayName": "AIDP Catalog Toolkit",
-  "description": "Read/write Standard Catalog volume files, browse catalog metadata, and trigger KB ingestion.",
+  "description": "Read/write Standard Catalog volume files, browse catalog metadata, and trigger KB ingestion. File IO + catalog browsing delegate to the shared aidp_io URI contract.",
   "tools": [
     {
       "toolClassName": "CatalogFileTool",
       "displayName": "Catalog File Read",
-      "description": "Pull a specific file from a Standard Catalog volume, or list a volume's files. Provide volume_key + path, or catalog/schema/volume names + path. Use to load a known reference document an agent needs.",
-      "version": "1.1.0",
+      "description": "Pull a specific file from a Standard Catalog volume, or list a volume's files. Either set source_uri (master:cat.sch.vol:/path or workspace:/path) OR provide volume_key + path / catalog/schema/volume names + path. Use to load a known reference document an agent needs.",
+      "version": "1.2.0",
       "schema": [
         {
           "name": "operation",
@@ -19,9 +19,14 @@
           "default": "get"
         },
         {
+          "name": "source_uri",
+          "type": "string",
+          "description": "AIDP URI to read from. Format: master:<catalog>.<schema>.<volume>:/<path> or workspace:/<path>. When set, supersedes volume_key/catalog/schema/volume/path."
+        },
+        {
           "name": "path",
           "type": "string",
-          "description": "File path within the volume for get (e.g. /safety_manual.md), or folder path for list (default /)."
+          "description": "File path within the volume for get (e.g. /safety_manual.md), or folder path for list (default /). Ignored when source_uri is set."
         },
         {
           "name": "volume_key",
@@ -151,21 +156,29 @@
         "tenancy_ocid": "OCI Tenancy OCID. Auto-filled from ~/.oci/config.",
         "user_ocid": "OCI User OCID. Auto-filled from ~/.oci/config.",
         "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
-        "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
-        "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
+        "private_key_content": "(secret) PEM private key — DO NOT commit. Provide via secret store at deploy time.",
+        "pass_phrase": "(secret) Private key passphrase — DO NOT commit.",
         "service_path": "Auto-derived from api_version (20240831->dataLakes, 20260430->aiDataPlatforms). Only set if AIDP exposes a custom path."
+      },
+      "_schemaDescriptions": {
+        "source_uri": "AIDP URI form: master:<catalog>.<schema>.<volume>:/<path> for catalog volumes, or workspace:/<path> for workspace files. When set, takes precedence over the legacy fields below. Delegated to the shared aidp_io module."
       }
     },
     {
       "toolClassName": "VolumeWriteTool",
       "displayName": "Catalog Volume Write",
-      "description": "Write a file into a Standard Catalog volume. Provide volume_key + path + content, or catalog/schema/volume names. Use to persist an agent's output (report, dataset, summary) back into the catalog.",
-      "version": "1.1.0",
+      "description": "Write a file into a Standard Catalog volume. Either set dest_uri (master:cat.sch.vol:/path) OR provide volume_key + path + content / catalog/schema/volume names. Use to persist an agent's output (report, dataset, summary) back into the catalog. Workspace writes go through Workspace File.",
+      "version": "1.2.0",
       "schema": [
+        {
+          "name": "dest_uri",
+          "type": "string",
+          "description": "AIDP master URI to write to. Format: master:<catalog>.<schema>.<volume>:/<path>. When set, supersedes volume_key/catalog/schema/volume/path. Workspace writes go through Workspace File."
+        },
         {
           "name": "path",
           "type": "string",
-          "description": "Destination file path within the volume (e.g. /reports/summary.md)."
+          "description": "Destination file path within the volume (e.g. /reports/summary.md). Ignored when dest_uri is set."
         },
         {
           "name": "content",
@@ -291,16 +304,19 @@
         "tenancy_ocid": "OCI Tenancy OCID. Auto-filled from ~/.oci/config.",
         "user_ocid": "OCI User OCID. Auto-filled from ~/.oci/config.",
         "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
-        "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
-        "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
+        "private_key_content": "(secret) PEM private key — DO NOT commit. Provide via secret store at deploy time.",
+        "pass_phrase": "(secret) Private key passphrase — DO NOT commit.",
         "service_path": "Auto-derived from api_version (20240831->dataLakes, 20260430->aiDataPlatforms). Only set if AIDP exposes a custom path."
+      },
+      "_schemaDescriptions": {
+        "dest_uri": "AIDP master URI form: master:<catalog>.<schema>.<volume>:/<path>. When set, supersedes the legacy volume_key / catalog / schema / volume / path fields. Workspace writes are not supported here — use the Workspace File tool. Delegated to the shared aidp_io module."
       }
     },
     {
       "toolClassName": "CatalogBrowserTool",
       "displayName": "Catalog Browser",
-      "description": "Browse catalog metadata: list catalogs, schemas, tables, volumes, or knowledge bases, or describe a table's columns. Use so an agent can discover the right data asset before acting on it.",
-      "version": "1.1.0",
+      "description": "Browse catalog metadata: list catalogs, schemas, tables, volumes, or knowledge bases, or describe a table's columns. Use so an agent can discover the right data asset before acting on it. Delegates to aidp_io when its browsing helpers are available.",
+      "version": "1.2.0",
       "schema": [
         {
           "name": "list",
@@ -409,16 +425,16 @@
         "tenancy_ocid": "OCI Tenancy OCID. Auto-filled from ~/.oci/config.",
         "user_ocid": "OCI User OCID. Auto-filled from ~/.oci/config.",
         "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
-        "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
-        "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
+        "private_key_content": "(secret) PEM private key — DO NOT commit. Provide via secret store at deploy time.",
+        "pass_phrase": "(secret) Private key passphrase — DO NOT commit.",
         "service_path": "Auto-derived from api_version (20240831->dataLakes, 20260430->aiDataPlatforms). Only set if AIDP exposes a custom path."
       }
     },
     {
       "toolClassName": "KBIngestTool",
       "displayName": "KB Ingestion",
-      "description": "List a knowledge base's ingestion jobs, or trigger an ingestion run to (re)index it. Use after documents change so the KB is up to date for RAG queries.",
-      "version": "1.1.0",
+      "description": "List a knowledge base's ingestion jobs, or trigger an ingestion run to (re)index it. Use after documents change so the KB is up to date for RAG queries. Delegates to aidp_io.list_kb_jobs / trigger_kb_job_run when present.",
+      "version": "1.2.0",
       "schema": [
         {
           "name": "operation",
@@ -520,16 +536,16 @@
         "tenancy_ocid": "OCI Tenancy OCID. Auto-filled from ~/.oci/config.",
         "user_ocid": "OCI User OCID. Auto-filled from ~/.oci/config.",
         "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
-        "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
-        "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
+        "private_key_content": "(secret) PEM private key — DO NOT commit. Provide via secret store at deploy time.",
+        "pass_phrase": "(secret) Private key passphrase — DO NOT commit.",
         "service_path": "Auto-derived from api_version (20240831->dataLakes, 20260430->aiDataPlatforms). Only set if AIDP exposes a custom path."
       }
     },
     {
       "toolClassName": "WorkspaceFileTool",
       "displayName": "Workspace File",
-      "description": "Read or list files in the workspace (not a catalog volume). Workspace files (notebooks, scripts, text) live under /Workspace. Provide a path. Use for an agent's code/config files; for Standard Catalog volume files use Catalog File Read.",
-      "version": "1.1.0",
+      "description": "Read or list files in the workspace (not a catalog volume). Workspace files (notebooks, scripts, text) live under /Workspace. Either set source_uri / dest_uri (workspace:/<path>) OR provide a path and rely on the configured workspace_id. Use for an agent's code/config files; for Standard Catalog volume files use Catalog File Read / Catalog Volume Write.",
+      "version": "1.2.0",
       "schema": [
         {
           "name": "operation",
@@ -542,9 +558,19 @@
           "default": "get"
         },
         {
+          "name": "source_uri",
+          "type": "string",
+          "description": "Workspace URI to read from. Format: workspace:/<path>. Master URIs are not accepted here — use Catalog File Read."
+        },
+        {
+          "name": "dest_uri",
+          "type": "string",
+          "description": "Workspace URI to write to (reserved for future write operations). Format: workspace:/<path>. Master URIs are not accepted here — use Catalog Volume Write."
+        },
+        {
           "name": "path",
           "type": "string",
-          "description": "Workspace path relative to /Workspace, e.g. Notebooks/foo.ipynb (for get) or a folder for list (default /)."
+          "description": "Workspace path relative to /Workspace, e.g. Notebooks/foo.ipynb (for get) or a folder for list (default /). Ignored when source_uri/dest_uri is set."
         }
       ],
       "conf": {
@@ -615,9 +641,13 @@
         "tenancy_ocid": "OCI Tenancy OCID. Auto-filled from ~/.oci/config.",
         "user_ocid": "OCI User OCID. Auto-filled from ~/.oci/config.",
         "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
-        "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
-        "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
+        "private_key_content": "(secret) PEM private key — DO NOT commit. Provide via secret store at deploy time.",
+        "pass_phrase": "(secret) Private key passphrase — DO NOT commit.",
         "service_path": "Auto-derived from api_version (20240831->dataLakes, 20260430->aiDataPlatforms). Only set if AIDP exposes a custom path."
+      },
+      "_schemaDescriptions": {
+        "source_uri": "AIDP workspace URI form: workspace:/<path>. When set, supersedes the legacy path field. Delegated to the shared aidp_io module.",
+        "dest_uri": "AIDP workspace URI form: workspace:/<path>. Reserved for future workspace-write operations through this tool. Delegated to the shared aidp_io module."
       }
     }
   ]
