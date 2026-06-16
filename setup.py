@@ -690,9 +690,14 @@ def _rebuild_zips(creds: Optional[Dict] = None) -> None:
 
 
 def _rebuild_one(pkg_dir: Path, creds: Optional[Dict] = None) -> None:
-    """Build the package zip. When `creds` is provided, patch tool_config.json
-    IN THE ZIP (not on disk) with user_principal credentials. Source stays
-    clean; the zip is the only artifact that ever sees the secrets."""
+    """Build the package zip. tool_config.json is ALWAYS sanitized into the
+    zip — extension-only sidecar keys (_uiHints / _confDescriptions) get
+    stripped because AIDP's CustomToolEntry schema rejects unknown keys
+    with a Pydantic ValidationError on tool load. Source on disk keeps
+    those sidecars so the AIDP Flow Designer extension can read them.
+
+    When `creds` is provided, also patch the (already-sanitized) tool_config
+    with user_principal credentials for AIDP Test panel testing."""
     src = pkg_dir / "src"
     if not src.is_dir():
         return
@@ -700,6 +705,7 @@ def _rebuild_one(pkg_dir: Path, creds: Optional[Dict] = None) -> None:
     if zip_path.exists():
         zip_path.unlink()
     patched_tools = 0
+    sanitized = False
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for entry in src.rglob("*"):
             if entry.is_dir():
@@ -707,15 +713,51 @@ def _rebuild_one(pkg_dir: Path, creds: Optional[Dict] = None) -> None:
             if "__pycache__" in entry.parts or entry.suffix == ".pyc":
                 continue
             rel = entry.relative_to(src).as_posix()
-            if creds and rel == "tool_config.json":
+            if rel == "tool_config.json":
                 data = json.loads(entry.read_text(encoding="utf-8"))
-                patched_tools += _inject_credentials(data, creds)
+                if _strip_extension_only_keys(data):
+                    sanitized = True
+                if creds:
+                    patched_tools += _inject_credentials(data, creds)
                 zf.writestr(rel, json.dumps(data, indent=2) + "\n")
                 continue
             zf.write(entry, rel)
     tag = green("rebuilt") if not creds else yellow("rebuilt+creds")
-    extra = f" [auth on {patched_tools} tool(s)]" if creds and patched_tools else ""
+    parts = []
+    if sanitized:
+        parts.append("stripped sidecars")
+    if creds and patched_tools:
+        parts.append(f"auth on {patched_tools} tool(s)")
+    extra = f" [{'; '.join(parts)}]" if parts else ""
     print(f"  {tag} {zip_path.name} ({zip_path.stat().st_size:>7,} bytes){extra}")
+
+
+# Keys our spec adds at the CustomToolEntry level that AIDP doesn't recognize.
+# AIDP's CustomToolEntry only declares: tool_class_name, display_name,
+# description, version, config, input_schema. Any other key at this level can
+# trigger a Pydantic ValidationError on tool load depending on framework
+# version. Source on disk keeps them so the VS Code extension can render
+# dropdowns / tooltips; we strip them here so the deployed zip is spec-clean.
+_EXTENSION_ONLY_KEYS = ("_uiHints", "_confDescriptions")
+
+
+def _strip_extension_only_keys(tool_config: Dict) -> bool:
+    """Mutate tool_config in-place, dropping _uiHints / _confDescriptions
+    from every tool entry. Returns True if anything was stripped."""
+    stripped = False
+    for tool in tool_config.get("tools") or []:
+        for k in _EXTENSION_ONLY_KEYS:
+            if k in tool:
+                del tool[k]
+                stripped = True
+        # Also strip them from schema entries if any agent put them there.
+        for field in tool.get("schema") or []:
+            if isinstance(field, dict):
+                for k in _EXTENSION_ONLY_KEYS:
+                    if k in field:
+                        del field[k]
+                        stripped = True
+    return stripped
 
 
 def _inject_credentials(tool_config: Dict, creds: Dict) -> int:

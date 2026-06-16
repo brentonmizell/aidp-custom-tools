@@ -206,8 +206,33 @@ def update_one(
     return total
 
 
+_EXTENSION_ONLY_KEYS = ("_uiHints", "_confDescriptions")
+
+
+def _strip_extension_only_keys(tool_config: Dict) -> bool:
+    """AIDP's CustomToolEntry schema rejects unknown top-level keys with a
+    Pydantic ValidationError. Strip sidecar keys (_uiHints, _confDescriptions)
+    that are valid only for the extension UI."""
+    stripped = False
+    for tool in tool_config.get("tools") or []:
+        for k in _EXTENSION_ONLY_KEYS:
+            if k in tool:
+                del tool[k]
+                stripped = True
+        for field in tool.get("schema") or []:
+            if isinstance(field, dict):
+                for k in _EXTENSION_ONLY_KEYS:
+                    if k in field:
+                        del field[k]
+                        stripped = True
+    return stripped
+
+
 def rebuild_zips(tools_dir: Path) -> None:
-    """Re-zip every package's src/ into <pkg>/<pkg>.zip."""
+    """Re-zip every package's src/ into <pkg>/<pkg>.zip. tool_config.json is
+    sanitized into the zip — sidecar keys stripped so AIDP's Pydantic model
+    accepts the package. Source on disk stays unchanged."""
+    import json as _json
     for pkg_dir in sorted(tools_dir.iterdir()):
         src = pkg_dir / "src"
         if not src.is_dir():
@@ -219,10 +244,14 @@ def rebuild_zips(tools_dir: Path) -> None:
             for entry in src.rglob("*"):
                 if entry.is_dir():
                     continue
-                # Skip pyc and __pycache__.
                 if "__pycache__" in entry.parts or entry.suffix == ".pyc":
                     continue
                 arcname = entry.relative_to(src).as_posix()
+                if arcname == "tool_config.json":
+                    data = _json.loads(entry.read_text(encoding="utf-8"))
+                    _strip_extension_only_keys(data)
+                    zf.writestr(arcname, _json.dumps(data, indent=2) + "\n")
+                    continue
                 zf.write(entry, arcname)
         print(f"  rebuilt {zip_path.name} ({zip_path.stat().st_size:>7,} bytes)")
 
