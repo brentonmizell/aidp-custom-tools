@@ -6,7 +6,7 @@
       "toolClassName": "ConvertFileTool",
       "displayName": "Convert File",
       "description": "Converts tabular data between csv, json, jsonl, parquet, xlsx, tsv, and txt formats.\n\nWhen to use: Use when the user asks to convert, reformat, transform, or export a data file from one tabular format to another (e.g. 'turn this csv into parquet', 'export to excel', 'flatten jsonl into csv').\n\nHow to discover inputs: If the user names a stored file but not a path, FIRST call CatalogFileTool(operation='list', source_uri='master:<cat>.<sch>.<vol>:/') or WorkspaceFileTool(operation='list', source_uri='workspace:/') to find it. Prefer the unified `source_uri`/`dest_uri` URI form (`master:cat.sch.vol:/path` or `workspace:/path`) over legacy `input_path`/`output_path`. Use inline `content` only for small csv/json snippets pasted into the chat.\n\nHow to communicate: Report row count, source and destination formats, and the final URI written. Do not echo full file bodies for large outputs.\n\nExample: {source_uri:'master:sales_catalog.raw.uploads:/q1_orders.csv', dest_uri:'workspace:/exports/q1_orders.parquet', to_format:'parquet'}.",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "schema": [
         {
           "name": "from_format",
@@ -28,6 +28,7 @@
           "name": "content",
           "type": "string",
           "description": "Inline source data as a raw csv or json string. Use ONLY for small text snippets pasted in the chat. Mutually exclusive with `input_path` and `source_uri`; required when neither of those is given.",
+          "default": "",
           "examples": [
             "name,age\nAlice,30\nBob,25",
             "[{\"name\":\"Alice\",\"age\":30},{\"name\":\"Bob\",\"age\":25}]"
@@ -37,18 +38,21 @@
           "name": "input_path",
           "type": "string",
           "description": "Legacy workspace path to read from, resolved relative to `base_dir` (default `/workspace`). Prefer `source_uri` with the `workspace:/` scheme instead. Mutually exclusive with `content` and `source_uri`.",
+          "default": "uploads/report.csv",
           "examples": ["uploads/report.csv", "data/q1.json"]
         },
         {
           "name": "output_path",
           "type": "string",
           "description": "Legacy workspace path to write to, resolved relative to `base_dir`. Prefer `dest_uri` instead. Required for parquet/xlsx output when no `dest_uri` is given.",
+          "default": "exports/report.parquet",
           "examples": ["exports/report.parquet", "out/q1.xlsx"]
         },
         {
           "name": "source_uri",
           "type": "string",
           "description": "Fully-qualified URI of the source file. Format: `master:<catalog>.<schema>.<volume>:/<path>` for catalog volumes or `workspace:/<path>` for the user workspace. Preferred over `input_path`. When `from_format` is omitted, format is detected from the URI's extension. Required unless `content` or `input_path` is given.",
+          "default": "master:sales_catalog.raw.uploads:/q1_orders.csv",
           "examples": [
             "master:sales_catalog.raw.uploads:/q1_orders.csv",
             "workspace:/uploads/report.csv",
@@ -59,6 +63,7 @@
           "name": "dest_uri",
           "type": "string",
           "description": "Fully-qualified URI to write the converted output to. Same URI grammar as `source_uri` (`master:cat.sch.vol:/path` or `workspace:/path`). Preferred over `output_path`. Required for parquet/xlsx output when no `output_path` is supplied.",
+          "default": "workspace:/exports/q1_orders.parquet",
           "examples": [
             "workspace:/exports/q1_orders.parquet",
             "master:sales_catalog.curated.exports:/q1_orders.parquet",

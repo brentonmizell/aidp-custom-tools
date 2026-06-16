@@ -6,12 +6,13 @@
       "toolClassName": "DocumentExtractTool",
       "displayName": "Document Extract",
       "description": "Extracts clean text (and table text) from a document file: PDF, DOCX, CSV, TXT, MD, or JSON.\n\nWhen to use: Use when the user asks to read, parse, extract, summarize, or ingest a document, PDF, Word doc, CSV, or text file. Accepts input three ways: an AIDP `source_uri`, raw `content_base64` bytes, or inline `content` text. Optionally writes results to `dest_uri`.\n\nHow to discover inputs: Prefer the unified `source_uri` form (`master:<catalog>.<schema>.<volume>:/<path>` or `workspace:/<path>`) over legacy catalog/schema/volume name fields. If the user hasn't named a file, FIRST call CatalogFileTool(operation='list', source_uri='master:cat.sch.vol:/') to browse, then ask which to extract.\n\nHow to communicate: Summarize the extracted text in plain prose; for long documents quote a few representative lines and report total character count rather than dumping everything.\n\nExample: {source_uri:'master:construction_catalog.construction_schema.construction_documents:/safety_manual.pdf', format:'pdf', page_start:1, page_end:5}.",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "schema": [
         {
           "name": "content_base64",
           "type": "string",
           "description": "Raw file bytes encoded as base64 (for binary formats like pdf/docx). Use this when the document isn't yet in AIDP storage. Required unless `content` or `source_uri` is provided. Example: `JVBERi0xLjQKJeLjz9MK...` (truncated PDF header).",
+          "default": "",
           "examples": [
             "JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PC9UeXBlL0NhdGFsb2c+Pg==",
             "UEsDBBQABgAIAAAAIQA..."
@@ -21,6 +22,7 @@
           "name": "content",
           "type": "string",
           "description": "Inline plain-text or CSV content passed directly as a string. Use for text/csv/md/json formats when the bytes are already in hand. Required unless `content_base64` or `source_uri` is provided.",
+          "default": "",
           "examples": [
             "name,age,city\nAlice,30,NYC\nBob,25,SF",
             "# Project Notes\n\nThis document covers the Q3 milestones."
@@ -30,6 +32,7 @@
           "name": "source_uri",
           "type": "string",
           "description": "Fully-qualified AIDP URI to read the document from. Preferred input form. Format: `master:<catalog>.<schema>.<volume>:/<path>` for catalog volumes or `workspace:/<path>` for the user workspace. Required unless `content` or `content_base64` is provided.",
+          "default": "master:construction_catalog.construction_schema.construction_documents:/safety_manual.pdf",
           "examples": [
             "master:construction_catalog.construction_schema.construction_documents:/safety_manual.pdf",
             "workspace:/uploads/report.csv",
@@ -40,6 +43,7 @@
           "name": "dest_uri",
           "type": "string",
           "description": "Optional fully-qualified AIDP URI to write the extracted text (or raw CSV) to. Same URI grammar as `source_uri` (`master:cat.sch.vol:/path` or `workspace:/path`). Write is best-effort: errors surface in the response data and do not fail extraction. Optional; omit to return text only.",
+          "default": "workspace:/extracts/safety_manual.txt",
           "examples": [
             "workspace:/extracts/safety_manual.txt",
             "master:construction_catalog.construction_schema.extracted_text:/safety_manual.txt"
@@ -68,6 +72,7 @@
           "name": "filename",
           "type": "string",
           "description": "Optional original filename used only to infer `format` from the extension when `format` is not explicitly set. Example: `quarterly_report.pdf` would imply `format='pdf'`.",
+          "default": "safety_manual.pdf",
           "examples": [
             "safety_manual.pdf",
             "data.csv",
@@ -78,6 +83,7 @@
           "name": "page_start",
           "type": "integer",
           "description": "PDF only: the first page to extract (1-based, inclusive). Defaults to 1 when omitted. Use to skip front matter or extract a slice of a long PDF. Ignored for non-PDF formats.",
+          "default": 1,
           "examples": [
             1,
             5,
@@ -88,6 +94,7 @@
           "name": "page_end",
           "type": "integer",
           "description": "PDF only: the last page to extract (1-based, inclusive). Defaults to the final page when omitted. Use together with `page_start` to limit extraction to a page range. Ignored for non-PDF formats.",
+          "default": 5,
           "examples": [
             5,
             20,

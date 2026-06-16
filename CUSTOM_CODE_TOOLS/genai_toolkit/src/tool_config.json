@@ -6,12 +6,13 @@
       "toolClassName": "RubricScorerTool",
       "displayName": "Rubric Scorer",
       "description": "Scores a candidate text against a rubric and returns a structured verdict (overall 0-10 score, per-criterion scores, rationale, pass/fail).\n\nWhen to use: Use when the user asks to evaluate, grade, judge, or quality-gate a piece of generated text — e.g. checking an agent answer, a summary, an email draft, or a model output against named criteria.\n\nHow to communicate: Report the overall score, the pass/fail flag, and the top one or two weakest criteria in plain prose. Do not dump the entire raw JSON unless the user asks.\n\nExample: user says 'score this support reply for tone, accuracy, and brevity'. Call {candidate:'Hi Jane, your refund of $42 was processed...', rubric:'tone (warm, professional), accuracy (matches order #1234), brevity (under 80 words)'} -> summarize: 'Overall 8.2/10, PASS. Weakest: brevity 6/10 (reply is 110 words).'",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "schema": [
         {
           "name": "candidate",
           "type": "string",
           "description": "The text to evaluate. Pass the full candidate output as a single string, e.g. an agent answer, a draft email, or a model-generated summary. Long inputs beyond `max_candidate_chars` are truncated.",
+          "default": "Hi Jane, your refund of $42.00 for order #1234 was processed on 2026-06-15 and should appear on your card within 3-5 business days.",
           "examples": [
             "Hi Jane, your refund of $42.00 for order #1234 was processed on 2026-06-15 and should appear on your card within 3-5 business days.",
             "The capital of France is Paris, which has been the seat of French government since the late 10th century."
@@ -21,6 +22,7 @@
           "name": "rubric",
           "type": "string",
           "description": "The scoring criteria as plain text. Either a comma-separated list of named criteria or a richer description with definitions, e.g. 'accuracy, completeness, tone' or 'tone (warm, professional), accuracy (matches order data), brevity (under 80 words)'. Truncated past `max_rubric_chars`.",
+          "default": "accuracy, completeness, tone",
           "examples": [
             "accuracy, completeness, tone",
             "tone (warm, professional), accuracy (matches order #1234), brevity (under 80 words)",
@@ -70,12 +72,13 @@
       "toolClassName": "SummarizerTool",
       "displayName": "Summarizer",
       "description": "Summarizes long text via map-reduce when the input exceeds a single context window; returns a single condensed summary string.\n\nWhen to use: Use when the user asks to summarize, condense, TL;DR, or extract key points from a document, transcript, email thread, web page body, or aggregated tool output. Pick this tool over a raw LLM call whenever the input might exceed one model context.\n\nHow to communicate: Return the summary as-is in prose. If the input was truncated by `max_input_chars`, mention that fact in one short sentence so the user knows.\n\nExample: user says 'summarize this 40-page transcript, focus on action items'. Call {text:'<full transcript text>', instruction:'focus on action items, group by owner'} -> return the resulting bullet summary.",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "schema": [
         {
           "name": "text",
           "type": "string",
           "description": "The full text to summarize. Pass the raw document, transcript, or concatenated content as one string. Input longer than `max_input_chars` is truncated; input longer than `chunk_chars` triggers map-reduce.",
+          "default": "Meeting transcript: Alice opened by reviewing Q2 revenue... (40 pages of dialogue)",
           "examples": [
             "Meeting transcript: Alice opened by reviewing Q2 revenue... (40 pages of dialogue)",
             "The Treaty of Westphalia, signed in 1648, ended the Thirty Years War and established... (long article body)"
@@ -85,6 +88,7 @@
           "name": "instruction",
           "type": "string",
           "description": "Optional guidance shaping the summary's focus, length, or format. Example: 'focus on action items', 'one paragraph, neutral tone', 'bulleted list grouped by speaker'. Optional; omit to get a generic neutral summary.",
+          "default": "focus on action items, group by owner",
           "examples": [
             "focus on action items, group by owner",
             "one short paragraph, neutral tone",
@@ -134,12 +138,13 @@
       "toolClassName": "EmbeddingTool",
       "displayName": "Embedding",
       "description": "Embeds one or more strings using an OCI GenAI embeddings model and returns a list of float vectors.\n\nWhen to use: Use when the user (or another tool) needs vector representations of text — typically for semantic search, similarity scoring, clustering, or upserting into a vector index. Pick this whenever you would otherwise call an external embeddings API.\n\nHow to communicate: Report the number of vectors returned and their dimensionality (e.g. '3 vectors, dim 1024'). Do not dump the raw float arrays into the reply unless the user explicitly asks.\n\nExample: user says 'embed these three product titles for search'. Call {texts:['Red running shoes','Blue hiking boots','Trail socks'], input_type:'search_document'} -> reply 'Embedded 3 strings into 1024-dim vectors.'",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "schema": [
         {
           "name": "text",
           "type": "string",
           "description": "A single string to embed. Use this OR `texts`, not both. Pick `text` for one-off query embeddings (e.g. a search query); pick `texts` for batch document embedding.",
+          "default": "best running shoes for flat feet",
           "examples": [
             "best running shoes for flat feet",
             "How do I reset my password?"
@@ -149,6 +154,7 @@
           "name": "texts",
           "type": "array",
           "description": "A list of strings to embed in one batch. Use this OR `text`, not both. Up to `max_texts` items (Cohere caps at 96); each item longer than `max_text_chars` is handled per the `truncate` setting.",
+          "default": ["Red running shoes", "Blue hiking boots", "Trail socks"],
           "examples": [
             ["Red running shoes", "Blue hiking boots", "Trail socks"],
             ["Refund policy: items can be returned within 30 days.", "Shipping: orders ship within 2 business days."]

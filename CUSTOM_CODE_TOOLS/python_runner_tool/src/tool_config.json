@@ -6,7 +6,7 @@
       "toolClassName": "RunPythonTool",
       "displayName": "Run Python",
       "description": "Executes a block of Python code in a sandboxed process and returns stdout, stderr, return code, and an optional structured `result` value.\n\nWhen to use: Use when the user asks to compute, transform, parse, or script something that the other tools do not cover (math, data munging, custom file processing, ad-hoc logic). Also use when the user asks to read or write AIDP files programmatically via aidp_read/aidp_write/aidp_list helpers exposed in the exec namespace.\n\nHow to discover inputs: If the code needs to read AIDP files and the user has not named them, FIRST call CatalogBrowserTool or WorkspaceFileTool to list candidates and ask which to use. URIs use `master:<catalog>.<schema>.<volume>:/<path>` or `workspace:/<path>` — prefer these unified URIs over passing raw paths.\n\nHow to communicate: Summarize the returned `result` and any printed output in plain prose. Quote short stdout snippets; for large outputs report line counts and a few sample lines instead of dumping the full text.\n\nExample: {code:\"import json\\nresult={'sum':sum(data)}\\nprint('ok')\", data:\"[1,2,3]\"} -> result {sum:6}, stdout 'ok'.",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "schema": [
         {
           "name": "code",
@@ -16,7 +16,8 @@
             "result = sum(data)",
             "import json\\nrows = json.loads(aidp_read_text('workspace:/data/input.json'))\\nresult = {'count': len(rows)}",
             "text = aidp_read_text('master:construction_catalog.construction_schema.construction_documents:/notes.txt')\\nresult = text.upper()"
-          ]
+          ],
+          "default": "result = sum(data)"
         },
         {
           "name": "data",
@@ -26,7 +27,8 @@
             "[1, 2, 3, 4]",
             "{\"name\": \"Alice\", \"age\": 30}",
             "\"hello world\""
-          ]
+          ],
+          "default": "[1, 2, 3, 4]"
         },
         {
           "name": "stdin",
@@ -35,7 +37,8 @@
           "examples": [
             "line one\\nline two\\n",
             "{\"event\":\"click\"}\\n"
-          ]
+          ],
+          "default": "line one\\nline two\\n"
         },
         {
           "name": "files",
@@ -45,7 +48,8 @@
             "[\"workspace:/uploads/report.csv\", \"master:construction_catalog.construction_schema.construction_documents:/safety_manual.pdf\"]",
             "[{\"uri\":\"workspace:/data/input.json\",\"alias\":\"input\"}]",
             "{\"manual\":\"master:construction_catalog.construction_schema.construction_documents:/safety_manual.pdf\"}"
-          ]
+          ],
+          "default": "[\"workspace:/uploads/report.csv\", \"master:construction_catalog.construction_schema.construction_documents:/safety_manual.pdf\"]"
         }
       ],
       "conf": {
@@ -95,7 +99,7 @@
       "toolClassName": "RunNotebookTool",
       "displayName": "Run Notebook",
       "description": "Executes a Jupyter notebook (.ipynb) on the live AIDP workspace kernel and returns each code cell's output.\n\nWhen to use: Use when the user asks to run, execute, or re-run a workspace notebook end-to-end — especially when they need the live workspace context (Spark session, datalake mounts, AIDP credentials). Provide `notebook_path` for a workspace file or `notebook_json` to run raw notebook content inline.\n\nHow to discover inputs: If the user hasn't named the notebook, FIRST call WorkspaceFileTool(list ...) to enumerate `.ipynb` files under the workspace and ask the user to pick. Default to listing first; after listing, summarize the names and ask which to run. Notebook paths are workspace paths like `Workspace/analysis.ipynb`.\n\nHow to communicate: Summarize per-cell results in plain prose — cell index, short output snippet, error if any. Quote tracebacks verbatim; for long DataFrame dumps report shape and a few sample rows instead of the full table.\n\nExample: user says 'run the sales report notebook' -> list notebooks -> {notebook_path:\"Workspace/sales_report.ipynb\"}.",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "schema": [
         {
           "name": "notebook_path",
@@ -105,7 +109,8 @@
             "Workspace/analysis.ipynb",
             "Workspace/reports/sales_report.ipynb",
             "Workspace/etl/daily_load.ipynb"
-          ]
+          ],
+          "default": "Workspace/analysis.ipynb"
         },
         {
           "name": "notebook_json",
@@ -114,7 +119,8 @@
           "examples": [
             "{\"cells\":[{\"cell_type\":\"code\",\"source\":\"print('hello')\",\"metadata\":{},\"outputs\":[]}],\"metadata\":{},\"nbformat\":4,\"nbformat_minor\":5}",
             "{\"cells\":[{\"cell_type\":\"code\",\"source\":\"df = spark.range(10)\\ndf.show()\",\"metadata\":{},\"outputs\":[]}],\"metadata\":{},\"nbformat\":4,\"nbformat_minor\":5}"
-          ]
+          ],
+          "default": ""
         }
       ],
       "conf": {
