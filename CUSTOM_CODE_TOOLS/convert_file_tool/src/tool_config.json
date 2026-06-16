@@ -5,28 +5,66 @@
     {
       "toolClassName": "ConvertFileTool",
       "displayName": "Convert File",
-      "description": "Convert tabular data between csv, json, parquet, and excel. Use inline content for csv/json text, input_path/output_path for workspace files, or source_uri/dest_uri to read and write via the AIDP URI scheme (master:<cat>.<sch>.<vol>:/<path> or workspace:/<path>). Use to reshape data files between steps or prepare an export.",
-      "version": "1.2.0",
+      "description": "Converts tabular data between csv, json, jsonl, parquet, xlsx, tsv, and txt formats.\n\nWhen to use: Use when the user asks to convert, reformat, transform, or export a data file from one tabular format to another (e.g. 'turn this csv into parquet', 'export to excel', 'flatten jsonl into csv').\n\nHow to discover inputs: If the user names a stored file but not a path, FIRST call CatalogFileTool(operation='list', source_uri='master:<cat>.<sch>.<vol>:/') or WorkspaceFileTool(operation='list', source_uri='workspace:/') to find it. Prefer the unified `source_uri`/`dest_uri` URI form (`master:cat.sch.vol:/path` or `workspace:/path`) over legacy `input_path`/`output_path`. Use inline `content` only for small csv/json snippets pasted into the chat.\n\nHow to communicate: Report row count, source and destination formats, and the final URI written. Do not echo full file bodies for large outputs.\n\nExample: {source_uri:'master:sales_catalog.raw.uploads:/q1_orders.csv', dest_uri:'workspace:/exports/q1_orders.parquet', to_format:'parquet'}.",
+      "version": "1.3.0",
       "schema": [
         {
           "name": "from_format",
           "type": "string",
-          "description": "Source format. When omitted and source_uri is supplied, the format is detected from the URI's path extension.",
+          "description": "Source file format. Optional when `source_uri` or `input_path` is supplied — format is auto-detected from the path extension (e.g. `.csv` -> `csv`). Set explicitly only when the extension is missing or misleading. Default: `csv`.",
           "enum": ["csv", "json", "jsonl", "parquet", "xlsx", "tsv", "txt"],
-          "default": "csv"
+          "default": "csv",
+          "examples": ["csv", "json", "parquet"]
         },
         {
           "name": "to_format",
           "type": "string",
-          "description": "Target format.",
+          "description": "Target file format to convert into. Required when it differs from the source. Choose `parquet`/`xlsx` for binary tabular exports, `csv`/`tsv`/`json`/`jsonl`/`txt` for text. Default: `json`.",
           "enum": ["csv", "json", "jsonl", "parquet", "xlsx", "tsv", "txt"],
-          "default": "json"
+          "default": "json",
+          "examples": ["json", "parquet", "xlsx"]
         },
-        {"name": "content", "type": "string", "description": "Inline source data (csv or json text). Use this OR input_path OR source_uri."},
-        {"name": "input_path", "type": "string", "description": "Workspace path to read from, relative to base_dir. Use this OR content OR source_uri."},
-        {"name": "output_path", "type": "string", "description": "Workspace path to write to, relative to base_dir. Required for parquet/excel output when not using dest_uri."},
-        {"name": "source_uri", "type": "string", "description": "AIDP URI to read the source file via aidp_io. Forms: master:<catalog>.<schema>.<volume>:/<path>, workspace:/<path>, or the alias <catalog>.<schema>.<volume>:/<path>. When from_format is empty, it is detected from the URI's path extension."},
-        {"name": "dest_uri", "type": "string", "description": "AIDP URI to write the converted output via aidp_io. Same forms as source_uri. Required for parquet/excel output when no output_path is given."}
+        {
+          "name": "content",
+          "type": "string",
+          "description": "Inline source data as a raw csv or json string. Use ONLY for small text snippets pasted in the chat. Mutually exclusive with `input_path` and `source_uri`; required when neither of those is given.",
+          "examples": [
+            "name,age\nAlice,30\nBob,25",
+            "[{\"name\":\"Alice\",\"age\":30},{\"name\":\"Bob\",\"age\":25}]"
+          ]
+        },
+        {
+          "name": "input_path",
+          "type": "string",
+          "description": "Legacy workspace path to read from, resolved relative to `base_dir` (default `/workspace`). Prefer `source_uri` with the `workspace:/` scheme instead. Mutually exclusive with `content` and `source_uri`.",
+          "examples": ["uploads/report.csv", "data/q1.json"]
+        },
+        {
+          "name": "output_path",
+          "type": "string",
+          "description": "Legacy workspace path to write to, resolved relative to `base_dir`. Prefer `dest_uri` instead. Required for parquet/xlsx output when no `dest_uri` is given.",
+          "examples": ["exports/report.parquet", "out/q1.xlsx"]
+        },
+        {
+          "name": "source_uri",
+          "type": "string",
+          "description": "Fully-qualified URI of the source file. Format: `master:<catalog>.<schema>.<volume>:/<path>` for catalog volumes or `workspace:/<path>` for the user workspace. Preferred over `input_path`. When `from_format` is omitted, format is detected from the URI's extension. Required unless `content` or `input_path` is given.",
+          "examples": [
+            "master:sales_catalog.raw.uploads:/q1_orders.csv",
+            "workspace:/uploads/report.csv",
+            "master:construction_catalog.construction_schema.construction_documents:/inventory.xlsx"
+          ]
+        },
+        {
+          "name": "dest_uri",
+          "type": "string",
+          "description": "Fully-qualified URI to write the converted output to. Same URI grammar as `source_uri` (`master:cat.sch.vol:/path` or `workspace:/path`). Preferred over `output_path`. Required for parquet/xlsx output when no `output_path` is supplied.",
+          "examples": [
+            "workspace:/exports/q1_orders.parquet",
+            "master:sales_catalog.curated.exports:/q1_orders.parquet",
+            "workspace:/out/report.json"
+          ]
+        }
       ],
       "conf": {"base_dir": "/workspace", "max_rows": 100000, "max_bytes": 104857600},
       "_confDescriptions": {

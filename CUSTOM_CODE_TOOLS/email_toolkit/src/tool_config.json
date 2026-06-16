@@ -5,51 +5,74 @@
     {
       "toolClassName": "SmtpEmailTool",
       "displayName": "Send Email",
-      "description": "Send an email via SMTP. Use to send notifications, reports, or alerts, or to tell a person a flow needs their input. Recipients, subject, and body are provided at call time.",
-      "version": "1.1.0",
+      "description": "Sends an outbound email message through a configured SMTP relay (OCI Email Delivery, Gmail, Office 365, or any standards-compliant SMTP server).\n\nWhen to use: Use when the user asks to send, email, notify, alert, message, or forward something to one or more recipients, or when the agent needs to tell a human a flow is awaiting input. Supports plain text and HTML bodies, CC/BCC, and priority hints.\n\nHow to discover inputs: Recipient addresses, subject, and body come from the user or from prior tool output — ask the user if any are missing. The sender (`from_addr`) and SMTP credentials are pre-configured in tool conf; do not ask the user for them.\n\nHow to communicate: After sending, confirm in one sentence with the recipient and subject. Do not echo the full body back.\n\nExample: user says 'email the report to alice@acme.com'. Call {to:'alice@acme.com', subject:'Weekly Report', body:'See attached summary...', content_type:'plain'}.",
+      "version": "1.3.0",
       "schema": [
         {
           "name": "to",
           "type": "string",
-          "description": "Recipient address(es). One address or a comma/semicolon-separated list."
+          "description": "Primary recipient address or addresses. Single email or a comma/semicolon-separated list like `alice@acme.com,bob@acme.com`. Required.",
+          "examples": [
+            "alice@acme.com",
+            "alice@acme.com,bob@acme.com",
+            "ops-team@acme.com;manager@acme.com"
+          ]
         },
         {
           "name": "subject",
           "type": "string",
-          "description": "Email subject line."
+          "description": "Subject line shown in the recipient's inbox. Keep under ~80 characters for best readability. Required.",
+          "examples": [
+            "Weekly Sales Report",
+            "[ALERT] Pipeline failure in prod",
+            "Action required: please review"
+          ]
         },
         {
           "name": "body",
           "type": "string",
-          "description": "Email body. Plain text by default."
+          "description": "Message body content. Plain text by default; set `content_type='html'` (or `html=true`) to send HTML markup like `<p>Hello</p>`. Required.",
+          "examples": [
+            "Hi Alice,\n\nThe weekly report is attached. Let me know if you have questions.\n\n-- Bot",
+            "<h1>Weekly Report</h1><p>See the dashboard for details.</p>",
+            "Pipeline run #4821 failed at step 'extract'. Logs: https://example.com/run/4821"
+          ]
         },
         {
           "name": "cc",
           "type": "string",
-          "description": "Optional CC address(es), comma/semicolon-separated."
+          "description": "Carbon-copy recipient address(es). Comma/semicolon-separated list, same format as `to`. Optional; omit if not needed.",
+          "examples": [
+            "manager@acme.com",
+            "alice@acme.com,bob@acme.com"
+          ]
         },
         {
           "name": "bcc",
           "type": "string",
-          "description": "Optional BCC address(es), comma/semicolon-separated."
+          "description": "Blind carbon-copy recipient address(es). Comma/semicolon-separated list, same format as `to`. Optional; recipients in this list are hidden from other recipients.",
+          "examples": [
+            "audit@acme.com",
+            "archive@acme.com,compliance@acme.com"
+          ]
         },
         {
           "name": "html",
           "type": "boolean",
-          "description": "Set true if the body is HTML.",
+          "description": "Set `true` if `body` contains HTML markup, `false` (default) for plain text. Equivalent to `content_type='html'`. Optional; defaults to `false`.",
           "default": false
         },
         {
           "name": "content_type",
           "type": "string",
-          "description": "Body content type. 'plain' for text, 'html' for HTML.",
+          "description": "Body MIME content type. Use `plain` for unformatted text, `html` for formatted markup. Optional; defaults to `plain`. Overrides the `html` boolean when both are set.",
           "enum": ["plain", "html"],
           "default": "plain"
         },
         {
           "name": "priority",
           "type": "string",
-          "description": "Message priority hint (sets X-Priority header).",
+          "description": "Message priority hint that sets the `X-Priority` header. Use `high` for urgent alerts, `low` for FYI notices, `normal` (default) for routine mail. Optional.",
           "enum": ["low", "normal", "high"],
           "default": "normal"
         }
@@ -95,42 +118,57 @@
     {
       "toolClassName": "ImapReadTool",
       "displayName": "Read IMAP Inbox",
-      "description": "Fetch messages from an IMAP mailbox. Supports server (host/port/ssl), credentials, folder (default INBOX), filtering (last N messages, unread only, since date), and selectable per-message fields. Returns a structured envelope with messages, count, and folder.",
-      "version": "1.1.0",
+      "description": "Fetches messages from an IMAP mailbox (Gmail, Office 365, or any standards-compliant IMAP server) and returns a structured list with headers and body.\n\nWhen to use: Use when the user asks to read, check, list, search, summarize, or pull email from an inbox or folder — for example 'show me unread mail', 'any emails from Alice this week?', or 'summarize today's inbox'. Default to listing first when the target message is unknown.\n\nHow to discover inputs: Folder defaults to `INBOX` — only set `folder` if the user names a specific mailbox. If the user hasn't named one, list `INBOX` first, then summarize subjects/senders and ask which message they care about. IMAP server and credentials are pre-configured in tool conf.\n\nHow to communicate: Summarize results in plain prose (sender, subject, date, one-line snippet). Never dump raw `body_html` or full headers unless explicitly asked.\n\nExample: user says 'any unread mail today?'. Call {folder:'INBOX', unread_only:true, since:'2026-06-16', limit:25, fields:'uid,from,subject,date,body_text'}.",
+      "version": "1.3.0",
       "schema": [
         {
           "name": "folder",
           "type": "string",
-          "description": "Mailbox folder to read. Defaults to INBOX.",
-          "default": "INBOX"
+          "description": "IMAP mailbox folder name to read. Defaults to `INBOX`. Use vendor-specific paths like `[Gmail]/All Mail` or `Sent` for non-default folders. Optional.",
+          "default": "INBOX",
+          "examples": [
+            "INBOX",
+            "[Gmail]/All Mail",
+            "Sent"
+          ]
         },
         {
           "name": "limit",
           "type": "integer",
-          "description": "Maximum number of messages to return (capped server-side).",
+          "description": "Maximum number of messages to return in one call. Capped server-side by the `max_messages` conf value. Optional; defaults to 25.",
           "default": 25
         },
         {
           "name": "unread_only",
           "type": "boolean",
-          "description": "If true, only return UNSEEN messages.",
+          "description": "If `true`, only return messages with the UNSEEN flag (not yet opened). Optional; defaults to `false` which returns all messages matching other filters.",
           "default": false
         },
         {
           "name": "since",
           "type": "string",
-          "description": "Only fetch messages on/after this date. Accepts ISO-8601 (YYYY-MM-DD) or IMAP date (e.g. 01-Jan-2026)."
+          "description": "Lower-bound date filter; only fetches messages on/after this date. Accepts ISO-8601 (`YYYY-MM-DD`) or IMAP-native date (`DD-Mon-YYYY`). Optional; omit for no date filter.",
+          "examples": [
+            "2026-06-16",
+            "2026-01-01",
+            "16-Jun-2026"
+          ]
         },
         {
           "name": "fields",
           "type": "string",
-          "description": "Comma-separated list of fields to include per message. Allowed: uid, from, to, subject, date, body_text, body_html, headers.",
-          "default": "uid,from,to,subject,date,body_text"
+          "description": "Comma-separated list of per-message fields to include in the response. Allowed: `uid`, `from`, `to`, `subject`, `date`, `body_text`, `body_html`, `headers`. Optional; defaults to `uid,from,to,subject,date,body_text`. Omit `body_html` and `headers` unless explicitly needed.",
+          "default": "uid,from,to,subject,date,body_text",
+          "examples": [
+            "uid,from,subject,date",
+            "uid,from,to,subject,date,body_text",
+            "uid,from,subject,date,body_text,body_html,headers"
+          ]
         },
         {
           "name": "mark_seen",
           "type": "boolean",
-          "description": "If true, mark fetched messages as Seen. Defaults false (peek).",
+          "description": "If `true`, set the Seen/Read flag on each fetched message. Optional; defaults to `false` so calls act as a non-destructive peek.",
           "default": false
         }
       ],

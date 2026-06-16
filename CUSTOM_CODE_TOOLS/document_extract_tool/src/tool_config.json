@@ -5,33 +5,50 @@
     {
       "toolClassName": "DocumentExtractTool",
       "displayName": "Document Extract",
-      "description": "Extract clean text (and table text) from a document: PDF, DOCX, CSV, or plain text. Read the file from an AIDP source_uri (master volume or workspace), from base64 bytes (content_base64), or from inline text (content). Optionally write the extracted text back to dest_uri. Use to turn a document into text for the agent or for RAG.",
-      "version": "1.2.0",
+      "description": "Extracts clean text (and table text) from a document file: PDF, DOCX, CSV, TXT, MD, or JSON.\n\nWhen to use: Use when the user asks to read, parse, extract, summarize, or ingest a document, PDF, Word doc, CSV, or text file. Accepts input three ways: an AIDP `source_uri`, raw `content_base64` bytes, or inline `content` text. Optionally writes results to `dest_uri`.\n\nHow to discover inputs: Prefer the unified `source_uri` form (`master:<catalog>.<schema>.<volume>:/<path>` or `workspace:/<path>`) over legacy catalog/schema/volume name fields. If the user hasn't named a file, FIRST call CatalogFileTool(operation='list', source_uri='master:cat.sch.vol:/') to browse, then ask which to extract.\n\nHow to communicate: Summarize the extracted text in plain prose; for long documents quote a few representative lines and report total character count rather than dumping everything.\n\nExample: {source_uri:'master:construction_catalog.construction_schema.construction_documents:/safety_manual.pdf', format:'pdf', page_start:1, page_end:5}.",
+      "version": "1.3.0",
       "schema": [
         {
           "name": "content_base64",
           "type": "string",
-          "description": "The file bytes, base64-encoded (for pdf/docx/binary). Use this OR content OR source_uri."
+          "description": "Raw file bytes encoded as base64 (for binary formats like pdf/docx). Use this when the document isn't yet in AIDP storage. Required unless `content` or `source_uri` is provided. Example: `JVBERi0xLjQKJeLjz9MK...` (truncated PDF header).",
+          "examples": [
+            "JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PC9UeXBlL0NhdGFsb2c+Pg==",
+            "UEsDBBQABgAIAAAAIQA..."
+          ]
         },
         {
           "name": "content",
           "type": "string",
-          "description": "Plain text/CSV content directly. Use this OR content_base64 OR source_uri."
+          "description": "Inline plain-text or CSV content passed directly as a string. Use for text/csv/md/json formats when the bytes are already in hand. Required unless `content_base64` or `source_uri` is provided.",
+          "examples": [
+            "name,age,city\nAlice,30,NYC\nBob,25,SF",
+            "# Project Notes\n\nThis document covers the Q3 milestones."
+          ]
         },
         {
           "name": "source_uri",
           "type": "string",
-          "description": "AIDP URI to read the document from. Formats: master:<catalog>.<schema>.<volume>:/path, workspace:/path, or <catalog>.<schema>.<volume>:/path (treated as master:). Use this OR content_base64 OR content."
+          "description": "Fully-qualified AIDP URI to read the document from. Preferred input form. Format: `master:<catalog>.<schema>.<volume>:/<path>` for catalog volumes or `workspace:/<path>` for the user workspace. Required unless `content` or `content_base64` is provided.",
+          "examples": [
+            "master:construction_catalog.construction_schema.construction_documents:/safety_manual.pdf",
+            "workspace:/uploads/report.csv",
+            "master:legal_catalog.contracts_schema.signed_docs:/2026/agreement.docx"
+          ]
         },
         {
           "name": "dest_uri",
           "type": "string",
-          "description": "Optional AIDP URI to write the extracted text (or raw CSV) to. Same URI formats as source_uri. Best-effort: write errors surface in the response data and do not fail extraction."
+          "description": "Optional fully-qualified AIDP URI to write the extracted text (or raw CSV) to. Same URI grammar as `source_uri` (`master:cat.sch.vol:/path` or `workspace:/path`). Write is best-effort: errors surface in the response data and do not fail extraction. Optional; omit to return text only.",
+          "examples": [
+            "workspace:/extracts/safety_manual.txt",
+            "master:construction_catalog.construction_schema.extracted_text:/safety_manual.txt"
+          ]
         },
         {
           "name": "format",
           "type": "string",
-          "description": "File format. Inferred from source_uri or filename when omitted.",
+          "description": "Document format. Inferred from `source_uri` or `filename` extension when omitted; defaults to `txt` if nothing else is available. Use `pdf` for PDFs, `docx` for Word, `csv` for spreadsheets, `txt`/`md` for plain text, `json` for JSON.",
           "enum": [
             "pdf",
             "docx",
@@ -40,22 +57,42 @@
             "md",
             "json"
           ],
-          "default": "txt"
+          "default": "txt",
+          "examples": [
+            "pdf",
+            "docx",
+            "csv"
+          ]
         },
         {
           "name": "filename",
           "type": "string",
-          "description": "Optional filename; the format is inferred from its extension if format is not given."
+          "description": "Optional original filename used only to infer `format` from the extension when `format` is not explicitly set. Example: `quarterly_report.pdf` would imply `format='pdf'`.",
+          "examples": [
+            "safety_manual.pdf",
+            "data.csv",
+            "notes.md"
+          ]
         },
         {
           "name": "page_start",
           "type": "integer",
-          "description": "PDF only: first page to extract (1-based, inclusive). Default 1."
+          "description": "PDF only: the first page to extract (1-based, inclusive). Defaults to 1 when omitted. Use to skip front matter or extract a slice of a long PDF. Ignored for non-PDF formats.",
+          "examples": [
+            1,
+            5,
+            10
+          ]
         },
         {
           "name": "page_end",
           "type": "integer",
-          "description": "PDF only: last page to extract (1-based, inclusive). Default = last page."
+          "description": "PDF only: the last page to extract (1-based, inclusive). Defaults to the final page when omitted. Use together with `page_start` to limit extraction to a page range. Ignored for non-PDF formats.",
+          "examples": [
+            5,
+            20,
+            100
+          ]
         }
       ],
       "conf": {
@@ -82,8 +119,8 @@
         "region": "OCI region for AIDP file IO (e.g. us-chicago-1). Required when using source_uri / dest_uri with master: URIs. Falls back to OCI_REGION env var.",
         "data_lake_ocid": "AIDP data lake OCID for file IO. Required when using source_uri / dest_uri with master: URIs. Falls back to DATALAKE_ID env var or context_vars.datalake_id.",
         "workspace_id": "AIDP workspace ID, required when using source_uri / dest_uri with workspace: URIs.",
-        "api_version": "AIDP API version segment in the base URL. Default 20260430 (do NOT use 20240831 \u2014 that path lacks the volume/workspace IO endpoints).",
-        "service_path": "AIDP service path segment in the base URL. Default aiDataPlatforms (do NOT use dataLakes \u2014 it lacks the IO endpoints).",
+        "api_version": "AIDP API version segment in the base URL. Default 20260430 (do NOT use 20240831 — that path lacks the volume/workspace IO endpoints).",
+        "service_path": "AIDP service path segment in the base URL. Default aiDataPlatforms (do NOT use dataLakes — it lacks the IO endpoints).",
         "auth_mode": "OCI auth mode for AIDP file IO: resource_principal (default), instance_principal, or user_principal.",
         "tenancy_ocid": "OCI tenancy OCID. Required when auth_mode is user_principal.",
         "user_ocid": "OCI user OCID. Required when auth_mode is user_principal.",

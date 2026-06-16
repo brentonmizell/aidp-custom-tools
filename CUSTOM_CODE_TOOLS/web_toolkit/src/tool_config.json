@@ -5,10 +5,19 @@
     {
       "toolClassName": "WebFetchTool",
       "displayName": "Web Fetch",
-      "description": "Fetch a web page and return its main readable text with boilerplate removed. Use to read an article or page the user references or that an earlier step produced a link to.",
-      "version": "1.1.0",
+      "description": "Fetches a web page and returns its main readable text with navigation, ads, and other boilerplate stripped out.\n\nWhen to use: Use when the user references a URL, asks to read or summarize an article or web page, or when an earlier step produced a link whose content you need to inspect. Do NOT use for binary downloads (PDFs, images) or for API endpoints — only for human-readable HTML pages.\n\nHow to communicate: Summarize the extracted text in plain prose; quote sparingly. If the response indicates `truncated:true`, tell the user the page was long and only the first portion was read.\n\nExample: user says 'summarize https://example.com/article'. Call {url:'https://example.com/article'} -> read the returned text -> reply with a 3-bullet summary.",
+      "version": "1.3.0",
       "schema": [
-        {"name": "url", "type": "string", "description": "The URL to fetch."}
+        {
+          "name": "url",
+          "type": "string",
+          "description": "The full HTTP or HTTPS URL of the page to fetch. Must include the scheme. Example: `https://en.wikipedia.org/wiki/Oracle_Corporation` or `https://example.com/news/2026/article.html`.",
+          "examples": [
+            "https://en.wikipedia.org/wiki/Oracle_Corporation",
+            "https://example.com/news/2026/article.html",
+            "http://localhost:8080/status"
+          ]
+        }
       ],
       "conf": {"timeout": 30, "max_chars": 20000, "max_bytes": 5242880, "return_raw_html": false, "user_agent": "AIDP-Agent/1.0"},
       "_confDescriptions": {
@@ -28,12 +37,39 @@
     {
       "toolClassName": "WebhookSenderTool",
       "displayName": "Webhook Sender",
-      "description": "Send a notification to a webhook (Slack, Teams, or generic). Use to alert a channel or person, for example to tell a human a flow is waiting on their input.",
-      "version": "1.1.0",
+      "description": "Sends a notification message to a Slack, Microsoft Teams, or generic HTTP webhook endpoint.\n\nWhen to use: Use when the user asks to notify, alert, ping, message, or post to a channel/team/person — including human-in-the-loop pauses where the flow needs to tell someone it is waiting on input. Do NOT use for arbitrary REST API calls; this is for notification webhooks only.\n\nHow to discover inputs: The destination URL normally comes from the tool's `conf.webhook_url` set at deploy time. Only pass the `webhook_url` field when the user explicitly supplies a different URL at call time.\n\nHow to communicate: After sending, confirm in one sentence what was delivered and to which style (slack/teams/generic). Do not echo the webhook URL back to the user.\n\nExample: user says 'tell the team the report is ready'. Call {title:'Report ready', message:'Q2 sales report is available in the workspace.'}.",
+      "version": "1.3.0",
       "schema": [
-        {"name": "message", "type": "string", "description": "The message body to send."},
-        {"name": "title", "type": "string", "description": "Optional title/heading for the message."},
-        {"name": "webhook_url", "type": "string", "description": "Optional override of the configured webhook URL (only used when conf.webhook_url is empty)."}
+        {
+          "name": "message",
+          "type": "string",
+          "description": "The main body text of the notification. Plain text; Slack/Teams styles wrap it appropriately. Example: `Q2 sales report is ready in the workspace.` or `Flow paused — awaiting your approval on the deployment.`",
+          "examples": [
+            "Q2 sales report is ready in the workspace.",
+            "Flow paused — awaiting your approval on the deployment.",
+            "Build #1423 failed: 2 tests broke in web_toolkit."
+          ]
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "description": "Optional short heading rendered above the message body (bolded in Slack/Teams). Keep under ~60 characters. Example: `Report ready` or `Deployment approval required`. Omit for a body-only notification.",
+          "examples": [
+            "Report ready",
+            "Deployment approval required",
+            "Build failed"
+          ]
+        },
+        {
+          "name": "webhook_url",
+          "type": "string",
+          "description": "Optional per-call override of the destination webhook URL. Only used when `conf.webhook_url` is empty — otherwise ignored. Format: full HTTPS URL issued by the Slack/Teams app or generic receiver. Example: `https://hooks.slack.com/services/T000/B000/XXXX`.",
+          "examples": [
+            "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX",
+            "https://outlook.office.com/webhook/abc-123/IncomingWebhook/def/ghi",
+            "https://example.com/webhooks/notify"
+          ]
+        }
       ],
       "conf": {"webhook_url": "", "style": "slack", "method": "POST", "timeout": 30},
       "_confDescriptions": {

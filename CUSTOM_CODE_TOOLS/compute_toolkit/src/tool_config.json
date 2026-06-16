@@ -5,27 +5,38 @@
     {
       "toolClassName": "MathTool",
       "displayName": "Math",
-      "description": "Evaluate an arithmetic expression exactly (no model arithmetic), or compute summary statistics (mean, median, std, percentiles) over a list of numbers. Always prefer this for any calculation.",
-      "version": "1.1.0",
+      "description": "Evaluates arithmetic expressions exactly or computes summary statistics over a list of numbers.\n\nWhen to use: Use whenever the user asks for any calculation, total, average, percentage, percentile, standard deviation, or numeric comparison. Never do arithmetic in the model head — call this tool. Supports `eval` mode for expressions and `stats` mode for descriptive statistics.\n\nHow to communicate: Return the numeric result in plain prose with units if known; for `stats` give a short labelled summary (mean, median, std, p95) instead of dumping the raw object.\n\nExample: user asks 'what's monthly payment on 1500 at 8% over 12 months' -> call {mode:'eval', expression:'(1500 * 1.08) / 12'}. For 'std dev of these scores [82,90,75,88,91]' -> call {mode:'stats', values:'[82,90,75,88,91]'}.",
+      "version": "1.3.0",
       "schema": [
         {
           "name": "mode",
           "type": "string",
-          "description": "'eval' to evaluate an expression, or 'stats' for summary statistics.",
+          "description": "Which calculation path to take. Use `eval` to evaluate a single arithmetic expression, or `stats` to compute mean/median/std/percentiles over a numeric list. Defaults to `eval` when omitted.",
           "enum": ["eval", "stats"],
-          "default": "eval"
+          "default": "eval",
+          "examples": ["eval", "stats"]
         },
         {
           "name": "expression",
           "type": "string",
-          "description": "Arithmetic expression when mode is 'eval', e.g. '(1500 * 1.08) / 12'. Supports + - * / // % **, sqrt, log, sin, abs, round, min, max, sum, pi, e. Max 4000 chars.",
-          "default": ""
+          "description": "Arithmetic expression to evaluate when `mode='eval'`. Supports `+ - * / // % **`, `sqrt`, `log`, `sin`, `abs`, `round`, `min`, `max`, `sum`, and constants `pi`, `e`. Max 4000 characters. Required when `mode='eval'`; ignored otherwise.",
+          "default": "",
+          "examples": [
+            "(1500 * 1.08) / 12",
+            "sqrt(2) * pi",
+            "round(sum([10, 20, 30]) / 3, 2)"
+          ]
         },
         {
           "name": "values",
           "type": "string",
-          "description": "List of numbers when mode is 'stats' (JSON array).",
-          "default": "[]"
+          "description": "JSON array of numbers to summarize when `mode='stats'`. Must parse as a JSON list of numeric values, e.g. `[82, 90, 75, 88, 91]`. Required when `mode='stats'`; ignored otherwise.",
+          "default": "[]",
+          "examples": [
+            "[82, 90, 75, 88, 91]",
+            "[1.5, 2.25, 3.75, 4.0]",
+            "[100, 200, 300, 400, 500, 600]"
+          ]
         }
       ],
       "conf": {
@@ -49,25 +60,36 @@
     {
       "toolClassName": "SchemaValidatorTool",
       "displayName": "Validate Schema",
-      "description": "Check that a data object conforms to a JSON Schema and list any violations. Use as a quality gate or to verify an API/tool response has the expected structure before continuing.",
-      "version": "1.1.0",
+      "description": "Validates a data object against a JSON Schema and returns any violations.\n\nWhen to use: Use as a quality gate before acting on structured data — verify an API response, a tool result, or user-supplied JSON has the expected shape before passing it downstream. Also use when the user explicitly asks to validate, check, or lint a JSON payload against a schema.\n\nHow to communicate: If valid, say so in one line. If invalid, list each violation as `path: message` (e.g. `/items/0/price: must be number`); do not dump the full schema or data back to the user.\n\nExample: user says 'does this response match my schema' -> call {data:'{\"name\":\"x\",\"age\":\"30\"}', schema:'{\"type\":\"object\",\"properties\":{\"age\":{\"type\":\"integer\"}}}', mode:'best_effort'} -> report the type mismatch on /age.",
+      "version": "1.3.0",
       "schema": [
         {
           "name": "data",
           "type": "string",
-          "description": "The data to validate (object/array or JSON string)."
+          "description": "The payload to validate. Accepts a JSON string or a JSON-serializable object/array, e.g. `{\"name\":\"Ada\",\"age\":36}` or `[1,2,3]`. Required.",
+          "examples": [
+            "{\"name\":\"Ada\",\"age\":36}",
+            "[{\"id\":1},{\"id\":2}]",
+            "{\"status\":\"ok\",\"items\":[]}"
+          ]
         },
         {
           "name": "schema",
           "type": "string",
-          "description": "A JSON Schema (Draft 2020-12) describing the expected shape."
+          "description": "A JSON Schema (Draft 2020-12) describing the expected shape of `data`. Pass as a JSON string, e.g. `{\"type\":\"object\",\"required\":[\"id\"],\"properties\":{\"id\":{\"type\":\"integer\"}}}`. Required.",
+          "examples": [
+            "{\"type\":\"object\",\"required\":[\"id\"],\"properties\":{\"id\":{\"type\":\"integer\"}}}",
+            "{\"type\":\"array\",\"items\":{\"type\":\"number\"}}",
+            "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"age\":{\"type\":\"integer\",\"minimum\":0}}}"
+          ]
         },
         {
           "name": "mode",
           "type": "string",
-          "description": "'best_effort' returns all violations; 'fail_fast' stops at the first violation.",
+          "description": "Validation strategy. Use `best_effort` to collect every violation (best for reporting to the user). Use `fail_fast` to stop at the first violation when you only need a pass/fail signal. Defaults to `best_effort` when omitted.",
           "enum": ["best_effort", "fail_fast"],
-          "default": "best_effort"
+          "default": "best_effort",
+          "examples": ["best_effort", "fail_fast"]
         }
       ],
       "conf": {

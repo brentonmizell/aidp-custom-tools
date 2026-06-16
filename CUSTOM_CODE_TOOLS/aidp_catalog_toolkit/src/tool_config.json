@@ -5,48 +5,78 @@
     {
       "toolClassName": "CatalogFileTool",
       "displayName": "Catalog File Read",
-      "description": "Pull a specific file from a Standard Catalog volume, or list a volume's files. Either set source_uri (master:cat.sch.vol:/path or workspace:/path) OR provide volume_key + path / catalog/schema/volume names + path. Use to load a known reference document an agent needs.",
-      "version": "1.2.0",
+      "description": "Reads or lists files in an AIDP Standard Catalog volume.\n\nWhen to use: Use when the user asks to fetch, open, read, download, or list a file/document/PDF/dataset stored in a catalog volume. Supports `get` and `list` operations on `master:<catalog>.<schema>.<volume>:/<path>` URIs. For workspace files use WorkspaceFileTool; to write use VolumeWriteTool.\n\nHow to discover inputs: If the user hasn't named a catalog/schema/volume, FIRST call CatalogBrowserTool(list='volumes', catalog_key=..., schema_key=...) and ask which to use. Default to `operation='list'` first when the target file path is unknown.\n\nHow to communicate: Summarize listings as bulleted names; for binary content describe size + MIME type, never dump raw bytes.\n\nExample: CatalogBrowserTool(list='volumes', catalog_key='construction_catalog', schema_key='construction_schema') -> CatalogFileTool(operation='list', source_uri='master:construction_catalog.construction_schema.construction_documents:/') -> CatalogFileTool(operation='get', source_uri='master:construction_catalog.construction_schema.construction_documents:/safety_manual.pdf').",
+      "version": "1.3.0",
       "schema": [
         {
           "name": "operation",
           "type": "string",
-          "description": "'get' (default) to read a file, or 'list' to list a volume/folder.",
+          "description": "The action to perform. Use `list` to browse a folder, `get` to download a file. Default to `list` first when the target path is unknown, then call `get` with the chosen path. Example: `list`.",
           "enum": [
             "get",
             "list"
           ],
-          "default": "get"
+          "default": "get",
+          "examples": [
+            "list",
+            "get"
+          ]
         },
         {
           "name": "source_uri",
           "type": "string",
-          "description": "AIDP URI to read from. Format: master:<catalog>.<schema>.<volume>:/<path> or workspace:/<path>. When set, supersedes volume_key/catalog/schema/volume/path."
+          "description": "Fully-qualified AIDP URI to read from. Format: `master:<catalog>.<schema>.<volume>:/<path>` for catalog volumes, or `workspace:/<path>` for workspace files. PREFER this unified URI over the legacy volume_key/catalog/schema/volume/path fields. Required unless you supply volume_key + path or the catalog/schema/volume triple + path.",
+          "examples": [
+            "master:construction_catalog.construction_schema.construction_documents:/safety_manual.pdf",
+            "master:construction_catalog.construction_schema.construction_documents:/",
+            "workspace:/uploads/report.csv"
+          ]
         },
         {
           "name": "path",
           "type": "string",
-          "description": "File path within the volume for get (e.g. /safety_manual.md), or folder path for list (default /). Ignored when source_uri is set."
+          "description": "File path within the volume for `get` (e.g. `/safety_manual.pdf`) or folder path for `list` (default `/`). Ignored when `source_uri` is set. Optional if `source_uri` is provided. Example: `/reports/q3_summary.md`.",
+          "examples": [
+            "/safety_manual.pdf",
+            "/reports/q3_summary.md",
+            "/"
+          ]
         },
         {
           "name": "volume_key",
           "type": "string",
-          "description": "The volume key, if known. Otherwise provide catalog/schema/volume."
+          "description": "Internal UUID identifying the catalog volume. Optional if `source_uri` is provided (preferred) or if catalog/schema/volume names are given instead. Discover keys with CatalogBrowserTool(list='volumes').",
+          "examples": [
+            "ocid1.volume.oc1..exampleuniqueid",
+            "vol-7a3c91"
+          ]
         },
         {
           "name": "catalog",
           "type": "string",
-          "description": "Catalog name (or key) when resolving by name."
+          "description": "Catalog name (or key) when resolving by name. Optional if `source_uri` or `volume_key` is supplied — prefer the unified URI form. Example: `construction_catalog`.",
+          "examples": [
+            "construction_catalog",
+            "finance_catalog"
+          ]
         },
         {
           "name": "schema",
           "type": "string",
-          "description": "Schema name (or key) when resolving by name."
+          "description": "Schema name (or key) within the catalog. Optional if `source_uri` or `volume_key` is supplied — prefer the unified URI form. Example: `construction_schema`.",
+          "examples": [
+            "construction_schema",
+            "reporting_schema"
+          ]
         },
         {
           "name": "volume",
           "type": "string",
-          "description": "Volume name (or key) when resolving by name."
+          "description": "Volume name (or key) within the schema. Optional if `source_uri` or `volume_key` is supplied — prefer the unified URI form. Example: `construction_documents`.",
+          "examples": [
+            "construction_documents",
+            "quarterly_reports"
+          ]
         }
       ],
       "conf": {
@@ -167,43 +197,72 @@
     {
       "toolClassName": "VolumeWriteTool",
       "displayName": "Catalog Volume Write",
-      "description": "Write a file into a Standard Catalog volume. Either set dest_uri (master:cat.sch.vol:/path) OR provide volume_key + path + content / catalog/schema/volume names. Use to persist an agent's output (report, dataset, summary) back into the catalog. Workspace writes go through Workspace File.",
-      "version": "1.2.0",
+      "description": "Writes (uploads) a file into an AIDP Standard Catalog volume.\n\nWhen to use: Use when the user asks to save, persist, upload, store, or write an agent-generated artifact (report, dataset, summary, JSON, markdown) back into a catalog volume. Accepts `master:<catalog>.<schema>.<volume>:/<path>` URIs. For workspace writes use WorkspaceFileTool; to read existing files use CatalogFileTool.\n\nHow to discover inputs: If the user hasn't named a target volume, FIRST call CatalogBrowserTool(list='volumes', catalog_key=..., schema_key=...) and ask which to use.\n\nHow to communicate: Confirm the written URI and byte size in one sentence; do not echo the file content back.\n\nExample: CatalogBrowserTool(list='volumes', catalog_key='finance_catalog', schema_key='reporting_schema') -> VolumeWriteTool(dest_uri='master:finance_catalog.reporting_schema.quarterly_reports:/q3_summary.md', content='# Q3 Summary...').",
+      "version": "1.3.0",
       "schema": [
         {
           "name": "dest_uri",
           "type": "string",
-          "description": "AIDP master URI to write to. Format: master:<catalog>.<schema>.<volume>:/<path>. When set, supersedes volume_key/catalog/schema/volume/path. Workspace writes go through Workspace File."
+          "description": "Fully-qualified destination URI for the write. Format: `master:<catalog>.<schema>.<volume>:/<path>`. PREFER this unified URI over the legacy volume_key/catalog/schema/volume/path fields. Workspace writes go through WorkspaceFileTool instead. Required unless you supply volume_key + path or the catalog/schema/volume triple + path.",
+          "examples": [
+            "master:finance_catalog.reporting_schema.quarterly_reports:/q3_summary.md",
+            "master:construction_catalog.construction_schema.construction_documents:/new_spec.pdf",
+            "workspace:/exports/result.json"
+          ]
         },
         {
           "name": "path",
           "type": "string",
-          "description": "Destination file path within the volume (e.g. /reports/summary.md). Ignored when dest_uri is set."
+          "description": "Destination file path within the volume (e.g. `/reports/summary.md`). Ignored when `dest_uri` is set. Optional if `dest_uri` is provided.",
+          "examples": [
+            "/reports/q3_summary.md",
+            "/exports/result.json"
+          ]
         },
         {
           "name": "content",
           "type": "string",
-          "description": "The file content to write."
+          "description": "The file body to write. Plain text or stringified JSON/markdown. Required for every write. Example: `# Quarterly Summary\\n\\nTotal revenue...`.",
+          "examples": [
+            "# Quarterly Summary\n\nTotal revenue: $12.3M",
+            "{\"status\":\"ok\",\"rows\":42}"
+          ]
         },
         {
           "name": "volume_key",
           "type": "string",
-          "description": "The volume key, if known. Otherwise provide catalog/schema/volume."
+          "description": "Internal UUID identifying the catalog volume. Optional if `dest_uri` is provided (preferred) or if catalog/schema/volume names are given instead. Discover keys with CatalogBrowserTool(list='volumes').",
+          "examples": [
+            "ocid1.volume.oc1..exampleuniqueid",
+            "vol-7a3c91"
+          ]
         },
         {
           "name": "catalog",
           "type": "string",
-          "description": "Catalog name (or key) when resolving by name."
+          "description": "Catalog name (or key) when resolving by name. Optional if `dest_uri` or `volume_key` is supplied — prefer the unified URI form. Example: `finance_catalog`.",
+          "examples": [
+            "finance_catalog",
+            "construction_catalog"
+          ]
         },
         {
           "name": "schema",
           "type": "string",
-          "description": "Schema name (or key) when resolving by name."
+          "description": "Schema name (or key) within the catalog. Optional if `dest_uri` or `volume_key` is supplied — prefer the unified URI form. Example: `reporting_schema`.",
+          "examples": [
+            "reporting_schema",
+            "construction_schema"
+          ]
         },
         {
           "name": "volume",
           "type": "string",
-          "description": "Volume name (or key) when resolving by name."
+          "description": "Volume name (or key) within the schema. Optional if `dest_uri` or `volume_key` is supplied — prefer the unified URI form. Example: `quarterly_reports`.",
+          "examples": [
+            "quarterly_reports",
+            "construction_documents"
+          ]
         }
       ],
       "conf": {
@@ -315,13 +374,13 @@
     {
       "toolClassName": "CatalogBrowserTool",
       "displayName": "Catalog Browser",
-      "description": "Browse catalog metadata: list catalogs, schemas, tables, volumes, or knowledge bases, or describe a table's columns. Use so an agent can discover the right data asset before acting on it. Delegates to aidp_io when its browsing helpers are available.",
-      "version": "1.2.0",
+      "description": "Discovers AIDP catalog metadata: lists catalogs, schemas, tables, volumes, knowledge bases, or describes a table's columns.\n\nWhen to use: Use FIRST whenever the user mentions data assets without naming exact keys, or when another tool (CatalogFileTool, VolumeWriteTool, SqlExecTool, KBIngestTool) needs a catalog_key/schema_key/table_key/volume name you don't have. Default to listing before acting.\n\nHow to communicate: After listing, summarize the names in a short bulleted list and ask the user which to pick. For `list='table'`, return column names + types.\n\nExample: CatalogBrowserTool(list='catalogs') -> ask user -> CatalogBrowserTool(list='schemas', catalog_key='construction_catalog') -> CatalogBrowserTool(list='volumes', catalog_key='construction_catalog', schema_key='construction_schema') -> hand the chosen volume to CatalogFileTool.",
+      "version": "1.3.0",
       "schema": [
         {
           "name": "list",
           "type": "string",
-          "description": "What to list: catalogs, schemas, tables, volumes, knowledgeBases, or 'table' to describe one.",
+          "description": "What to discover. Use `catalogs` to enumerate top-level catalogs, `schemas` within a catalog, `tables`/`volumes`/`knowledgeBases` within a schema, or `table` to describe one table's columns. Start with `catalogs` when nothing is known.",
           "enum": [
             "catalogs",
             "schemas",
@@ -330,22 +389,39 @@
             "knowledgeBases",
             "table"
           ],
-          "default": "catalogs"
+          "default": "catalogs",
+          "examples": [
+            "catalogs",
+            "volumes",
+            "table"
+          ]
         },
         {
           "name": "catalog_key",
           "type": "string",
-          "description": "Catalog key (required for schemas/tables/volumes/KBs)."
+          "description": "Catalog key identifying the parent catalog. Required for `schemas`, `tables`, `volumes`, `knowledgeBases`, and `table`. Discover with `list='catalogs'` first. Example: `construction_catalog`.",
+          "examples": [
+            "construction_catalog",
+            "finance_catalog"
+          ]
         },
         {
           "name": "schema_key",
           "type": "string",
-          "description": "Schema key (required for tables/volumes/KBs)."
+          "description": "Schema key within the catalog. Required for `tables`, `volumes`, `knowledgeBases`, and `table`. Discover with `list='schemas'` first. Example: `construction_schema`.",
+          "examples": [
+            "construction_schema",
+            "reporting_schema"
+          ]
         },
         {
           "name": "table_key",
           "type": "string",
-          "description": "Table key (required when list='table')."
+          "description": "Table key to describe. Required only when `list='table'`. Discover with `list='tables'` first. Example: `incident_reports`.",
+          "examples": [
+            "incident_reports",
+            "quarterly_revenue"
+          ]
         }
       ],
       "conf": {
@@ -433,33 +509,45 @@
     {
       "toolClassName": "KBIngestTool",
       "displayName": "KB Ingestion",
-      "description": "List a knowledge base's ingestion jobs, or trigger an ingestion run to (re)index it. Use after documents change so the KB is up to date for RAG queries. Delegates to aidp_io.list_kb_jobs / trigger_kb_job_run when present.",
-      "version": "1.2.0",
+      "description": "Lists ingestion jobs for an AIDP knowledge base, or triggers an ingestion run to (re)index it.\n\nWhen to use: Use when the user asks to refresh/reindex/re-ingest a knowledge base, check ingestion status, or kick off a new RAG ingest after documents change. Supports `list_jobs` (discovery) and `trigger` (start a run). Default to `list_jobs` first when the job key is unknown.\n\nHow to discover inputs: If the user hasn't named a KB, call CatalogBrowserTool(list='knowledgeBases', catalog_key=..., schema_key=...) to enumerate KBs. Then call KBIngestTool(operation='list_jobs', kb_key=...) and ask which job to trigger.\n\nHow to communicate: For listings, show job names + last-run status. For triggers, return the run id and current state.\n\nExample: KBIngestTool(operation='list_jobs', kb_key='construction_catalog.construction_schema.safety_kb') -> KBIngestTool(operation='trigger', kb_key='...', job_key='daily_refresh').",
+      "version": "1.3.0",
       "schema": [
         {
           "name": "operation",
           "type": "string",
-          "description": "'list_jobs' (default) to see jobs, or 'trigger' to start a run.",
+          "description": "The action to perform. Use `list_jobs` to enumerate ingestion jobs for a KB, or `trigger` to start a run. Default to `list_jobs` first when the job_key is unknown.",
           "enum": [
             "list_jobs",
             "trigger"
           ],
-          "default": "list_jobs"
+          "default": "list_jobs",
+          "examples": [
+            "list_jobs",
+            "trigger"
+          ]
         },
         {
           "name": "kb_key",
           "type": "string",
-          "description": "Knowledge base key (e.g. catalog.schema.kbName)."
+          "description": "Knowledge base key in `catalog.schema.kbName` form. Required for both operations. Discover with CatalogBrowserTool(list='knowledgeBases'). Example: `construction_catalog.construction_schema.safety_kb`.",
+          "examples": [
+            "construction_catalog.construction_schema.safety_kb",
+            "finance_catalog.reporting_schema.policy_kb"
+          ]
         },
         {
           "name": "job_key",
           "type": "string",
-          "description": "Job key to trigger (required for operation=trigger; find it via list_jobs)."
+          "description": "Job key identifying the ingestion job to trigger. Required when `operation='trigger'`; ignored for `list_jobs`. Discover by calling this tool with `operation='list_jobs'` first. Example: `daily_refresh`.",
+          "examples": [
+            "daily_refresh",
+            "manual_reingest"
+          ]
         },
         {
           "name": "run_config",
           "type": "object",
-          "description": "Optional run config body for operation=trigger (passed through as JSON)."
+          "description": "Optional run-config body passed through as JSON for `operation='trigger'`. Use to override defaults like document filters or chunk size. Omit to use the job's saved config. Example: `{\"chunk_size\": 1024}`."
         }
       ],
       "conf": {
@@ -544,33 +632,51 @@
     {
       "toolClassName": "WorkspaceFileTool",
       "displayName": "Workspace File",
-      "description": "Read or list files in the workspace (not a catalog volume). Workspace files (notebooks, scripts, text) live under /Workspace. Either set source_uri / dest_uri (workspace:/<path>) OR provide a path and rely on the configured workspace_id. Use for an agent's code/config files; for Standard Catalog volume files use Catalog File Read / Catalog Volume Write.",
-      "version": "1.2.0",
+      "description": "Reads or lists files in the AIDP workspace (notebooks, scripts, configs under /Workspace).\n\nWhen to use: Use when the user asks to read, open, list, or browse a workspace file (.ipynb, .py, .md, .txt, config, log) that lives under /Workspace rather than in a catalog volume. For catalog-volume files use CatalogFileTool; for catalog writes use VolumeWriteTool. Accepts `workspace:/<path>` URIs only. Default to `operation='list'` first when the path is unknown.\n\nHow to communicate: For listings, show file names as bullets and ask which to open. For `get`, summarize content in plain prose; for binary, describe size + type.\n\nExample: WorkspaceFileTool(operation='list', source_uri='workspace:/Notebooks/') -> WorkspaceFileTool(operation='get', source_uri='workspace:/Notebooks/analysis.ipynb').",
+      "version": "1.3.0",
       "schema": [
         {
           "name": "operation",
           "type": "string",
-          "description": "'get' (default) to read a file, or 'list' to list a folder.",
+          "description": "The action to perform. Use `list` to browse a folder, `get` to download a file. Default to `list` first when the target path is unknown.",
           "enum": [
             "get",
             "list"
           ],
-          "default": "get"
+          "default": "get",
+          "examples": [
+            "list",
+            "get"
+          ]
         },
         {
           "name": "source_uri",
           "type": "string",
-          "description": "Workspace URI to read from. Format: workspace:/<path>. Master URIs are not accepted here — use Catalog File Read."
+          "description": "Fully-qualified workspace URI to read from. Format: `workspace:/<path>` only. Master/catalog URIs are not accepted — use CatalogFileTool for those. PREFER this unified URI over the legacy `path` field. Optional if `path` is provided.",
+          "examples": [
+            "workspace:/Notebooks/analysis.ipynb",
+            "workspace:/scripts/etl.py",
+            "workspace:/"
+          ]
         },
         {
           "name": "dest_uri",
           "type": "string",
-          "description": "Workspace URI to write to (reserved for future write operations). Format: workspace:/<path>. Master URIs are not accepted here — use Catalog Volume Write."
+          "description": "Fully-qualified workspace destination URI (reserved for future workspace-write operations). Format: `workspace:/<path>` only. Master/catalog URIs are not accepted — use VolumeWriteTool for those. Optional; currently unused for `get`/`list`.",
+          "examples": [
+            "workspace:/exports/result.json",
+            "workspace:/Notebooks/output.ipynb"
+          ]
         },
         {
           "name": "path",
           "type": "string",
-          "description": "Workspace path relative to /Workspace, e.g. Notebooks/foo.ipynb (for get) or a folder for list (default /). Ignored when source_uri/dest_uri is set."
+          "description": "Workspace path relative to `/Workspace` for `get` (e.g. `Notebooks/foo.ipynb`) or a folder for `list` (default `/`). Ignored when `source_uri`/`dest_uri` is set. Optional if a URI is provided.",
+          "examples": [
+            "Notebooks/analysis.ipynb",
+            "scripts/etl.py",
+            "/"
+          ]
         }
       ],
       "conf": {

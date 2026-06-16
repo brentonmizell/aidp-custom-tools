@@ -5,30 +5,45 @@
     {
       "toolClassName": "ObjectStorageTool",
       "displayName": "Object Storage",
-      "description": "List, read, write, or delete objects in an OCI Object Storage bucket (resource-principal auth). Use to read or persist files and artifacts an agent works with.",
-      "version": "1.1.0",
+      "description": "Lists, reads, writes, or deletes objects in a configured OCI Object Storage bucket using resource-principal auth.\n\nWhen to use: Use when the user asks to read, fetch, write, upload, save, persist, list, browse, or delete an object, file, blob, artifact, log, or export stored in an OCI Object Storage bucket. Supports `list`, `get`, `put`, and `delete` operations on the bucket configured in `conf.bucket`.\n\nHow to discover inputs: The bucket, namespace, and region are pre-bound in `conf` — do not ask the user for them. If the user has not named a specific object, FIRST call with `operation='list'` (optionally with a `name` prefix) and ask them to pick from the returned keys.\n\nHow to communicate: Summarize listed keys in plain prose (count + a few names). For `get`, report size and a short text preview or MIME hint — never dump large binary payloads.\n\nExample: user says 'show me yesterday's log'. Call {operation:'list', name:'logs/2026-06-15/'} -> pick a key -> call {operation:'get', name:'logs/2026-06-15/run.log'}.",
+      "version": "1.3.0",
       "schema": [
         {
           "name": "operation",
           "type": "string",
-          "description": "One of: list, get, put, delete.",
+          "description": "The action to perform on the bucket. Use `list` to browse object keys (optionally filtered by `name` as a prefix), `get` to download an object's bytes/text, `put` to upload `content` under `name`, `delete` to remove the object at `name`. Default to `list` first when the target object key is unknown.",
           "enum": [
             "list",
             "get",
             "put",
             "delete"
           ],
-          "default": "list"
+          "default": "list",
+          "examples": [
+            "list",
+            "get",
+            "put"
+          ]
         },
         {
           "name": "name",
           "type": "string",
-          "description": "Object name/key (or prefix for list)."
+          "description": "Object key for `get`, `put`, and `delete`, or a key prefix for `list`. Use slash-delimited paths like `logs/2026-06-15/run.log` or a folder-style prefix like `exports/`. Optional for `list` (omit to list from the bucket's configured `prefix` root); required for `get`, `put`, and `delete`.",
+          "examples": [
+            "logs/2026-06-15/run.log",
+            "exports/report.csv",
+            "logs/2026-06-15/"
+          ]
         },
         {
           "name": "content",
           "type": "string",
-          "description": "Text content to write (for put)."
+          "description": "Text payload to upload when `operation='put'`. Pass UTF-8 text (JSON, CSV, plain text, etc.); for binary uploads, base64-encode first and note that in the key. Required for `put`; ignored for `list`, `get`, and `delete`.",
+          "examples": [
+            "{\"status\":\"ok\",\"count\":42}",
+            "id,name\n1,alpha\n2,beta\n",
+            "Run completed at 2026-06-15T18:00:00Z"
+          ]
         }
       ],
       "conf": {
