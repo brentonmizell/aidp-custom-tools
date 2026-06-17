@@ -5,8 +5,8 @@
     {
       "toolClassName": "ObjectStorageTool",
       "displayName": "Object Storage",
-      "description": "Lists, reads, writes, or deletes objects in a configured OCI Object Storage bucket using resource-principal auth.\n\nWhen to use: Use when the user asks to read, fetch, write, upload, save, persist, list, browse, or delete an object, file, blob, artifact, log, or export stored in an OCI Object Storage bucket. Supports `list`, `get`, `put`, and `delete` operations on the bucket configured in `conf.bucket`.\n\nHow to discover inputs: The bucket, namespace, and region are pre-bound in `conf` — do not ask the user for them. If the user has not named a specific object, FIRST call with `operation='list'` (optionally with a `name` prefix) and ask them to pick from the returned keys.\n\nHow to communicate: Summarize listed keys in plain prose (count + a few names). For `get`, report size and a short text preview or MIME hint — never dump large binary payloads.\n\nExample: user says 'show me yesterday's log'. Call {operation:'list', name:'logs/2026-06-15/'} -> pick a key -> call {operation:'get', name:'logs/2026-06-15/run.log'}.",
-      "version": "1.3.1",
+      "description": "Lists, reads, writes, or deletes objects in a configured OCI Object Storage bucket using resource-principal auth.\n\nWhen to use: Use when the user asks to read, fetch, write, upload, save, persist, list, browse, or delete an object, file, blob, artifact, log, or export stored in an OCI Object Storage bucket. Supports `list`, `get`, `put`, and `delete` operations on the bucket configured in `conf.bucket`.\n\nHow to discover inputs: The bucket, namespace, and region are pre-bound in `conf` \u2014 do not ask the user for them. If the user has not named a specific object, FIRST call with `operation='list'` (optionally with a `name` prefix) and ask them to pick from the returned keys.\n\nHow to communicate: Summarize listed keys in plain prose (count + a few names). For `get`, report size and a short text preview or MIME hint \u2014 never dump large binary payloads.\n\nExample: user says 'show me yesterday's log'. Call {operation:'list', name:'logs/2026-06-15/'} -> pick a key -> call {operation:'get', name:'logs/2026-06-15/run.log'}.",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "operation",
@@ -68,11 +68,24 @@
           },
           "namespace": {
             "kind": "readonly",
-            "placeholder": "auto-detected from get_namespace()"
+            "placeholder": "auto-detected from get_namespace()",
+            "inputStyle": "singleline"
           },
           "region": {
             "kind": "dropdown",
             "source": "regions"
+          },
+          "prefix": {
+            "inputStyle": "singleline"
+          },
+          "max_keys": {
+            "inputStyle": "singleline"
+          },
+          "max_bytes": {
+            "inputStyle": "singleline"
+          },
+          "max_retries": {
+            "inputStyle": "singleline"
           }
         },
         "schema": {
@@ -83,7 +96,14 @@
               "get",
               "put",
               "delete"
-            ]
+            ],
+            "inputStyle": "singleline"
+          },
+          "name": {
+            "inputStyle": "singleline"
+          },
+          "content": {
+            "inputStyle": "multiline"
           }
         }
       },

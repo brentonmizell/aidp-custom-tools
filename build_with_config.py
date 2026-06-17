@@ -42,17 +42,28 @@ import shutil
 import sys
 import zipfile
 from pathlib import Path
-from typing import Dict, Iterable, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parent
 TOOLS_DIR = REPO_ROOT / "CUSTOM_CODE_TOOLS"
 
-# Canonical source for the shared aidp_io helper. The zip-build step copies
-# this into each package's src/utils/aidp_io.py before zipping so the deployed
-# package is self-contained, and ALSO writes it onto disk under each package
+# Canonical source for each shared helper. The zip-build step copies these
+# into each package's src/utils/<helper>.py before zipping so the deployed
+# package is self-contained, and ALSO writes them onto disk under each package
 # so local dev imports (e.g. `from utils.aidp_io import ...`) keep working
 # without a build step.
-SHARED_AIDP_IO_SRC = REPO_ROOT / "aidp_io" / "aidp_io.py"
+#
+# Each entry is (canonical_source_path, dest_filename_in_src_utils). New
+# helpers can be added by extending this list — sync_shared_modules() walks
+# it and skips any source that isn't on disk yet (partial rollouts work).
+SHARED_MODULES: List[Tuple[Path, str]] = [
+    (REPO_ROOT / "aidp_io"    / "aidp_io.py",    "aidp_io.py"),
+    (REPO_ROOT / "aidp_genai" / "aidp_genai.py", "aidp_genai.py"),
+    (REPO_ROOT / "aidp_kb"    / "aidp_kb.py",    "aidp_kb.py"),
+]
+
+# Back-compat alias for any external caller that imported the old name.
+SHARED_AIDP_IO_SRC = SHARED_MODULES[0][0]
 
 # Conf keys we'll touch (and the source of their value).
 AUTO_FILL_KEYS = {
@@ -236,25 +247,40 @@ def _strip_extension_only_keys(tool_config: Dict) -> bool:
     return stripped
 
 
-def sync_shared_module(tools_dir: Path) -> int:
-    """Copy the canonical aidp_io.py into each package's src/utils/aidp_io.py.
+def sync_shared_modules(tools_dir: Path) -> int:
+    """Copy every canonical helper in SHARED_MODULES into each package's
+    src/utils/<helper>.py.
 
     Runs ONCE per build (before the per-package zip loop):
-      - so the zip contains a self-contained aidp_io.py inside src/utils/,
-      - and so dev-time imports from CUSTOM_CODE_TOOLS/<pkg>/src/utils/aidp_io.py
+      - so the zip contains self-contained helpers inside src/utils/,
+      - and so dev-time imports from CUSTOM_CODE_TOOLS/<pkg>/src/utils/<helper>.py
         keep working without an explicit build step.
 
-    Missing canonical source -> warn and continue (no fatal error). Returns
-    the number of packages successfully synced.
+    Missing canonical source for any single helper -> warn and skip THAT
+    helper, continue with the rest. This lets partial rollouts work (e.g.
+    aidp_io is canonical but aidp_kb hasn't been written yet). Returns the
+    number of packages touched (i.e. at least one helper was copied into them).
+
+    Final summary line: "[shared] N helpers synced to M packages".
     """
-    if not SHARED_AIDP_IO_SRC.is_file():
-        print(f"  [warn] canonical aidp_io.py not found at {SHARED_AIDP_IO_SRC} — skipping sync",
-              file=sys.stderr)
-        return 0
     if not tools_dir.is_dir():
         print(f"  [warn] {tools_dir} not found — skipping sync", file=sys.stderr)
         return 0
-    synced = 0
+
+    # Resolve which canonical sources are actually on disk.
+    present: List[Tuple[Path, str]] = []
+    for src_path, dest_name in SHARED_MODULES:
+        if src_path.is_file():
+            present.append((src_path, dest_name))
+        else:
+            print(f"  [warn] canonical {dest_name} not found at {src_path} — skipping",
+                  file=sys.stderr)
+
+    if not present:
+        print("[shared] no canonical helpers available — nothing to sync")
+        return 0
+
+    packages_touched = 0
     for pkg in sorted(tools_dir.iterdir()):
         if not pkg.is_dir():
             continue
@@ -266,21 +292,35 @@ def sync_shared_module(tools_dir: Path) -> int:
         init_py = utils_dir / "__init__.py"
         if not init_py.exists():
             init_py.write_text("", encoding="utf-8")
-        dest = utils_dir / "aidp_io.py"
-        try:
-            shutil.copyfile(SHARED_AIDP_IO_SRC, dest)
-            synced += 1
-        except OSError as e:
-            print(f"  [warn] could not copy aidp_io.py into {pkg.name}: {e}", file=sys.stderr)
-    print(f"[shared] aidp_io.py synced to {synced} packages")
-    return synced
+        copied_any = False
+        for src_path, dest_name in present:
+            dest = utils_dir / dest_name
+            try:
+                shutil.copyfile(src_path, dest)
+                copied_any = True
+            except OSError as e:
+                print(f"  [warn] could not copy {dest_name} into {pkg.name}: {e}",
+                      file=sys.stderr)
+        if copied_any:
+            packages_touched += 1
+    print(f"[shared] {len(present)} helpers synced to {packages_touched} packages")
+    return packages_touched
+
+
+# Back-compat alias for any external caller that imported the singular name.
+sync_shared_module = sync_shared_modules
 
 
 def rebuild_zips(tools_dir: Path) -> None:
     """Re-zip every package's src/ into <pkg>/<pkg>.zip. tool_config.json is
     sanitized into the zip — sidecar keys stripped so AIDP's Pydantic model
-    accepts the package. Source on disk stays unchanged."""
+    accepts the package. Source on disk stays unchanged.
+
+    Sync ALL shared helpers ONCE at the top so the zip step picks them up
+    and dev imports keep working.
+    """
     import json as _json
+    sync_shared_modules(tools_dir)
     for pkg_dir in sorted(tools_dir.iterdir()):
         src = pkg_dir / "src"
         if not src.is_dir():
@@ -348,11 +388,8 @@ def main(argv: list[str]) -> int:
 
     if not args.dry_run and not args.no_zip:
         print(f"\n[zip] rebuilding artifacts in {TOOLS_DIR}")
-        # Sync the shared aidp_io helper ONCE before the per-package zip loop.
-        # This writes the canonical source onto disk under each package's
-        # src/utils/aidp_io.py (dev imports work) AND ensures the zip step
-        # picks it up (it walks src/).
-        sync_shared_module(TOOLS_DIR)
+        # rebuild_zips() syncs the shared helpers internally before the
+        # per-package zip loop, so we don't need a separate sync call here.
         rebuild_zips(TOOLS_DIR)
 
     return 0

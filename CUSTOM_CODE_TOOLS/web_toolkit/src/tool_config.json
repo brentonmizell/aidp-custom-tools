@@ -5,8 +5,8 @@
     {
       "toolClassName": "WebFetchTool",
       "displayName": "Web Fetch",
-      "description": "Fetches a web page and returns its main readable text with navigation, ads, and other boilerplate stripped out.\n\nWhen to use: Use when the user references a URL, asks to read or summarize an article or web page, or when an earlier step produced a link whose content you need to inspect. Do NOT use for binary downloads (PDFs, images) or for API endpoints — only for human-readable HTML pages.\n\nHow to communicate: Summarize the extracted text in plain prose; quote sparingly. If the response indicates `truncated:true`, tell the user the page was long and only the first portion was read.\n\nExample: user says 'summarize https://example.com/article'. Call {url:'https://example.com/article'} -> read the returned text -> reply with a 3-bullet summary.",
-      "version": "1.3.1",
+      "description": "Fetches a web page and returns its main readable text with navigation, ads, and other boilerplate stripped out.\n\nWhen to use: Use when the user references a URL, asks to read or summarize an article or web page, or when an earlier step produced a link whose content you need to inspect. Do NOT use for binary downloads (PDFs, images) or for API endpoints \u2014 only for human-readable HTML pages.\n\nHow to communicate: Summarize the extracted text in plain prose; quote sparingly. If the response indicates `truncated:true`, tell the user the page was long and only the first portion was read.\n\nExample: user says 'summarize https://example.com/article'. Call {url:'https://example.com/article'} -> read the returned text -> reply with a 3-bullet summary.",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "url",
@@ -20,7 +20,13 @@
           "default": "https://en.wikipedia.org/wiki/Oracle_Corporation"
         }
       ],
-      "conf": {"timeout": 30, "max_chars": 20000, "max_bytes": 5242880, "return_raw_html": false, "user_agent": "AIDP-Agent/1.0"},
+      "conf": {
+        "timeout": 30,
+        "max_chars": 20000,
+        "max_bytes": 5242880,
+        "return_raw_html": false,
+        "user_agent": "AIDP-Agent/1.0"
+      },
       "_confDescriptions": {
         "timeout": "HTTP timeout in seconds for the fetch request.",
         "max_chars": "Cap on extracted readable text length; returns truncated:true when hit.",
@@ -30,24 +36,47 @@
       },
       "_uiHints": {
         "conf": {
-          "return_raw_html": {"kind": "enum", "values": ["true", "false"]}
+          "return_raw_html": {
+            "kind": "enum",
+            "values": [
+              "true",
+              "false"
+            ],
+            "inputStyle": "singleline"
+          },
+          "timeout": {
+            "inputStyle": "singleline"
+          },
+          "max_chars": {
+            "inputStyle": "singleline"
+          },
+          "max_bytes": {
+            "inputStyle": "singleline"
+          },
+          "user_agent": {
+            "inputStyle": "singleline"
+          }
         },
-        "schema": {}
+        "schema": {
+          "url": {
+            "inputStyle": "singleline"
+          }
+        }
       }
     },
     {
       "toolClassName": "WebhookSenderTool",
       "displayName": "Webhook Sender",
-      "description": "Sends a notification message to a Slack, Microsoft Teams, or generic HTTP webhook endpoint.\n\nWhen to use: Use when the user asks to notify, alert, ping, message, or post to a channel/team/person — including human-in-the-loop pauses where the flow needs to tell someone it is waiting on input. Do NOT use for arbitrary REST API calls; this is for notification webhooks only.\n\nHow to discover inputs: The destination URL normally comes from the tool's `conf.webhook_url` set at deploy time. Only pass the `webhook_url` field when the user explicitly supplies a different URL at call time.\n\nHow to communicate: After sending, confirm in one sentence what was delivered and to which style (slack/teams/generic). Do not echo the webhook URL back to the user.\n\nExample: user says 'tell the team the report is ready'. Call {title:'Report ready', message:'Q2 sales report is available in the workspace.'}.",
-      "version": "1.3.1",
+      "description": "Sends a notification message to a Slack, Microsoft Teams, or generic HTTP webhook endpoint.\n\nWhen to use: Use when the user asks to notify, alert, ping, message, or post to a channel/team/person \u2014 including human-in-the-loop pauses where the flow needs to tell someone it is waiting on input. Do NOT use for arbitrary REST API calls; this is for notification webhooks only.\n\nHow to discover inputs: The destination URL normally comes from the tool's `conf.webhook_url` set at deploy time. Only pass the `webhook_url` field when the user explicitly supplies a different URL at call time.\n\nHow to communicate: After sending, confirm in one sentence what was delivered and to which style (slack/teams/generic). Do not echo the webhook URL back to the user.\n\nExample: user says 'tell the team the report is ready'. Call {title:'Report ready', message:'Q2 sales report is available in the workspace.'}.",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "message",
           "type": "string",
-          "description": "The main body text of the notification. Plain text; Slack/Teams styles wrap it appropriately. Example: `Q2 sales report is ready in the workspace.` or `Flow paused — awaiting your approval on the deployment.`",
+          "description": "The main body text of the notification. Plain text; Slack/Teams styles wrap it appropriately. Example: `Q2 sales report is ready in the workspace.` or `Flow paused \u2014 awaiting your approval on the deployment.`",
           "examples": [
             "Q2 sales report is ready in the workspace.",
-            "Flow paused — awaiting your approval on the deployment.",
+            "Flow paused \u2014 awaiting your approval on the deployment.",
             "Build #1423 failed: 2 tests broke in web_toolkit."
           ],
           "default": "Q2 sales report is ready in the workspace."
@@ -66,7 +95,7 @@
         {
           "name": "webhook_url",
           "type": "string",
-          "description": "Optional per-call override of the destination webhook URL. Only used when `conf.webhook_url` is empty — otherwise ignored. Format: full HTTPS URL issued by the Slack/Teams app or generic receiver. Example: `https://hooks.slack.com/services/T000/B000/XXXX`.",
+          "description": "Optional per-call override of the destination webhook URL. Only used when `conf.webhook_url` is empty \u2014 otherwise ignored. Format: full HTTPS URL issued by the Slack/Teams app or generic receiver. Example: `https://hooks.slack.com/services/T000/B000/XXXX`.",
           "examples": [
             "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX",
             "https://outlook.office.com/webhook/abc-123/IncomingWebhook/def/ghi",
@@ -75,21 +104,57 @@
           "default": "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
         }
       ],
-      "conf": {"webhook_url": "", "style": "slack", "method": "POST", "timeout": 30},
+      "conf": {
+        "webhook_url": "",
+        "style": "slack",
+        "method": "POST",
+        "timeout": 30
+      },
       "_confDescriptions": {
-        "webhook_url": "(secret) Incoming webhook URL — DO NOT commit. Provide via secret store at deploy time. Slack/Teams app config or generic endpoint.",
+        "webhook_url": "(secret) Incoming webhook URL \u2014 DO NOT commit. Provide via secret store at deploy time. Slack/Teams app config or generic endpoint.",
         "style": "Payload format: slack | teams | generic | generic_json. Selects how message/title are wrapped.",
         "method": "HTTP method used to deliver the webhook: POST (default) or PUT.",
         "timeout": "HTTP timeout in seconds for the webhook delivery."
       },
       "_uiHints": {
         "conf": {
-          "webhook_url": {"kind": "secret"},
-          "style": {"kind": "enum", "values": ["slack", "teams", "generic", "generic_json"]},
-          "method": {"kind": "enum", "values": ["POST", "PUT"]}
+          "webhook_url": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "style": {
+            "kind": "enum",
+            "values": [
+              "slack",
+              "teams",
+              "generic",
+              "generic_json"
+            ],
+            "inputStyle": "singleline"
+          },
+          "method": {
+            "kind": "enum",
+            "values": [
+              "POST",
+              "PUT"
+            ],
+            "inputStyle": "singleline"
+          },
+          "timeout": {
+            "inputStyle": "singleline"
+          }
         },
         "schema": {
-          "webhook_url": {"kind": "secret"}
+          "webhook_url": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "message": {
+            "inputStyle": "multiline"
+          },
+          "title": {
+            "inputStyle": "singleline"
+          }
         }
       }
     }

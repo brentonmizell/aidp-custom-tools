@@ -6,23 +6,47 @@
       "toolClassName": "ConvertFileTool",
       "displayName": "Convert File",
       "description": "Converts tabular data between csv, json, jsonl, parquet, xlsx, tsv, and txt formats.\n\nWhen to use: Use when the user asks to convert, reformat, transform, or export a data file from one tabular format to another (e.g. 'turn this csv into parquet', 'export to excel', 'flatten jsonl into csv').\n\nHow to discover inputs: If the user names a stored file but not a path, FIRST call CatalogFileTool(operation='list', source_uri='master:<cat>.<sch>.<vol>:/') or WorkspaceFileTool(operation='list', source_uri='workspace:/') to find it. Prefer the unified `source_uri`/`dest_uri` URI form (`master:cat.sch.vol:/path` or `workspace:/path`) over legacy `input_path`/`output_path`. Use inline `content` only for small csv/json snippets pasted into the chat.\n\nHow to communicate: Report row count, source and destination formats, and the final URI written. Do not echo full file bodies for large outputs.\n\nExample: {source_uri:'master:sales_catalog.raw.uploads:/q1_orders.csv', dest_uri:'workspace:/exports/q1_orders.parquet', to_format:'parquet'}.",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "from_format",
           "type": "string",
-          "description": "Source file format. Optional when `source_uri` or `input_path` is supplied — format is auto-detected from the path extension (e.g. `.csv` -> `csv`). Set explicitly only when the extension is missing or misleading. Default: `csv`.",
-          "enum": ["csv", "json", "jsonl", "parquet", "xlsx", "tsv", "txt"],
+          "description": "Source file format. Optional when `source_uri` or `input_path` is supplied \u2014 format is auto-detected from the path extension (e.g. `.csv` -> `csv`). Set explicitly only when the extension is missing or misleading. Default: `csv`.",
+          "enum": [
+            "csv",
+            "json",
+            "jsonl",
+            "parquet",
+            "xlsx",
+            "tsv",
+            "txt"
+          ],
           "default": "csv",
-          "examples": ["csv", "json", "parquet"]
+          "examples": [
+            "csv",
+            "json",
+            "parquet"
+          ]
         },
         {
           "name": "to_format",
           "type": "string",
           "description": "Target file format to convert into. Required when it differs from the source. Choose `parquet`/`xlsx` for binary tabular exports, `csv`/`tsv`/`json`/`jsonl`/`txt` for text. Default: `json`.",
-          "enum": ["csv", "json", "jsonl", "parquet", "xlsx", "tsv", "txt"],
+          "enum": [
+            "csv",
+            "json",
+            "jsonl",
+            "parquet",
+            "xlsx",
+            "tsv",
+            "txt"
+          ],
           "default": "json",
-          "examples": ["json", "parquet", "xlsx"]
+          "examples": [
+            "json",
+            "parquet",
+            "xlsx"
+          ]
         },
         {
           "name": "content",
@@ -39,14 +63,20 @@
           "type": "string",
           "description": "Legacy workspace path to read from, resolved relative to `base_dir` (default `/workspace`). Prefer `source_uri` with the `workspace:/` scheme instead. Mutually exclusive with `content` and `source_uri`.",
           "default": "uploads/report.csv",
-          "examples": ["uploads/report.csv", "data/q1.json"]
+          "examples": [
+            "uploads/report.csv",
+            "data/q1.json"
+          ]
         },
         {
           "name": "output_path",
           "type": "string",
           "description": "Legacy workspace path to write to, resolved relative to `base_dir`. Prefer `dest_uri` instead. Required for parquet/xlsx output when no `dest_uri` is given.",
           "default": "exports/report.parquet",
-          "examples": ["exports/report.parquet", "out/q1.xlsx"]
+          "examples": [
+            "exports/report.parquet",
+            "out/q1.xlsx"
+          ]
         },
         {
           "name": "source_uri",
@@ -71,7 +101,11 @@
           ]
         }
       ],
-      "conf": {"base_dir": "/workspace", "max_rows": 100000, "max_bytes": 104857600},
+      "conf": {
+        "base_dir": "/workspace",
+        "max_rows": 100000,
+        "max_bytes": 104857600
+      },
       "_confDescriptions": {
         "base_dir": "Root workspace directory for resolving input_path/output_path. Paths outside this dir are rejected (default /workspace).",
         "max_rows": "Maximum number of rows to read/write; returns truncated:true when hit (default 100000).",
@@ -81,13 +115,61 @@
       },
       "_uiHints": {
         "conf": {
-          "base_dir": {"kind": "readonly"},
-          "max_rows": {"kind": "readonly"},
-          "max_bytes": {"kind": "readonly"}
+          "base_dir": {
+            "kind": "readonly",
+            "inputStyle": "singleline"
+          },
+          "max_rows": {
+            "kind": "readonly",
+            "inputStyle": "singleline"
+          },
+          "max_bytes": {
+            "kind": "readonly",
+            "inputStyle": "singleline"
+          }
         },
         "schema": {
-          "from_format": {"kind": "enum", "values": ["csv", "json", "jsonl", "parquet", "xlsx", "tsv", "txt"]},
-          "to_format": {"kind": "enum", "values": ["csv", "json", "jsonl", "parquet", "xlsx", "tsv", "txt"]}
+          "from_format": {
+            "kind": "enum",
+            "values": [
+              "csv",
+              "json",
+              "jsonl",
+              "parquet",
+              "xlsx",
+              "tsv",
+              "txt"
+            ],
+            "inputStyle": "singleline"
+          },
+          "to_format": {
+            "kind": "enum",
+            "values": [
+              "csv",
+              "json",
+              "jsonl",
+              "parquet",
+              "xlsx",
+              "tsv",
+              "txt"
+            ],
+            "inputStyle": "singleline"
+          },
+          "content": {
+            "inputStyle": "multiline"
+          },
+          "input_path": {
+            "inputStyle": "singleline"
+          },
+          "output_path": {
+            "inputStyle": "singleline"
+          },
+          "source_uri": {
+            "inputStyle": "singleline"
+          },
+          "dest_uri": {
+            "inputStyle": "singleline"
+          }
         }
       }
     }

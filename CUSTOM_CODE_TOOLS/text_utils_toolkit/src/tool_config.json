@@ -6,7 +6,7 @@
       "toolClassName": "TemplateRenderTool",
       "displayName": "Render Template",
       "description": "Renders a Jinja2 template into a final string using a variable dictionary, optionally reading the template from a file and/or writing the result back to a file.\n\nWhen to use: Use when the user asks to build a prompt, email body, message, HTML page, SQL statement, or any text that fills placeholders with runtime values. Also use when the user wants to merge a stored template file with fresh data.\n\nHow to discover inputs: If the user references a stored template but hasn't given the path, FIRST call CatalogFileTool(operation='list', source_uri='master:<catalog>.<schema>.<volume>:/') or CatalogBrowserTool to find it. Prefer the unified `source_uri` / `dest_uri` URIs over any split catalog/schema/volume fields.\n\nHow to communicate: Return the rendered text verbatim in a fenced block; if it was also written to `dest_uri`, mention the destination path in one short line.\n\nExample: {template:'Hi {{ name }}, you have {{ count }} items.', variables:'{\"name\":\"Ada\",\"count\":3}'} -> 'Hi Ada, you have 3 items.'",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "template",
@@ -52,13 +52,43 @@
           ]
         }
       ],
-      "conf": {"autoescape": false, "strict": false},
+      "conf": {
+        "autoescape": false,
+        "strict": false
+      },
       "_uiHints": {
         "conf": {
-          "autoescape": {"kind": "enum", "values": ["true", "false"]},
-          "strict": {"kind": "enum", "values": ["true", "false"]}
+          "autoescape": {
+            "kind": "enum",
+            "values": [
+              "true",
+              "false"
+            ],
+            "inputStyle": "singleline"
+          },
+          "strict": {
+            "kind": "enum",
+            "values": [
+              "true",
+              "false"
+            ],
+            "inputStyle": "singleline"
+          }
         },
-        "schema": {}
+        "schema": {
+          "template": {
+            "inputStyle": "multiline"
+          },
+          "variables": {
+            "inputStyle": "singleline"
+          },
+          "source_uri": {
+            "inputStyle": "singleline"
+          },
+          "dest_uri": {
+            "inputStyle": "singleline"
+          }
+        }
       },
       "_confDescriptions": {
         "autoescape": "Jinja2 autoescape toggle. true escapes HTML-sensitive chars in output; false (default) leaves them as-is.",
@@ -71,7 +101,7 @@
       "toolClassName": "RegexTool",
       "displayName": "Regex Extract/Replace",
       "description": "Runs a Python regular expression against text to match, search, find all hits, substitute, or split, optionally reading the haystack from a file and writing results to one.\n\nWhen to use: Use when the user asks to extract emails, ids, phone numbers, codes, or any structured fragment from free text, OR to clean / rewrite / split text via pattern. Supports `match`, `search`, `findall` (default), `sub`, and `split` modes; legacy `extract` and `replace` aliases still resolve.\n\nHow to discover inputs: If the user names a file rather than pasting text, set `source_uri` instead of `text`. If they only name a folder, FIRST call CatalogFileTool(operation='list', source_uri=...) to pick the file. Prefer `source_uri` / `dest_uri` over split catalog/schema/volume fields.\n\nHow to communicate: Return the match list (or rewritten text) verbatim; for large result sets summarize the count and show the first few.\n\nExample: {text:'a@x.com, b@y.org', pattern:'[\\w.]+@[\\w.]+', mode:'findall'} -> ['a@x.com','b@y.org'].",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "text",
@@ -98,10 +128,20 @@
         {
           "name": "mode",
           "type": "string",
-          "enum": ["match", "search", "findall", "sub", "split"],
+          "enum": [
+            "match",
+            "search",
+            "findall",
+            "sub",
+            "split"
+          ],
           "default": "findall",
           "description": "The regex operation. Use `match` to anchor at the start, `search` for the first hit anywhere, `findall` for all hits (default), `sub` to replace, `split` to break the text on the pattern. Legacy aliases `extract` -> `findall` and `replace` -> `sub` still work.",
-          "examples": ["findall", "sub", "search"]
+          "examples": [
+            "findall",
+            "sub",
+            "search"
+          ]
         },
         {
           "name": "replacement",
@@ -136,14 +176,60 @@
           ]
         }
       ],
-      "conf": {"ignore_case": false, "multiline": false, "max_matches": 500},
+      "conf": {
+        "ignore_case": false,
+        "multiline": false,
+        "max_matches": 500
+      },
       "_uiHints": {
         "conf": {
-          "ignore_case": {"kind": "enum", "values": ["true", "false"]},
-          "multiline": {"kind": "enum", "values": ["true", "false"]}
+          "ignore_case": {
+            "kind": "enum",
+            "values": [
+              "true",
+              "false"
+            ],
+            "inputStyle": "singleline"
+          },
+          "multiline": {
+            "kind": "enum",
+            "values": [
+              "true",
+              "false"
+            ],
+            "inputStyle": "singleline"
+          },
+          "max_matches": {
+            "inputStyle": "singleline"
+          }
         },
         "schema": {
-          "mode": {"kind": "enum", "values": ["match", "search", "findall", "sub", "split"]}
+          "mode": {
+            "kind": "enum",
+            "values": [
+              "match",
+              "search",
+              "findall",
+              "sub",
+              "split"
+            ],
+            "inputStyle": "singleline"
+          },
+          "text": {
+            "inputStyle": "multiline"
+          },
+          "pattern": {
+            "inputStyle": "singleline"
+          },
+          "replacement": {
+            "inputStyle": "singleline"
+          },
+          "source_uri": {
+            "inputStyle": "singleline"
+          },
+          "dest_uri": {
+            "inputStyle": "singleline"
+          }
         }
       },
       "_confDescriptions": {
@@ -158,7 +244,7 @@
       "toolClassName": "JsonTransformTool",
       "displayName": "JSON Transform",
       "description": "Extracts values from a JSON document using a JSONPath expression, or reshapes it into a new object via a field->path mapping, optionally reading and writing from URIs.\n\nWhen to use: Use when the user asks to pull specific fields out of an API response, file, or upstream tool output, or to flatten / rename / pick a subset of a larger JSON blob. Pass EITHER `path` (single expression) OR `mapping` (multi-field reshape), never both.\n\nHow to discover inputs: If the JSON lives in a file and the path isn't given, FIRST call CatalogFileTool(operation='list', source_uri=...) to locate it, then set `source_uri` here. Prefer `source_uri` / `dest_uri` over legacy split catalog/schema/volume fields.\n\nHow to communicate: Return the extracted values inline as JSON; for large arrays summarize the count and show a few sample entries.\n\nExample: {data:'{\"items\":[{\"id\":1},{\"id\":2}]}', path:'$.items[*].id'} -> [1,2].",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "data",
@@ -215,10 +301,36 @@
           ]
         }
       ],
-      "conf": {"max_input_bytes": 1048576, "max_results": 1000},
+      "conf": {
+        "max_input_bytes": 1048576,
+        "max_results": 1000
+      },
       "_uiHints": {
-        "conf": {},
-        "schema": {}
+        "conf": {
+          "max_input_bytes": {
+            "inputStyle": "singleline"
+          },
+          "max_results": {
+            "inputStyle": "singleline"
+          }
+        },
+        "schema": {
+          "data": {
+            "inputStyle": "multiline"
+          },
+          "path": {
+            "inputStyle": "singleline"
+          },
+          "mapping": {
+            "inputStyle": "singleline"
+          },
+          "source_uri": {
+            "inputStyle": "singleline"
+          },
+          "dest_uri": {
+            "inputStyle": "singleline"
+          }
+        }
       },
       "_confDescriptions": {
         "max_input_bytes": "Cap on input JSON size in bytes; oversized input is rejected. Default 1048576 (1 MiB).",

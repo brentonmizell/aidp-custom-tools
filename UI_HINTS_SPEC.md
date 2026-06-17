@@ -71,6 +71,7 @@ Add a top-level `_uiHints` block per tool entry, mirroring `conf` and
 | `valueField` | string | (optional) for object sources, what field to store. Default: `key`. |
 | `multi` | boolean | (optional) allow multi-select. Default: false. |
 | `placeholder` | string | (optional) shown when empty. |
+| `inputStyle` | string | (optional) `"singleline"` (default) or `"multiline"`. Controls whether the extension UI renders a one-line `<input type="text">` or a resizable `<textarea>` (min 6 rows, monospace). See *Input style* below. |
 
 ### Hint `kind` semantics
 
@@ -78,6 +79,67 @@ Add a top-level `_uiHints` block per tool entry, mirroring `conf` and
 - **`enum`** — render as a select with a fixed set in `values` (or equivalently `enum` on the JSON-Schema entry). Static, no API call.
 - **`readonly`** — render as a non-editable display. Useful for derived fields (e.g. an endpoint URL computed from `region`, or an auto-detected namespace).
 - **`secret`** — render as a masked input (password-style). Extension UI MUST mask the value in logs, conf editors, and copy-to-clipboard. Used for tokens, API keys, private keys, webhook URLs that act as bearer tokens.
+
+### Input style (`inputStyle`)
+
+Long-form fields (Python source, JSON blobs, SQL, rubric templates) are
+unusable in a one-line `<input>`. The optional `inputStyle` key on any
+hint entry controls the input element used by the extension UI.
+
+| Value | Render |
+|---|---|
+| `"singleline"` | one-line `<input type="text">` (default) |
+| `"multiline"` | resizable `<textarea>` (min 6 rows, monospace) |
+
+`inputStyle` lives at the same nesting level as `kind` / `source` /
+`dependsOn` — inside `_uiHints.conf[fieldName]` or
+`_uiHints.schema[fieldName]`. `kind` MAY be omitted when the only
+purpose of the hint is `inputStyle` (the extension treats absent `kind`
+as `freeform`, equivalent to no hint at all except for the multiline
+override).
+
+```json
+"_uiHints": {
+  "schema": {
+    "code":     { "kind": "freeform", "inputStyle": "multiline" },
+    "language": { "kind": "enum", "values": ["python", "sql"] }
+  },
+  "conf": {
+    "system_prompt":     { "inputStyle": "multiline" },
+    "response_template": { "inputStyle": "multiline" }
+  }
+}
+```
+
+#### Default-multiline field names (LONGFORM list)
+
+When generating `_uiHints` (build step, starter zip, `new-tool`
+scaffold), the following field names get `"inputStyle": "multiline"`
+automatically:
+
+```
+code, content, body, template, template_text, expression, query, sql,
+rubric_template, rubric, message, prompt, text, document, json,
+json_input, json_data, response_template, json_schema, schema, data,
+html, markdown
+```
+
+Match is case-insensitive, **exact** match on the field name (NOT
+substring — `query_id` stays singleline). An explicit
+`"inputStyle": "singleline"` in the source `tool_config.json` always
+wins over the auto rule.
+
+#### Interaction with `kind`
+
+- `kind: "secret"` + `inputStyle: "multiline"` — valid (PEM private
+  keys). UI renders a masked `<textarea>` that does not echo characters
+  in DOM and is excluded from copy-to-clipboard.
+- `kind: "dropdown"` + `inputStyle: "multiline"` — illegal; build step
+  warns and drops `inputStyle`. Dropdowns are always singleline.
+- `kind: "readonly"` + `inputStyle: "multiline"` — valid. Renders a
+  scrollable `<pre>` block.
+- Old extension versions without `inputStyle` support silently fall
+  back to singleline. Field still works, just cramped. No errors.
 
 ### Supported `source` values
 

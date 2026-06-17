@@ -4,7 +4,7 @@
 **Repo**: https://github.com/brentonmizell/aidp-custom-tools (private)
 **Status**: Open — needs AIDP product/engineering input
 
-A consolidated ticket covering four persistent gaps surfaced while
+A consolidated ticket covering seven persistent gaps surfaced while
 building a curated set of 11 Custom Code tool packages (~22 tools).
 Each section names the gap, lists the workarounds already in place,
 and proposes a concrete ask of the AIDP team.
@@ -275,6 +275,112 @@ This is a one-line config change in AIDP's deserializer.
 
 ---
 
+## Issue 5 — Single-line vs multiline field rendering
+
+### Current behavior
+
+The AIDP Test panel renders every input as a single-line text box,
+including fields meant for code blocks, long content, query templates,
+etc. There is no way to declare a field as multiline. Editing anything
+longer than a short identifier in a one-line input is awkward — text
+scrolls horizontally, newlines can't be entered, and reviewing the full
+value requires arrow-keying through it.
+
+### Workarounds in place
+
+The repo's `_uiHints` sidecar now carries an `inputStyle` per field with
+values `"singleline" | "multiline"`. The VS Code extension (AIDP Flow
+Designer) consumes this hint and renders a textarea where appropriate.
+Like the other sidecar keys, `inputStyle` is stripped from the deployed
+zip per Issue 4 to satisfy the `CustomToolEntry` model.
+
+### Ask
+
+The Test panel reads a multiline hint and renders the field as a
+`<textarea>` with a sane initial row height. Two viable shapes:
+
+1. Adopt `inputStyle` from the existing `_uiHints` contract.
+2. Pick a JSON Schema vendor extension AIDP prefers (e.g.
+   `x-aidp-input-style` on the field) and document it.
+
+Either way, fields declared multiline render as a textarea; everything
+else keeps the current single-line input.
+
+---
+
+## Issue 6 — In-AIDP custom tool editor (replace zip upload)
+
+### Current behavior
+
+A developer writes Python locally, zips it, and uploads via
+**Tools → Upload custom tool**. The iteration loop is heavy: edit →
+rebuild zip → re-upload → re-test. There is no syntax help inside
+AIDP, no inline preview of how the tool's inputs will render, and no
+way to see runtime errors without redeploying.
+
+### Vision
+
+The Custom Tool config page itself becomes an editor:
+
+- Code on one side, live UI preview on the other.
+- Developer toggles capabilities like "needs catalog dropdown" or
+  "needs OCI GenAI" and the framework injects the right helper function
+  imports and binds the relevant dropdowns automatically.
+- The proprietary parts (signed AIDP REST calls, OCI auth dispatch)
+  stay hidden in framework code. The developer-facing API is just
+  *"import the helper, call the function"*.
+- Save / Run / Test happen in-place; no zip round-trip.
+
+### Ask
+
+A long-term roadmap item. Not expected to land soon, but worth
+designing toward. Issues 1, 2, 3, 5, and 7 are all steps on the path:
+they make the current zip-upload model bearable while the in-console
+editor is built. Once #6 ships, much of the per-tool sidecar metadata
+becomes implicit (the editor knows the field types because it owns the
+form definition).
+
+---
+
+## Issue 7 — Downloadable starter zip from inside the Custom Tool config page
+
+### Current behavior
+
+A new developer opening **Tools → Upload custom tool** for the first
+time has no clear starting point. There's no scaffold, no example, no
+"here's a hello-world tool you can edit". Asking around for an example
+tool is the usual path — which doesn't scale beyond internal users.
+
+### Workarounds in place
+
+The repo's `setup.py` now has a `starter` subcommand that generates a
+self-contained starter zip containing:
+
+- The tool template (`tool.py` + `tool_config.json`) wired correctly.
+- All helper modules (`aidp_io`, `aidp_genai`, `aidp_kb`) so the
+  developer can call AIDP REST / OCI GenAI / KB endpoints without
+  re-deriving auth.
+- Worked examples for each helper.
+- A quickstart `README.md`.
+
+Run `python setup.py starter` and you get a zip ready to upload and
+iterate on.
+
+### Ask
+
+Surface this same zip from inside the AIDP Console. When the user
+opens **Upload custom tool**, add a **"Download starter template"**
+button that returns the equivalent zip (AIDP can host its own version
+or pull from this repo's release artifacts).
+
+This unblocks Issue 6 by giving an immediate path for the current
+upload model: a developer who has never seen a custom tool can download
+the starter, open it locally, change one function, and re-upload — all
+within minutes. By the time the in-console editor lands, every existing
+tool will already have been bootstrapped from this template.
+
+---
+
 ## Summary of asks (prioritized)
 
 | Priority | Ask | Effort | Impact |
@@ -284,7 +390,10 @@ This is a one-line config change in AIDP's deserializer.
 | **P1** | `CustomToolEntry` ignores unknown top-level keys (Pydantic `extra='ignore'`) | Low | Unblocks any sidecar metadata pattern |
 | **P1** | Test panel: render `examples` array as click-to-fill hints | Low | Reduces typos |
 | **P1** | Test panel: render `enum` fields as `<select>` | Low | Prevents invalid values |
+| **P1** | Test panel: render multiline inputs (textarea) when the field expects long content | Low | Removes the awkwardness of editing query/code in a one-line input |
+| **P1** | Console: "Download starter template" button on the Upload Custom Tool page | Low | First-time developers have an immediate clean entrypoint |
 | **P2** | Native catalog-backed dropdowns in the Test panel (catalog, schema, volume, table, KB pickers) | Higher | Removes need to leave Test panel to discover identifiers. A contract (`_uiHints`) already exists in the curated repo for AIDP to adopt or replace |
+| **P3** | In-AIDP custom tool editor (replace zip upload over time) | High | Long-term vision — eliminates the zip round-trip |
 
 ---
 

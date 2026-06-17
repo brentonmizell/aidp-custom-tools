@@ -6,7 +6,7 @@
       "toolClassName": "DocumentExtractTool",
       "displayName": "Document Extract",
       "description": "Extracts clean text (and table text) from a document file: PDF, DOCX, CSV, TXT, MD, or JSON.\n\nWhen to use: Use when the user asks to read, parse, extract, summarize, or ingest a document, PDF, Word doc, CSV, or text file. Accepts input three ways: an AIDP `source_uri`, raw `content_base64` bytes, or inline `content` text. Optionally writes results to `dest_uri`.\n\nHow to discover inputs: Prefer the unified `source_uri` form (`master:<catalog>.<schema>.<volume>:/<path>` or `workspace:/<path>`) over legacy catalog/schema/volume name fields. If the user hasn't named a file, FIRST call CatalogFileTool(operation='list', source_uri='master:cat.sch.vol:/') to browse, then ask which to extract.\n\nHow to communicate: Summarize the extracted text in plain prose; for long documents quote a few representative lines and report total character count rather than dumping everything.\n\nExample: {source_uri:'master:construction_catalog.construction_schema.construction_documents:/safety_manual.pdf', format:'pdf', page_start:1, page_end:5}.",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "content_base64",
@@ -126,8 +126,8 @@
         "region": "OCI region for AIDP file IO (e.g. us-chicago-1). Required when using source_uri / dest_uri with master: URIs. Falls back to OCI_REGION env var.",
         "data_lake_ocid": "AIDP data lake OCID for file IO. Required when using source_uri / dest_uri with master: URIs. Falls back to DATALAKE_ID env var or context_vars.datalake_id.",
         "workspace_id": "AIDP workspace ID, required when using source_uri / dest_uri with workspace: URIs.",
-        "api_version": "AIDP API version segment in the base URL. Default 20260430 (do NOT use 20240831 — that path lacks the volume/workspace IO endpoints).",
-        "service_path": "AIDP service path segment in the base URL. Default aiDataPlatforms (do NOT use dataLakes — it lacks the IO endpoints).",
+        "api_version": "AIDP API version segment in the base URL. Default 20260430 (do NOT use 20240831 \u2014 that path lacks the volume/workspace IO endpoints).",
+        "service_path": "AIDP service path segment in the base URL. Default aiDataPlatforms (do NOT use dataLakes \u2014 it lacks the IO endpoints).",
         "auth_mode": "OCI auth mode for AIDP file IO: resource_principal (default), instance_principal, or user_principal.",
         "tenancy_ocid": "OCI tenancy OCID. Required when auth_mode is user_principal.",
         "user_ocid": "OCI user OCID. Required when auth_mode is user_principal.",
@@ -139,28 +139,36 @@
       "_uiHints": {
         "conf": {
           "max_chars": {
-            "kind": "readonly"
+            "kind": "readonly",
+            "inputStyle": "singleline"
           },
           "max_csv_rows": {
-            "kind": "readonly"
+            "kind": "readonly",
+            "inputStyle": "singleline"
           },
           "max_input_bytes": {
-            "kind": "readonly"
+            "kind": "readonly",
+            "inputStyle": "singleline"
           },
           "region": {
-            "kind": "string"
+            "kind": "string",
+            "inputStyle": "singleline"
           },
           "data_lake_ocid": {
-            "kind": "string"
+            "kind": "string",
+            "inputStyle": "singleline"
           },
           "workspace_id": {
-            "kind": "string"
+            "kind": "string",
+            "inputStyle": "singleline"
           },
           "api_version": {
-            "kind": "string"
+            "kind": "string",
+            "inputStyle": "singleline"
           },
           "service_path": {
-            "kind": "string"
+            "kind": "string",
+            "inputStyle": "singleline"
           },
           "auth_mode": {
             "kind": "enum",
@@ -168,25 +176,32 @@
               "resource_principal",
               "instance_principal",
               "user_principal"
-            ]
+            ],
+            "inputStyle": "singleline"
           },
           "tenancy_ocid": {
-            "kind": "string"
+            "kind": "string",
+            "inputStyle": "singleline"
           },
           "user_ocid": {
-            "kind": "string"
+            "kind": "string",
+            "inputStyle": "singleline"
           },
           "fingerprint": {
-            "kind": "string"
+            "kind": "string",
+            "inputStyle": "singleline"
           },
           "private_key_content": {
-            "kind": "secret"
+            "kind": "secret",
+            "inputStyle": "singleline"
           },
           "pass_phrase": {
-            "kind": "secret"
+            "kind": "secret",
+            "inputStyle": "singleline"
           },
           "timeout": {
-            "kind": "readonly"
+            "kind": "readonly",
+            "inputStyle": "singleline"
           }
         },
         "schema": {
@@ -199,13 +214,31 @@
               "txt",
               "md",
               "json"
-            ]
+            ],
+            "inputStyle": "singleline"
           },
           "source_uri": {
-            "kind": "string"
+            "kind": "string",
+            "inputStyle": "singleline"
           },
           "dest_uri": {
-            "kind": "string"
+            "kind": "string",
+            "inputStyle": "singleline"
+          },
+          "content_base64": {
+            "inputStyle": "singleline"
+          },
+          "content": {
+            "inputStyle": "multiline"
+          },
+          "filename": {
+            "inputStyle": "singleline"
+          },
+          "page_start": {
+            "inputStyle": "singleline"
+          },
+          "page_end": {
+            "inputStyle": "singleline"
           }
         }
       }

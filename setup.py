@@ -8,6 +8,7 @@ Subcommands:
   python setup.py configure    # walk every tool's conf and fill values
   python setup.py new-tool     # scaffold a brand-new custom tool package
   python setup.py build        # auto-fill + rebuild all zips (non-interactive)
+  python setup.py starter      # generate dist/aidp-tool-starter.zip
   python setup.py status       # show what's filled vs blank across all tools
 
 Cross-platform stdlib only - no pip deps.
@@ -23,17 +24,34 @@ import re
 import shutil
 import sys
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parent
 TOOLS_DIR = REPO_ROOT / "CUSTOM_CODE_TOOLS"
 TEMPLATE_DIR = REPO_ROOT / "CUSTOM_CODE_TEMPLATE"
+DIST_DIR = REPO_ROOT / "dist"
+STARTER_ZIP_DEFAULT = DIST_DIR / "aidp-tool-starter.zip"
 
-# Canonical source for the shared aidp_io helper. The build step copies this
-# into each package's src/utils/aidp_io.py so the zip is self-contained AND so
-# `python -m` style dev imports keep working.
-SHARED_AIDP_IO_SRC = REPO_ROOT / "aidp_io" / "aidp_io.py"
+# Canonical source for each shared helper. Build step copies these into each
+# package's src/utils/<helper>.py so the zip is self-contained AND so dev
+# imports keep working. New helpers can be added by extending this list — both
+# `_sync_shared_modules` and the `starter` subcommand walk it.
+#
+# Each entry is (canonical_source_path, dest_filename_in_src_utils).
+SHARED_MODULES: List[Tuple[Path, str]] = [
+    (REPO_ROOT / "aidp_io"    / "aidp_io.py",    "aidp_io.py"),
+    (REPO_ROOT / "aidp_genai" / "aidp_genai.py", "aidp_genai.py"),
+    (REPO_ROOT / "aidp_kb"    / "aidp_kb.py",    "aidp_kb.py"),
+]
+
+# Back-compat alias: external scripts (and old in-repo callers) imported
+# SHARED_AIDP_IO_SRC directly. Keep the name pointing at the first entry.
+SHARED_AIDP_IO_SRC = SHARED_MODULES[0][0]
+
+# Canonical source for the per-package config_utils helper (lives under the
+# template, not in a top-level dir — it's small and unlikely to drift).
+SHARED_CONFIG_UTILS_SRC = TEMPLATE_DIR / "utils" / "config_utils.py"
 
 # ---------------------------------------------------------------------------
 # ANSI colors (auto-disabled when stdout isn't a TTY)
@@ -568,8 +586,8 @@ def cmd_new_tool(args) -> int:
             profile=args.profile, all=False, package=[pkg],
         ))
     if ask_yes_no("Build the .zip now?", default=True):
-        # Make sure the shared helper is in place before the one-off rebuild.
-        _sync_shared_module()
+        # Make sure the shared helpers are in place before the one-off rebuild.
+        _sync_shared_modules()
         _rebuild_one(pkg_dir)
     return 0
 
@@ -610,6 +628,16 @@ def cmd_build(args) -> int:
             _warn_test_creds()
             print(f"[creds] profile=[{profile}] tenancy={creds['tenancy'][:32]}... key={len(creds['private_key'])} bytes")
     _rebuild_zips(creds=creds)
+
+    # After every successful build, regenerate the starter zip so its bundled
+    # utils/ stays in lockstep with the canonical helpers we just synced. This
+    # is non-interactive and quick; failure here is non-fatal for the build.
+    try:
+        out = _build_starter_zip(STARTER_ZIP_DEFAULT, force=True)
+        if out is not None:
+            print(green(f"[starter] regenerated {out.relative_to(REPO_ROOT)}"))
+    except Exception as e:
+        print(yellow(f"[starter] skipped (build failed): {e}"))
     return 0
 
 def _autofill_one(path: Path, aidp: Dict, oci: Dict, force: bool, dry_run: bool) -> int:
@@ -685,27 +713,41 @@ def cmd_status(args) -> int:
     return 0
 
 # ---------------------------------------------------------------------------
-# Shared module sync
+# Shared module sync (aidp_io, aidp_genai, aidp_kb, ...)
 # ---------------------------------------------------------------------------
 
-def _sync_shared_module() -> int:
-    """Copy the canonical aidp_io.py into each package's src/utils/aidp_io.py.
+def _sync_shared_modules() -> int:
+    """Copy every canonical helper in SHARED_MODULES into each package's
+    src/utils/<helper>.py.
 
-    This runs ONCE per build (before the per-package zip loop) so:
-      - the zip contains a self-contained aidp_io.py inside src/utils/,
-      - dev imports from CUSTOM_CODE_TOOLS/<pkg>/src/utils/aidp_io.py keep
+    Runs ONCE per build (before the per-package zip loop) so:
+      - the zip contains self-contained helpers inside src/utils/,
+      - dev imports from CUSTOM_CODE_TOOLS/<pkg>/src/utils/<helper>.py keep
         working without a build step.
 
-    Missing canonical source -> warn and continue (no fatal error). Returns
-    the number of packages successfully synced.
+    A missing canonical source file is SKIPPED with a warning, not fatal —
+    this lets partial rollouts work (e.g. aidp_io exists but aidp_kb hasn't
+    been written yet). Returns the number of packages touched.
+
+    Final summary line: "[shared] N helpers synced to M packages".
     """
-    if not SHARED_AIDP_IO_SRC.is_file():
-        print(yellow(f"[shared] canonical aidp_io.py not found at {SHARED_AIDP_IO_SRC} — skipping sync"))
-        return 0
     if not TOOLS_DIR.is_dir():
         print(yellow(f"[shared] {TOOLS_DIR} not found — skipping sync"))
         return 0
-    synced = 0
+
+    # Resolve which canonical sources are actually on disk.
+    present: List[Tuple[Path, str]] = []
+    for src_path, dest_name in SHARED_MODULES:
+        if src_path.is_file():
+            present.append((src_path, dest_name))
+        else:
+            print(yellow(f"[shared] canonical {dest_name} not found at {src_path} — skipping"))
+
+    if not present:
+        print(yellow("[shared] no canonical helpers available — nothing to sync"))
+        return 0
+
+    packages_touched = 0
     for pkg in sorted(TOOLS_DIR.iterdir()):
         if not pkg.is_dir():
             continue
@@ -717,14 +759,22 @@ def _sync_shared_module() -> int:
         init_py = utils_dir / "__init__.py"
         if not init_py.exists():
             init_py.write_text("", encoding="utf-8")
-        dest = utils_dir / "aidp_io.py"
-        try:
-            shutil.copyfile(SHARED_AIDP_IO_SRC, dest)
-            synced += 1
-        except OSError as e:
-            print(yellow(f"[shared] could not copy into {pkg.name}: {e}"))
-    print(f"[shared] aidp_io.py synced to {synced} packages")
-    return synced
+        copied_any = False
+        for src_path, dest_name in present:
+            dest = utils_dir / dest_name
+            try:
+                shutil.copyfile(src_path, dest)
+                copied_any = True
+            except OSError as e:
+                print(yellow(f"[shared] could not copy {dest_name} into {pkg.name}: {e}"))
+        if copied_any:
+            packages_touched += 1
+    print(f"[shared] {len(present)} helpers synced to {packages_touched} packages")
+    return packages_touched
+
+
+# Back-compat alias for any external caller that imported the old name.
+_sync_shared_module = _sync_shared_modules
 
 # ---------------------------------------------------------------------------
 # Zip rebuilds
@@ -733,10 +783,10 @@ def _sync_shared_module() -> int:
 def _rebuild_zips(creds: Optional[Dict] = None) -> None:
     label = " (with user-principal credentials embedded)" if creds else ""
     print(f"\n{bold('Rebuilding .zip artifacts...' + label)}")
-    # Sync the shared aidp_io helper ONCE before the loop — both onto disk
-    # under each package's src/utils/ (so dev imports work) and indirectly into
-    # the zip (since the zip step walks src/).
-    _sync_shared_module()
+    # Sync ALL shared helpers ONCE before the loop — both onto disk under each
+    # package's src/utils/ (so dev imports work) and indirectly into the zip
+    # (since the zip step walks src/).
+    _sync_shared_modules()
     for pkg in sorted(TOOLS_DIR.iterdir()):
         if pkg.is_dir():
             _rebuild_one(pkg, creds)
@@ -889,6 +939,385 @@ def _warn_test_creds() -> None:
     print()
 
 # ---------------------------------------------------------------------------
+# Subcommand: starter (build a downloadable zip for a fresh dev)
+# ---------------------------------------------------------------------------
+
+# Fallback templates used when CUSTOM_CODE_TEMPLATE/ is missing or partial.
+# Kept in setup.py so the starter zip can always be built from a clean checkout.
+
+STARTER_FALLBACK_TOOL_CONFIG = """{
+  "displayName": "My Starter Tool",
+  "description": "A blank custom-tool package generated by `python setup.py starter`. Edit this file, tool_implementation.py, and requirements.txt, then zip and upload via AIDP Console.",
+  "tools": [
+    {
+      "toolClassName": "MyStarterTool",
+      "displayName": "My Starter Tool",
+      "description": "Echoes the input. Replace _execute_tool with your real logic.",
+      "version": "1.0.0",
+      "schema": [
+        {
+          "name": "query",
+          "type": "string",
+          "description": "Free-form user query passed at runtime."
+        }
+      ],
+      "conf": {
+        "region": "us-ashburn-1",
+        "data_lake_ocid": "",
+        "compartment_id": "",
+        "model_id": "cohere.command-r-plus",
+        "auth_mode": "resource_principal",
+        "prompt_template": "Summarize the following text in two sentences:\\n\\n{text}",
+        "timeout": 60
+      },
+      "_uiHints": {
+        "conf": {
+          "region":          { "kind": "dropdown", "source": "regions" },
+          "data_lake_ocid":  { "kind": "dropdown", "source": "dataLakes",
+                               "dependsOn": ["region"] },
+          "compartment_id":  { "kind": "dropdown", "source": "compartments",
+                               "dependsOn": ["region"] },
+          "model_id":        { "kind": "dropdown", "source": "models",
+                               "dependsOn": ["region"] },
+          "auth_mode":       { "kind": "enum",
+                               "values": ["resource_principal",
+                                          "user_principal",
+                                          "instance_principal"] },
+          "prompt_template": { "inputStyle": "multiline" }
+        },
+        "schema": {
+          "query": { "inputStyle": "multiline" }
+        }
+      },
+      "_confDescriptions": {
+        "region":          "OCI region short code (e.g. us-ashburn-1).",
+        "data_lake_ocid":  "OCID of the AIDP data lake holding your KBs / catalogs.",
+        "compartment_id":  "Compartment OCID for OCI Generative AI inference.",
+        "model_id":        "OCI Gen AI model ID; default cohere.command-r-plus.",
+        "auth_mode":       "How the tool authenticates to OCI at runtime.",
+        "prompt_template": "Multiline template; {text} is substituted at call time.",
+        "timeout":         "HTTP timeout in seconds for outbound calls."
+      }
+    }
+  ]
+}
+"""
+
+STARTER_FALLBACK_TOOL_IMPL = '''"""tool_implementation.py — starter scaffold generated by `setup.py starter`.
+
+Three helpers are bundled under utils/:
+  - aidp_io     — read/write files in AIDP volumes
+  - aidp_genai  — OCI Generative AI chat + embeddings
+  - aidp_kb     — Knowledge Base search
+
+Replace the body of _execute_tool with your real logic. Keep the
+{"ok", "data", "error", "error_type"} envelope so AIDP shows clean errors
+in the Test panel.
+"""
+
+from typing import Any, Dict
+
+try:
+    from aidputils.agents.toolkit.tool_helper import register
+    from aidputils.agents.toolkit.base import CustomToolBase
+except ImportError:
+    # Local-test fallback so the module imports without aidputils installed.
+    def register(_cls=None, **_kw):
+        return _cls if _cls else (lambda c: c)
+    class CustomToolBase: ...
+
+try:
+    from aidp_debug import debug, debug_warn, debug_error, DebugLog
+except ImportError:
+    def debug(*_a, **_k): pass
+    def debug_warn(*_a, **_k): pass
+    def debug_error(*_a, **_k): pass
+    class DebugLog:
+        @staticmethod
+        def embed(x): return x
+
+# Bundled helpers (copied verbatim from the canonical repo at zip-build time).
+from utils.aidp_io    import read_text, write_text           # file IO
+from utils.aidp_genai import chat                            # LLM chat
+from utils.aidp_kb    import kb_search                       # KB retrieval
+
+
+def get_cfg(conf: Dict[str, Any], key: str, default: Any = None) -> Any:
+    """Unwrap conf['conf'] nesting + coerce stringified numbers/bools.
+
+    AIDP sometimes hands tools `{"conf": {...}}` and sometimes `{...}`
+    directly. NEVER read `conf["key"]` — always go through this helper.
+    """
+    if not isinstance(conf, dict):
+        return default
+    if "conf" in conf and isinstance(conf["conf"], dict):
+        conf = conf["conf"]
+    val = conf.get(key, default)
+    if isinstance(val, str) and isinstance(default, (int, float)):
+        try:
+            return type(default)(val)
+        except Exception:
+            return default
+    return val
+
+
+def ok(data: Any = None, **extra) -> Dict[str, Any]:
+    return DebugLog.embed({"ok": True, "data": data, **extra})
+
+
+def fail(error: str, error_type: str = "ToolError", **extra) -> Dict[str, Any]:
+    return DebugLog.embed({"ok": False, "error": error, "error_type": error_type, **extra})
+
+
+@register
+class MyStarterTool(CustomToolBase):
+    """Example tool wiring up all three helpers. Delete what you don't need."""
+
+    @classmethod
+    def _execute_tool(cls, runtime_params: Dict[str, Any], conf: Dict[str, Any]) -> Dict[str, Any]:
+        debug("MyStarterTool invoked", params=list(runtime_params.keys()))
+        query = (runtime_params.get("query") or "").strip()
+        if not query:
+            return fail("'query' is required", "ValidationError")
+
+        ctx: Dict[str, Any] = {}
+
+        try:
+            # 1) File IO example — uncomment and point at a real AIDP volume URI.
+            #    text = read_text("oci://my-bucket@ns/path/to/file.txt", conf, ctx)
+            text = query  # placeholder so the example runs without a real URI
+
+            # 2) GenAI example — call the chat helper with a one-shot prompt.
+            template = get_cfg(conf, "prompt_template", "Summarize: {text}")
+            prompt = template.format(text=text)
+            summary = chat(prompt, conf)
+
+            # 3) KB example — retrieve a few related chunks if a kb_key is set.
+            hits = []
+            kb_key = get_cfg(conf, "kb_key", "")
+            if kb_key:
+                hits = kb_search(query, kb_key, conf, top_k=3)
+
+            return ok({"summary": summary, "hits": hits}, query=query)
+        except ValueError as e:
+            # Helpers raise ValueError with HTTP status + body preview.
+            return fail(str(e), "ValueError")
+        except Exception as e:
+            return fail(str(e), "RuntimeError")
+'''
+
+STARTER_FALLBACK_REQUIREMENTS = """# Pip deps for your custom tool. Helpers lazy-import heavy deps (oci)
+# so this file can stay nearly empty for most tools.
+#
+# Common additions:
+#   requests
+#   pandas
+"""
+
+STARTER_FALLBACK_CONFIG_UTILS = '''"""config_utils.py — tiny helpers reused across tool implementations.
+
+Keep these stdlib-only so the starter zip stays dependency-free.
+"""
+from typing import Any, Dict
+
+
+def get_cfg(conf: Dict[str, Any], key: str, default: Any = None) -> Any:
+    """Unwrap conf['conf'] nesting + coerce stringified numbers."""
+    if not isinstance(conf, dict):
+        return default
+    if "conf" in conf and isinstance(conf["conf"], dict):
+        conf = conf["conf"]
+    val = conf.get(key, default)
+    if isinstance(val, str) and isinstance(default, (int, float)):
+        try:
+            return type(default)(val)
+        except Exception:
+            return default
+    return val
+'''
+
+STARTER_README = """# AIDP Custom Tool Starter
+
+A minimal, working AIDP custom-tool package. Unzip, edit three files,
+re-zip, upload via the AIDP Console.
+
+## What you got
+
+```
+tool_config.json          metadata + per-tool conf + _uiHints sidecar
+tool_implementation.py    Python entry point (subclass of CustomToolBase)
+requirements.txt          pip deps installed on the AIDP runtime
+README.md                 this file
+utils/aidp_io.py          AIDP file IO (read_text, write_text, list_*, ...)
+utils/aidp_genai.py       OCI Generative AI helpers (chat, embed)
+utils/aidp_kb.py          Knowledge Base search (kb_search, list_kbs)
+utils/config_utils.py     small get_cfg() helper
+utils/__init__.py         (empty, marks utils as a package)
+```
+
+## Edit these three files
+
+1. **`tool_config.json`** — change `toolClassName`, `displayName`,
+   `description`, and the `conf` keys to match what your tool needs.
+   The `_uiHints` and `_confDescriptions` blocks are read by the
+   AIDP Flow Designer VS Code extension to render nicer config UI;
+   they're harmless if you leave them in place. AIDP itself ignores them.
+
+2. **`tool_implementation.py`** — replace the body of `_execute_tool`.
+   The starter shows how to call all three bundled helpers
+   (`read_text`, `chat`, `kb_search`). Delete the calls you don't need.
+   Keep the `{"ok": ..., "data": ..., "error": ..., "error_type": ...}`
+   envelope — AIDP surfaces `error_type` in the Test panel.
+
+3. **`requirements.txt`** — add any pip deps your code needs.
+
+## Zip and upload
+
+From inside the unzipped folder:
+
+PowerShell (Windows):
+```
+Compress-Archive -Path * -Destination my_tool.zip -Force
+```
+
+bash / zsh (Mac, Linux):
+```
+zip -r my_tool.zip . -x "__pycache__/*" "*.pyc"
+```
+
+Then in the AIDP Console: **Tools -> Upload custom tool**, pick the zip,
+and the new tool class will appear in agent-flow editors.
+
+## Helper update policy
+
+`utils/aidp_io.py`, `utils/aidp_genai.py`, and `utils/aidp_kb.py` are
+**copies** of the canonical sources in the AIDP Custom Tools repo. Edit
+them locally if you must, but expect to re-sync from the canonical repo
+when you upgrade. The starter zip itself is regenerated on every
+`python setup.py build` of the canonical repo, so its `utils/` always
+matches the latest helper API.
+
+## Common pitfalls
+
+- **Don't read `conf["key"]` directly** — always use `get_cfg(conf, "key", default)`.
+  AIDP sometimes wraps conf one level deep (`{"conf": {...}}`).
+- **Always set `error_type`** in failure envelopes. The AIDP Test panel
+  groups errors by this field; missing it shows as `null`.
+- **Never log secrets.** Truncate tokens / private-key content in any
+  `debug(...)` calls.
+- **Don't import `oci` at module top-level.** The bundled helpers lazy-
+  import it so cold-start stays fast for non-LLM tools.
+"""
+
+
+def _build_starter_zip(output: Path, force: bool = False) -> Optional[Path]:
+    """Build the starter zip at `output`. Returns the output path on success,
+    or None if no zip was produced (which currently never happens unless a
+    required helper source is missing). Raises if a canonical helper is
+    missing — partial zips are never produced.
+
+    The zip layout (flat, no top-level folder):
+      tool_config.json
+      tool_implementation.py
+      requirements.txt
+      README.md
+      utils/__init__.py
+      utils/aidp_io.py
+      utils/aidp_genai.py
+      utils/aidp_kb.py
+      utils/config_utils.py
+    """
+    output = Path(output)
+    # If output points at an existing directory, drop the default filename in.
+    if output.exists() and output.is_dir():
+        output = output / STARTER_ZIP_DEFAULT.name
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if output.exists() and not force:
+        # Build step always passes force=True; explicit `starter` subcommand
+        # also passes force=True by default. Honor the flag if a caller doesn't.
+        raise FileExistsError(f"{output} already exists (pass --force to overwrite)")
+
+    # 1. Top-level files: use template if available, else inline fallback.
+    tpl_config = TEMPLATE_DIR / "tool_config.json"
+    tpl_impl   = TEMPLATE_DIR / "tool_implementation.py"
+    tpl_reqs   = TEMPLATE_DIR / "requirements.txt"
+
+    if tpl_config.is_file():
+        tool_config_bytes = tpl_config.read_text(encoding="utf-8")
+    else:
+        tool_config_bytes = STARTER_FALLBACK_TOOL_CONFIG
+    if tpl_impl.is_file():
+        tool_impl_bytes = tpl_impl.read_text(encoding="utf-8")
+    else:
+        tool_impl_bytes = STARTER_FALLBACK_TOOL_IMPL
+    if tpl_reqs.is_file():
+        reqs_bytes = tpl_reqs.read_text(encoding="utf-8")
+    else:
+        reqs_bytes = STARTER_FALLBACK_REQUIREMENTS
+
+    # 2. Bundled helpers under utils/. Required: at least aidp_io. The other
+    # two are skipped (with warning) if their canonical source is missing,
+    # matching the partial-rollout behavior of _sync_shared_modules.
+    utils_files: List[Tuple[str, bytes]] = []
+    utils_files.append(("utils/__init__.py", b""))
+    for src_path, dest_name in SHARED_MODULES:
+        if not src_path.is_file():
+            print(yellow(f"[starter] canonical {dest_name} not found at {src_path} — skipping"))
+            continue
+        utils_files.append((f"utils/{dest_name}", src_path.read_bytes()))
+
+    # config_utils.py: prefer the canonical template copy, else inline fallback.
+    if SHARED_CONFIG_UTILS_SRC.is_file():
+        utils_files.append(("utils/config_utils.py", SHARED_CONFIG_UTILS_SRC.read_bytes()))
+    else:
+        utils_files.append(("utils/config_utils.py", STARTER_FALLBACK_CONFIG_UTILS.encode("utf-8")))
+
+    # 3. README — always our own copy (template's README is per-tool, not generic).
+    readme_bytes = STARTER_README
+
+    # 4. Write the zip. Use PurePosixPath arcnames so the zip works on every OS.
+    if output.exists():
+        output.unlink()
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(str(PurePosixPath("tool_config.json")), tool_config_bytes)
+        zf.writestr(str(PurePosixPath("tool_implementation.py")), tool_impl_bytes)
+        zf.writestr(str(PurePosixPath("requirements.txt")), reqs_bytes)
+        zf.writestr(str(PurePosixPath("README.md")), readme_bytes)
+        for arc, data in utils_files:
+            zf.writestr(str(PurePosixPath(arc)), data)
+
+    return output
+
+
+def cmd_starter(args) -> int:
+    """Build the starter zip. Non-interactive; suitable for invocation from
+    `build`. Prints exactly one terminal line: the final `starter zip: ...`."""
+    out_path = Path(args.output)
+    try:
+        # `starter` is always treated as "regenerate", per the spec — the
+        # --force flag is accepted for symmetry but no-ops because we always
+        # overwrite.
+        result = _build_starter_zip(out_path, force=True)
+    except FileExistsError as e:
+        # Only reachable if a caller explicitly sets force=False.
+        print(red(f"[err] {e}"))
+        return 1
+    except FileNotFoundError as e:
+        print(red(f"[err] {e}"))
+        return 1
+    if result is None:
+        print(red("[err] starter zip not produced"))
+        return 1
+
+    try:
+        rel = result.relative_to(REPO_ROOT)
+        print(f"starter zip: {rel.as_posix()}")
+    except ValueError:
+        # Output lives outside REPO_ROOT — print absolute.
+        print(f"starter zip: {result}")
+    return 0
+
+# ---------------------------------------------------------------------------
 # Default wizard (init -> configure -> build)
 # ---------------------------------------------------------------------------
 
@@ -955,6 +1384,12 @@ def main(argv: List[str]) -> int:
     p.add_argument("--test-creds", action="store_true",
                    help="embed OCI user-principal credentials in the zips (zip-only; source untouched)")
 
+    p = sub.add_parser("starter",
+                       help="generate a downloadable starter zip with the tool template + all helpers")
+    p.add_argument("--output", default=str(STARTER_ZIP_DEFAULT))
+    p.add_argument("--force", action="store_true",
+                   help="overwrite an existing zip (default behavior already overwrites)")
+
     p = sub.add_parser("status", help="show what's filled vs blank across all tools")
 
     args = parser.parse_args(argv)
@@ -970,9 +1405,10 @@ def main(argv: List[str]) -> int:
     handlers = {
         "wizard": cmd_wizard,
         "init": cmd_init,
-        "configure": cmd_configure,
         "new-tool": cmd_new_tool,
+        "configure": cmd_configure,
         "build": cmd_build,
+        "starter": cmd_starter,
         "status": cmd_status,
     }
     return handlers[cmd](args)

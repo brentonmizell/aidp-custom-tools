@@ -5,8 +5,8 @@
     {
       "toolClassName": "RubricScorerTool",
       "displayName": "Rubric Scorer",
-      "description": "Scores a candidate text against a rubric and returns a structured verdict (overall 0-10 score, per-criterion scores, rationale, pass/fail).\n\nWhen to use: Use when the user asks to evaluate, grade, judge, or quality-gate a piece of generated text — e.g. checking an agent answer, a summary, an email draft, or a model output against named criteria.\n\nHow to communicate: Report the overall score, the pass/fail flag, and the top one or two weakest criteria in plain prose. Do not dump the entire raw JSON unless the user asks.\n\nExample: user says 'score this support reply for tone, accuracy, and brevity'. Call {candidate:'Hi Jane, your refund of $42 was processed...', rubric:'tone (warm, professional), accuracy (matches order #1234), brevity (under 80 words)'} -> summarize: 'Overall 8.2/10, PASS. Weakest: brevity 6/10 (reply is 110 words).'",
-      "version": "1.3.1",
+      "description": "Scores a candidate text against a rubric and returns a structured verdict (overall 0-10 score, per-criterion scores, rationale, pass/fail).\n\nWhen to use: Use when the user asks to evaluate, grade, judge, or quality-gate a piece of generated text \u2014 e.g. checking an agent answer, a summary, an email draft, or a model output against named criteria.\n\nHow to communicate: Report the overall score, the pass/fail flag, and the top one or two weakest criteria in plain prose. Do not dump the entire raw JSON unless the user asks.\n\nExample: user says 'score this support reply for tone, accuracy, and brevity'. Call {candidate:'Hi Jane, your refund of $42 was processed...', rubric:'tone (warm, professional), accuracy (matches order #1234), brevity (under 80 words)'} -> summarize: 'Overall 8.2/10, PASS. Weakest: brevity 6/10 (reply is 110 words).'",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "candidate",
@@ -45,21 +45,71 @@
       },
       "_uiHints": {
         "conf": {
-          "region": { "kind": "dropdown", "source": "regions" },
-          "endpoint": { "kind": "readonly", "dependsOn": "region", "placeholder": "Auto-derived from region" },
-          "compartment_id": { "kind": "dropdown", "source": "compartments" },
-          "model_id": { "kind": "dropdown", "source": "ociGenAiModels", "dependsOn": "region" },
-          "model_provider": { "kind": "readonly", "dependsOn": "model_id", "placeholder": "Auto-set: cohere or generic based on model_id" },
-          "auth_type": { "kind": "enum", "values": ["resource_principal", "instance_principal", "api_key"] }
+          "region": {
+            "kind": "dropdown",
+            "source": "regions"
+          },
+          "endpoint": {
+            "kind": "readonly",
+            "dependsOn": "region",
+            "placeholder": "Auto-derived from region",
+            "inputStyle": "singleline"
+          },
+          "compartment_id": {
+            "kind": "dropdown",
+            "source": "compartments"
+          },
+          "model_id": {
+            "kind": "dropdown",
+            "source": "ociGenAiModels",
+            "dependsOn": "region"
+          },
+          "model_provider": {
+            "kind": "readonly",
+            "dependsOn": "model_id",
+            "placeholder": "Auto-set: cohere or generic based on model_id",
+            "inputStyle": "singleline"
+          },
+          "auth_type": {
+            "kind": "enum",
+            "values": [
+              "resource_principal",
+              "instance_principal",
+              "api_key"
+            ],
+            "inputStyle": "singleline"
+          },
+          "temperature": {
+            "inputStyle": "singleline"
+          },
+          "max_tokens": {
+            "inputStyle": "singleline"
+          },
+          "pass_threshold": {
+            "inputStyle": "singleline"
+          },
+          "max_candidate_chars": {
+            "inputStyle": "singleline"
+          },
+          "max_rubric_chars": {
+            "inputStyle": "singleline"
+          }
         },
-        "schema": {}
+        "schema": {
+          "candidate": {
+            "inputStyle": "singleline"
+          },
+          "rubric": {
+            "inputStyle": "multiline"
+          }
+        }
       },
       "_confDescriptions": {
         "model_id": "OCI GenAI judge model ID. See .aidp/knowledge/oci-genai-models.md (e.g. cohere.command-a-03-2025, meta.llama-3-70b-instruct, xai.grok-4).",
         "model_provider": "cohere | generic. Auto-set from model_id family.",
         "region": "OCI region. Auto-filled from aidp-deploy.config.json. (e.g. us-ashburn-1, us-chicago-1)",
         "endpoint": "OCI GenAI inference endpoint. Auto-derived from region (readonly).",
-        "compartment_id": "OCI compartment OCID. OCI Console → Identity & Security → Compartments.",
+        "compartment_id": "OCI compartment OCID. OCI Console \u2192 Identity & Security \u2192 Compartments.",
         "auth_type": "Auth flavor: resource_principal (default, on-cluster), instance_principal, or api_key.",
         "temperature": "LLM sampling temperature (0.0 = deterministic, recommended for scoring).",
         "max_tokens": "Max tokens for the judge response (verdict JSON).",
@@ -72,7 +122,7 @@
       "toolClassName": "SummarizerTool",
       "displayName": "Summarizer",
       "description": "Summarizes long text via map-reduce when the input exceeds a single context window; returns a single condensed summary string.\n\nWhen to use: Use when the user asks to summarize, condense, TL;DR, or extract key points from a document, transcript, email thread, web page body, or aggregated tool output. Pick this tool over a raw LLM call whenever the input might exceed one model context.\n\nHow to communicate: Return the summary as-is in prose. If the input was truncated by `max_input_chars`, mention that fact in one short sentence so the user knows.\n\nExample: user says 'summarize this 40-page transcript, focus on action items'. Call {text:'<full transcript text>', instruction:'focus on action items, group by owner'} -> return the resulting bullet summary.",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "text",
@@ -111,21 +161,71 @@
       },
       "_uiHints": {
         "conf": {
-          "region": { "kind": "dropdown", "source": "regions" },
-          "endpoint": { "kind": "readonly", "dependsOn": "region", "placeholder": "Auto-derived from region" },
-          "compartment_id": { "kind": "dropdown", "source": "compartments" },
-          "model_id": { "kind": "dropdown", "source": "ociGenAiModels", "dependsOn": "region" },
-          "model_provider": { "kind": "readonly", "dependsOn": "model_id", "placeholder": "Auto-set: cohere or generic based on model_id" },
-          "auth_type": { "kind": "enum", "values": ["resource_principal", "instance_principal", "api_key"] }
+          "region": {
+            "kind": "dropdown",
+            "source": "regions"
+          },
+          "endpoint": {
+            "kind": "readonly",
+            "dependsOn": "region",
+            "placeholder": "Auto-derived from region",
+            "inputStyle": "singleline"
+          },
+          "compartment_id": {
+            "kind": "dropdown",
+            "source": "compartments"
+          },
+          "model_id": {
+            "kind": "dropdown",
+            "source": "ociGenAiModels",
+            "dependsOn": "region"
+          },
+          "model_provider": {
+            "kind": "readonly",
+            "dependsOn": "model_id",
+            "placeholder": "Auto-set: cohere or generic based on model_id",
+            "inputStyle": "singleline"
+          },
+          "auth_type": {
+            "kind": "enum",
+            "values": [
+              "resource_principal",
+              "instance_principal",
+              "api_key"
+            ],
+            "inputStyle": "singleline"
+          },
+          "temperature": {
+            "inputStyle": "singleline"
+          },
+          "max_tokens": {
+            "inputStyle": "singleline"
+          },
+          "chunk_chars": {
+            "inputStyle": "singleline"
+          },
+          "max_chunks": {
+            "inputStyle": "singleline"
+          },
+          "max_input_chars": {
+            "inputStyle": "singleline"
+          }
         },
-        "schema": {}
+        "schema": {
+          "text": {
+            "inputStyle": "multiline"
+          },
+          "instruction": {
+            "inputStyle": "singleline"
+          }
+        }
       },
       "_confDescriptions": {
         "model_id": "OCI GenAI summarizer model ID. See .aidp/knowledge/oci-genai-models.md (e.g. cohere.command-a-03-2025, xai.grok-4).",
         "model_provider": "cohere | generic. Auto-set from model_id family.",
         "region": "OCI region. Auto-filled from aidp-deploy.config.json. (e.g. us-ashburn-1, us-chicago-1)",
         "endpoint": "OCI GenAI inference endpoint. Auto-derived from region (readonly).",
-        "compartment_id": "OCI compartment OCID. OCI Console → Identity & Security → Compartments.",
+        "compartment_id": "OCI compartment OCID. OCI Console \u2192 Identity & Security \u2192 Compartments.",
         "auth_type": "Auth flavor: resource_principal (default, on-cluster), instance_principal, or api_key.",
         "temperature": "LLM sampling temperature (0.0-1.0). Low values give more faithful summaries.",
         "max_tokens": "Max tokens for each summarization step (per-chunk and final reduce).",
@@ -137,8 +237,8 @@
     {
       "toolClassName": "EmbeddingTool",
       "displayName": "Embedding",
-      "description": "Embeds one or more strings using an OCI GenAI embeddings model and returns a list of float vectors.\n\nWhen to use: Use when the user (or another tool) needs vector representations of text — typically for semantic search, similarity scoring, clustering, or upserting into a vector index. Pick this whenever you would otherwise call an external embeddings API.\n\nHow to communicate: Report the number of vectors returned and their dimensionality (e.g. '3 vectors, dim 1024'). Do not dump the raw float arrays into the reply unless the user explicitly asks.\n\nExample: user says 'embed these three product titles for search'. Call {texts:['Red running shoes','Blue hiking boots','Trail socks'], input_type:'search_document'} -> reply 'Embedded 3 strings into 1024-dim vectors.'",
-      "version": "1.3.1",
+      "description": "Embeds one or more strings using an OCI GenAI embeddings model and returns a list of float vectors.\n\nWhen to use: Use when the user (or another tool) needs vector representations of text \u2014 typically for semantic search, similarity scoring, clustering, or upserting into a vector index. Pick this whenever you would otherwise call an external embeddings API.\n\nHow to communicate: Report the number of vectors returned and their dimensionality (e.g. '3 vectors, dim 1024'). Do not dump the raw float arrays into the reply unless the user explicitly asks.\n\nExample: user says 'embed these three product titles for search'. Call {texts:['Red running shoes','Blue hiking boots','Trail socks'], input_type:'search_document'} -> reply 'Embedded 3 strings into 1024-dim vectors.'",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "text",
@@ -154,19 +254,38 @@
           "name": "texts",
           "type": "array",
           "description": "A list of strings to embed in one batch. Use this OR `text`, not both. Up to `max_texts` items (Cohere caps at 96); each item longer than `max_text_chars` is handled per the `truncate` setting.",
-          "default": ["Red running shoes", "Blue hiking boots", "Trail socks"],
+          "default": [
+            "Red running shoes",
+            "Blue hiking boots",
+            "Trail socks"
+          ],
           "examples": [
-            ["Red running shoes", "Blue hiking boots", "Trail socks"],
-            ["Refund policy: items can be returned within 30 days.", "Shipping: orders ship within 2 business days."]
+            [
+              "Red running shoes",
+              "Blue hiking boots",
+              "Trail socks"
+            ],
+            [
+              "Refund policy: items can be returned within 30 days.",
+              "Shipping: orders ship within 2 business days."
+            ]
           ]
         },
         {
           "name": "input_type",
           "type": "string",
           "description": "Embedding input-type hint (Cohere semantics). Use `search_document` for items being indexed, `search_query` for the user's lookup query, `classification` for label prediction inputs, `clustering` for unsupervised grouping. Optional; defaults to `search_document`.",
-          "enum": ["search_document", "search_query", "classification", "clustering"],
+          "enum": [
+            "search_document",
+            "search_query",
+            "classification",
+            "clustering"
+          ],
           "default": "search_document",
-          "examples": ["search_document", "search_query"]
+          "examples": [
+            "search_document",
+            "search_query"
+          ]
         }
       ],
       "conf": {
@@ -183,17 +302,83 @@
       },
       "_uiHints": {
         "conf": {
-          "region": { "kind": "dropdown", "source": "regions" },
-          "endpoint": { "kind": "readonly", "dependsOn": "region", "placeholder": "Auto-derived from region" },
-          "compartment_id": { "kind": "dropdown", "source": "compartments" },
-          "model_id": { "kind": "dropdown", "source": "ociGenAiModels", "dependsOn": "region" },
-          "model_provider": { "kind": "readonly", "dependsOn": "model_id", "placeholder": "Auto-set: cohere or generic based on model_id" },
-          "auth_type": { "kind": "enum", "values": ["resource_principal", "instance_principal", "api_key"] },
-          "input_type": { "kind": "enum", "values": ["search_document", "search_query", "classification", "clustering"] },
-          "truncate": { "kind": "enum", "values": ["NONE", "START", "END"] }
+          "region": {
+            "kind": "dropdown",
+            "source": "regions"
+          },
+          "endpoint": {
+            "kind": "readonly",
+            "dependsOn": "region",
+            "placeholder": "Auto-derived from region",
+            "inputStyle": "singleline"
+          },
+          "compartment_id": {
+            "kind": "dropdown",
+            "source": "compartments"
+          },
+          "model_id": {
+            "kind": "dropdown",
+            "source": "ociGenAiModels",
+            "dependsOn": "region"
+          },
+          "model_provider": {
+            "kind": "readonly",
+            "dependsOn": "model_id",
+            "placeholder": "Auto-set: cohere or generic based on model_id",
+            "inputStyle": "singleline"
+          },
+          "auth_type": {
+            "kind": "enum",
+            "values": [
+              "resource_principal",
+              "instance_principal",
+              "api_key"
+            ],
+            "inputStyle": "singleline"
+          },
+          "input_type": {
+            "kind": "enum",
+            "values": [
+              "search_document",
+              "search_query",
+              "classification",
+              "clustering"
+            ],
+            "inputStyle": "singleline"
+          },
+          "truncate": {
+            "kind": "enum",
+            "values": [
+              "NONE",
+              "START",
+              "END"
+            ],
+            "inputStyle": "singleline"
+          },
+          "max_texts": {
+            "inputStyle": "singleline"
+          },
+          "max_text_chars": {
+            "inputStyle": "singleline"
+          }
         },
         "schema": {
-          "input_type": { "kind": "enum", "values": ["search_document", "search_query", "classification", "clustering"] }
+          "input_type": {
+            "kind": "enum",
+            "values": [
+              "search_document",
+              "search_query",
+              "classification",
+              "clustering"
+            ],
+            "inputStyle": "singleline"
+          },
+          "text": {
+            "inputStyle": "multiline"
+          },
+          "texts": {
+            "inputStyle": "singleline"
+          }
         }
       },
       "_confDescriptions": {
@@ -201,7 +386,7 @@
         "model_provider": "cohere | generic. Auto-set from model_id family.",
         "region": "OCI region. Auto-filled from aidp-deploy.config.json. (e.g. us-ashburn-1, us-chicago-1)",
         "endpoint": "OCI GenAI inference endpoint. Auto-derived from region (readonly).",
-        "compartment_id": "OCI compartment OCID. OCI Console → Identity & Security → Compartments.",
+        "compartment_id": "OCI compartment OCID. OCI Console \u2192 Identity & Security \u2192 Compartments.",
         "auth_type": "Auth flavor: resource_principal (default, on-cluster), instance_principal, or api_key.",
         "input_type": "Default embedding input type if not provided per-call: search_document, search_query, classification, or clustering (Cohere semantics).",
         "max_texts": "Max number of strings per embed request (Cohere limit is 96).",

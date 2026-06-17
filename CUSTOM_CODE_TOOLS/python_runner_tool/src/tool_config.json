@@ -5,8 +5,8 @@
     {
       "toolClassName": "RunPythonTool",
       "displayName": "Run Python",
-      "description": "Executes a block of Python code in a sandboxed process and returns stdout, stderr, return code, and an optional structured `result` value.\n\nWhen to use: Use when the user asks to compute, transform, parse, or script something that the other tools do not cover (math, data munging, custom file processing, ad-hoc logic). Also use when the user asks to read or write AIDP files programmatically via aidp_read/aidp_write/aidp_list helpers exposed in the exec namespace.\n\nHow to discover inputs: If the code needs to read AIDP files and the user has not named them, FIRST call CatalogBrowserTool or WorkspaceFileTool to list candidates and ask which to use. URIs use `master:<catalog>.<schema>.<volume>:/<path>` or `workspace:/<path>` — prefer these unified URIs over passing raw paths.\n\nHow to communicate: Summarize the returned `result` and any printed output in plain prose. Quote short stdout snippets; for large outputs report line counts and a few sample lines instead of dumping the full text.\n\nExample: {code:\"import json\\nresult={'sum':sum(data)}\\nprint('ok')\", data:\"[1,2,3]\"} -> result {sum:6}, stdout 'ok'.",
-      "version": "1.3.1",
+      "description": "Executes a block of Python code in a sandboxed process and returns stdout, stderr, return code, and an optional structured `result` value.\n\nWhen to use: Use when the user asks to compute, transform, parse, or script something that the other tools do not cover (math, data munging, custom file processing, ad-hoc logic). Also use when the user asks to read or write AIDP files programmatically via aidp_read/aidp_write/aidp_list helpers exposed in the exec namespace.\n\nHow to discover inputs: If the code needs to read AIDP files and the user has not named them, FIRST call CatalogBrowserTool or WorkspaceFileTool to list candidates and ask which to use. URIs use `master:<catalog>.<schema>.<volume>:/<path>` or `workspace:/<path>` \u2014 prefer these unified URIs over passing raw paths.\n\nHow to communicate: Summarize the returned `result` and any printed output in plain prose. Quote short stdout snippets; for large outputs report line counts and a few sample lines instead of dumping the full text.\n\nExample: {code:\"import json\\nresult={'sum':sum(data)}\\nprint('ok')\", data:\"[1,2,3]\"} -> result {sum:6}, stdout 'ok'.",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "code",
@@ -43,7 +43,7 @@
         {
           "name": "files",
           "type": "string",
-          "description": "Optional list of AIDP URIs to pre-read before running the code. The bytes are exposed to user code as a dict named `files` keyed by alias (or URI basename). URI format: `master:<catalog>.<schema>.<volume>:/<path>` for catalog volume files or `workspace:/<path>` for workspace files. Accepts a JSON array of URI strings, a JSON array of {\"uri\":..., \"alias\":...} objects, or a JSON object of {alias: uri}. Optional — code can also call aidp_read/aidp_write/aidp_list on demand instead.",
+          "description": "Optional list of AIDP URIs to pre-read before running the code. The bytes are exposed to user code as a dict named `files` keyed by alias (or URI basename). URI format: `master:<catalog>.<schema>.<volume>:/<path>` for catalog volume files or `workspace:/<path>` for workspace files. Accepts a JSON array of URI strings, a JSON array of {\"uri\":..., \"alias\":...} objects, or a JSON object of {alias: uri}. Optional \u2014 code can also call aidp_read/aidp_write/aidp_list on demand instead.",
           "examples": [
             "[\"workspace:/uploads/report.csv\", \"master:construction_catalog.construction_schema.construction_documents:/safety_manual.pdf\"]",
             "[{\"uri\":\"workspace:/data/input.json\",\"alias\":\"input\"}]",
@@ -78,9 +78,43 @@
             "kind": "dropdown",
             "source": "workspaces",
             "dependsOn": "data_lake_ocid"
+          },
+          "timeout": {
+            "inputStyle": "singleline"
+          },
+          "max_output_lines": {
+            "inputStyle": "singleline"
+          },
+          "max_output_bytes": {
+            "inputStyle": "singleline"
+          },
+          "python_bin": {
+            "inputStyle": "singleline"
+          },
+          "api_version": {
+            "inputStyle": "singleline"
+          },
+          "service_path": {
+            "inputStyle": "singleline"
+          },
+          "auth_mode": {
+            "inputStyle": "singleline"
           }
         },
-        "schema": {}
+        "schema": {
+          "code": {
+            "inputStyle": "multiline"
+          },
+          "data": {
+            "inputStyle": "multiline"
+          },
+          "stdin": {
+            "inputStyle": "singleline"
+          },
+          "files": {
+            "inputStyle": "singleline"
+          }
+        }
       },
       "_confDescriptions": {
         "timeout": "Max seconds the Python block may run before being killed.",
@@ -98,8 +132,8 @@
     {
       "toolClassName": "RunNotebookTool",
       "displayName": "Run Notebook",
-      "description": "Executes a Jupyter notebook (.ipynb) on the live AIDP workspace kernel and returns each code cell's output.\n\nWhen to use: Use when the user asks to run, execute, or re-run a workspace notebook end-to-end — especially when they need the live workspace context (Spark session, datalake mounts, AIDP credentials). Provide `notebook_path` for a workspace file or `notebook_json` to run raw notebook content inline.\n\nHow to discover inputs: If the user hasn't named the notebook, FIRST call WorkspaceFileTool(list ...) to enumerate `.ipynb` files under the workspace and ask the user to pick. Default to listing first; after listing, summarize the names and ask which to run. Notebook paths are workspace paths like `Workspace/analysis.ipynb`.\n\nHow to communicate: Summarize per-cell results in plain prose — cell index, short output snippet, error if any. Quote tracebacks verbatim; for long DataFrame dumps report shape and a few sample rows instead of the full table.\n\nExample: user says 'run the sales report notebook' -> list notebooks -> {notebook_path:\"Workspace/sales_report.ipynb\"}.",
-      "version": "1.3.1",
+      "description": "Executes a Jupyter notebook (.ipynb) on the live AIDP workspace kernel and returns each code cell's output.\n\nWhen to use: Use when the user asks to run, execute, or re-run a workspace notebook end-to-end \u2014 especially when they need the live workspace context (Spark session, datalake mounts, AIDP credentials). Provide `notebook_path` for a workspace file or `notebook_json` to run raw notebook content inline.\n\nHow to discover inputs: If the user hasn't named the notebook, FIRST call WorkspaceFileTool(list ...) to enumerate `.ipynb` files under the workspace and ask the user to pick. Default to listing first; after listing, summarize the names and ask which to run. Notebook paths are workspace paths like `Workspace/analysis.ipynb`.\n\nHow to communicate: Summarize per-cell results in plain prose \u2014 cell index, short output snippet, error if any. Quote tracebacks verbatim; for long DataFrame dumps report shape and a few sample rows instead of the full table.\n\nExample: user says 'run the sales report notebook' -> list notebooks -> {notebook_path:\"Workspace/sales_report.ipynb\"}.",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "notebook_path",
@@ -151,7 +185,8 @@
           },
           "aidp_endpoint": {
             "kind": "readonly",
-            "dependsOn": "region"
+            "dependsOn": "region",
+            "inputStyle": "singleline"
           },
           "lake_ocid": {
             "kind": "dropdown",
@@ -168,7 +203,35 @@
             "dependsOn": "workspace_key"
           },
           "oci_config_profile": {
-            "kind": "secret"
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "ws_host": {
+            "inputStyle": "singleline"
+          },
+          "execution_timeout": {
+            "inputStyle": "singleline"
+          },
+          "connect_timeout": {
+            "inputStyle": "singleline"
+          },
+          "max_cells": {
+            "inputStyle": "singleline"
+          },
+          "max_output_chars": {
+            "inputStyle": "singleline"
+          },
+          "max_notebook_bytes": {
+            "inputStyle": "singleline"
+          },
+          "ws_retries": {
+            "inputStyle": "singleline"
+          },
+          "default_notebook_path": {
+            "inputStyle": "singleline"
+          },
+          "api_version": {
+            "inputStyle": "singleline"
           }
         },
         "schema": {
@@ -176,6 +239,9 @@
             "kind": "dropdown",
             "source": "notebookFiles",
             "dependsOn": "conf.workspace_key"
+          },
+          "notebook_json": {
+            "inputStyle": "singleline"
           }
         }
       },

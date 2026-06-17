@@ -5,8 +5,8 @@
     {
       "toolClassName": "SmtpEmailTool",
       "displayName": "Send Email",
-      "description": "Sends an outbound email message through a configured SMTP relay (OCI Email Delivery, Gmail, Office 365, or any standards-compliant SMTP server).\n\nWhen to use: Use when the user asks to send, email, notify, alert, message, or forward something to one or more recipients, or when the agent needs to tell a human a flow is awaiting input. Supports plain text and HTML bodies, CC/BCC, and priority hints.\n\nHow to discover inputs: Recipient addresses, subject, and body come from the user or from prior tool output — ask the user if any are missing. The sender (`from_addr`) and SMTP credentials are pre-configured in tool conf; do not ask the user for them.\n\nHow to communicate: After sending, confirm in one sentence with the recipient and subject. Do not echo the full body back.\n\nExample: user says 'email the report to alice@acme.com'. Call {to:'alice@acme.com', subject:'Weekly Report', body:'See attached summary...', content_type:'plain'}.",
-      "version": "1.3.1",
+      "description": "Sends an outbound email message through a configured SMTP relay (OCI Email Delivery, Gmail, Office 365, or any standards-compliant SMTP server).\n\nWhen to use: Use when the user asks to send, email, notify, alert, message, or forward something to one or more recipients, or when the agent needs to tell a human a flow is awaiting input. Supports plain text and HTML bodies, CC/BCC, and priority hints.\n\nHow to discover inputs: Recipient addresses, subject, and body come from the user or from prior tool output \u2014 ask the user if any are missing. The sender (`from_addr`) and SMTP credentials are pre-configured in tool conf; do not ask the user for them.\n\nHow to communicate: After sending, confirm in one sentence with the recipient and subject. Do not echo the full body back.\n\nExample: user says 'email the report to alice@acme.com'. Call {to:'alice@acme.com', subject:'Weekly Report', body:'See attached summary...', content_type:'plain'}.",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "to",
@@ -71,14 +71,21 @@
           "name": "content_type",
           "type": "string",
           "description": "Body MIME content type. Use `plain` for unformatted text, `html` for formatted markup. Optional; defaults to `plain`. Overrides the `html` boolean when both are set.",
-          "enum": ["plain", "html"],
+          "enum": [
+            "plain",
+            "html"
+          ],
           "default": "plain"
         },
         {
           "name": "priority",
           "type": "string",
           "description": "Message priority hint that sets the `X-Priority` header. Use `high` for urgent alerts, `low` for FYI notices, `normal` (default) for routine mail. Optional.",
-          "enum": ["low", "normal", "high"],
+          "enum": [
+            "low",
+            "normal",
+            "high"
+          ],
           "default": "normal"
         }
       ],
@@ -99,19 +106,82 @@
       },
       "_uiHints": {
         "conf": {
-          "smtp_password": { "kind": "secret" },
-          "smtp_username": { "kind": "secret" }
+          "smtp_password": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "smtp_username": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "smtp_host": {
+            "inputStyle": "singleline"
+          },
+          "smtp_port": {
+            "inputStyle": "singleline"
+          },
+          "from_addr": {
+            "inputStyle": "singleline"
+          },
+          "use_starttls": {
+            "inputStyle": "singleline"
+          },
+          "use_ssl": {
+            "inputStyle": "singleline"
+          },
+          "timeout": {
+            "inputStyle": "singleline"
+          },
+          "max_retries": {
+            "inputStyle": "singleline"
+          },
+          "allowed_recipient_domains": {
+            "inputStyle": "singleline"
+          }
         },
         "schema": {
-          "content_type": { "kind": "enum", "values": ["plain", "html"] },
-          "priority": { "kind": "enum", "values": ["low", "normal", "high"] }
+          "content_type": {
+            "kind": "enum",
+            "values": [
+              "plain",
+              "html"
+            ],
+            "inputStyle": "singleline"
+          },
+          "priority": {
+            "kind": "enum",
+            "values": [
+              "low",
+              "normal",
+              "high"
+            ],
+            "inputStyle": "singleline"
+          },
+          "to": {
+            "inputStyle": "singleline"
+          },
+          "subject": {
+            "inputStyle": "singleline"
+          },
+          "body": {
+            "inputStyle": "multiline"
+          },
+          "cc": {
+            "inputStyle": "singleline"
+          },
+          "bcc": {
+            "inputStyle": "singleline"
+          },
+          "html": {
+            "inputStyle": "multiline"
+          }
         }
       },
       "_confDescriptions": {
         "smtp_host": "SMTP server hostname (e.g. smtp.email.us-ashburn-1.oci.oraclecloud.com for OCI Email Delivery).",
         "smtp_port": "SMTP server port. 587 for STARTTLS (default), 465 for SSL, 25 for plain.",
-        "smtp_username": "(secret) SMTP auth username. OCI Console → Identity → Users → SMTP Credentials. Provide via secret store.",
-        "smtp_password": "(secret) SMTP auth password — DO NOT commit. Provide via secret store at deploy time.",
+        "smtp_username": "(secret) SMTP auth username. OCI Console \u2192 Identity \u2192 Users \u2192 SMTP Credentials. Provide via secret store.",
+        "smtp_password": "(secret) SMTP auth password \u2014 DO NOT commit. Provide via secret store at deploy time.",
         "from_addr": "Sender 'From' address. Must be a verified/approved sender on your SMTP relay.",
         "use_starttls": "If true, upgrade plaintext connection to TLS via STARTTLS (typical for port 587).",
         "use_ssl": "If true, use implicit SSL/TLS from the start (typical for port 465). Mutually exclusive with STARTTLS.",
@@ -123,8 +193,8 @@
     {
       "toolClassName": "ImapReadTool",
       "displayName": "Read IMAP Inbox",
-      "description": "Fetches messages from an IMAP mailbox (Gmail, Office 365, or any standards-compliant IMAP server) and returns a structured list with headers and body.\n\nWhen to use: Use when the user asks to read, check, list, search, summarize, or pull email from an inbox or folder — for example 'show me unread mail', 'any emails from Alice this week?', or 'summarize today's inbox'. Default to listing first when the target message is unknown.\n\nHow to discover inputs: Folder defaults to `INBOX` — only set `folder` if the user names a specific mailbox. If the user hasn't named one, list `INBOX` first, then summarize subjects/senders and ask which message they care about. IMAP server and credentials are pre-configured in tool conf.\n\nHow to communicate: Summarize results in plain prose (sender, subject, date, one-line snippet). Never dump raw `body_html` or full headers unless explicitly asked.\n\nExample: user says 'any unread mail today?'. Call {folder:'INBOX', unread_only:true, since:'2026-06-16', limit:25, fields:'uid,from,subject,date,body_text'}.",
-      "version": "1.3.1",
+      "description": "Fetches messages from an IMAP mailbox (Gmail, Office 365, or any standards-compliant IMAP server) and returns a structured list with headers and body.\n\nWhen to use: Use when the user asks to read, check, list, search, summarize, or pull email from an inbox or folder \u2014 for example 'show me unread mail', 'any emails from Alice this week?', or 'summarize today's inbox'. Default to listing first when the target message is unknown.\n\nHow to discover inputs: Folder defaults to `INBOX` \u2014 only set `folder` if the user names a specific mailbox. If the user hasn't named one, list `INBOX` first, then summarize subjects/senders and ask which message they care about. IMAP server and credentials are pre-configured in tool conf.\n\nHow to communicate: Summarize results in plain prose (sender, subject, date, one-line snippet). Never dump raw `body_html` or full headers unless explicitly asked.\n\nExample: user says 'any unread mail today?'. Call {folder:'INBOX', unread_only:true, since:'2026-06-16', limit:25, fields:'uid,from,subject,date,body_text'}.",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "folder",
@@ -193,16 +263,59 @@
       },
       "_uiHints": {
         "conf": {
-          "imap_password": { "kind": "secret" },
-          "imap_username": { "kind": "secret" }
+          "imap_password": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "imap_username": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "imap_host": {
+            "inputStyle": "singleline"
+          },
+          "imap_port": {
+            "inputStyle": "singleline"
+          },
+          "use_ssl": {
+            "inputStyle": "singleline"
+          },
+          "timeout": {
+            "inputStyle": "singleline"
+          },
+          "max_messages": {
+            "inputStyle": "singleline"
+          },
+          "max_body_bytes": {
+            "inputStyle": "singleline"
+          }
         },
-        "schema": {}
+        "schema": {
+          "folder": {
+            "inputStyle": "singleline"
+          },
+          "limit": {
+            "inputStyle": "singleline"
+          },
+          "unread_only": {
+            "inputStyle": "singleline"
+          },
+          "since": {
+            "inputStyle": "singleline"
+          },
+          "fields": {
+            "inputStyle": "singleline"
+          },
+          "mark_seen": {
+            "inputStyle": "singleline"
+          }
+        }
       },
       "_confDescriptions": {
         "imap_host": "IMAP server hostname (e.g. imap.gmail.com, outlook.office365.com).",
         "imap_port": "IMAP server port. 993 for SSL (default), 143 for plain/STARTTLS.",
         "imap_username": "(secret) IMAP login (usually the full email address). Provide via secret store.",
-        "imap_password": "(secret) IMAP password or app-password — DO NOT commit. Provide via secret store at deploy time.",
+        "imap_password": "(secret) IMAP password or app-password \u2014 DO NOT commit. Provide via secret store at deploy time.",
         "use_ssl": "If true, use implicit SSL/TLS (typical for port 993).",
         "timeout": "IMAP connection/read timeout in seconds.",
         "max_messages": "Hard cap on messages returned per call, regardless of requested limit.",

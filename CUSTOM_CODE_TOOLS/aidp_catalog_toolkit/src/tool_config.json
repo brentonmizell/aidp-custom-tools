@@ -6,15 +6,21 @@
       "toolClassName": "CatalogFileTool",
       "displayName": "Catalog File Read",
       "description": "Reads or lists files in an AIDP Standard Catalog volume.\n\nWhen to use: Use when the user asks to fetch, open, read, download, or list a file/document/PDF/dataset stored in a catalog volume. Supports `get` and `list` operations on `master:<catalog>.<schema>.<volume>:/<path>` URIs. For workspace files use WorkspaceFileTool; to write use VolumeWriteTool.\n\nHow to discover inputs: If the user hasn't named a catalog/schema/volume, FIRST call CatalogBrowserTool(list='volumes', catalog_key=..., schema_key=...) and ask which to use. Default to `operation='list'` first when the target file path is unknown.\n\nHow to communicate: Summarize listings as bulleted names; for binary content describe size + MIME type, never dump raw bytes.\n\nExample: CatalogBrowserTool(list='volumes', catalog_key='construction_catalog', schema_key='construction_schema') -> CatalogFileTool(operation='list', source_uri='master:construction_catalog.construction_schema.construction_documents:/') -> CatalogFileTool(operation='get', source_uri='master:construction_catalog.construction_schema.construction_documents:/safety_manual.pdf').",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "operation",
           "type": "string",
           "description": "The action to perform. Use `list` to browse a folder, `get` to download a file. Default to `list` first when the target path is unknown, then call `get` with the chosen path. Example: `list`.",
-          "enum": ["get", "list"],
+          "enum": [
+            "get",
+            "list"
+          ],
           "default": "get",
-          "examples": ["list", "get"]
+          "examples": [
+            "list",
+            "get"
+          ]
         },
         {
           "name": "source_uri",
@@ -32,35 +38,51 @@
           "type": "string",
           "description": "File path within the volume for `get` (e.g. `/safety_manual.pdf`) or folder path for `list` (default `/`). Ignored when `source_uri` is set. Optional if `source_uri` is provided. Example: `/reports/q3_summary.md`.",
           "default": "/safety_manual.pdf",
-          "examples": ["/safety_manual.pdf", "/reports/q3_summary.md", "/"]
+          "examples": [
+            "/safety_manual.pdf",
+            "/reports/q3_summary.md",
+            "/"
+          ]
         },
         {
           "name": "volume_key",
           "type": "string",
           "description": "Internal UUID identifying the catalog volume. Optional if `source_uri` is provided (preferred) or if catalog/schema/volume names are given instead. Discover keys with CatalogBrowserTool(list='volumes').",
           "default": "ocid1.volume.oc1..exampleuniqueid",
-          "examples": ["ocid1.volume.oc1..exampleuniqueid", "vol-7a3c91"]
+          "examples": [
+            "ocid1.volume.oc1..exampleuniqueid",
+            "vol-7a3c91"
+          ]
         },
         {
           "name": "catalog",
           "type": "string",
-          "description": "Catalog name (or key) when resolving by name. Optional if `source_uri` or `volume_key` is supplied — prefer the unified URI form. Example: `construction_catalog`.",
+          "description": "Catalog name (or key) when resolving by name. Optional if `source_uri` or `volume_key` is supplied \u2014 prefer the unified URI form. Example: `construction_catalog`.",
           "default": "construction_catalog",
-          "examples": ["construction_catalog", "finance_catalog"]
+          "examples": [
+            "construction_catalog",
+            "finance_catalog"
+          ]
         },
         {
           "name": "schema",
           "type": "string",
-          "description": "Schema name (or key) within the catalog. Optional if `source_uri` or `volume_key` is supplied — prefer the unified URI form. Example: `construction_schema`.",
+          "description": "Schema name (or key) within the catalog. Optional if `source_uri` or `volume_key` is supplied \u2014 prefer the unified URI form. Example: `construction_schema`.",
           "default": "construction_schema",
-          "examples": ["construction_schema", "reporting_schema"]
+          "examples": [
+            "construction_schema",
+            "reporting_schema"
+          ]
         },
         {
           "name": "volume",
           "type": "string",
-          "description": "Volume name (or key) within the schema. Optional if `source_uri` or `volume_key` is supplied — prefer the unified URI form. Example: `construction_documents`.",
+          "description": "Volume name (or key) within the schema. Optional if `source_uri` or `volume_key` is supplied \u2014 prefer the unified URI form. Example: `construction_documents`.",
           "default": "construction_documents",
-          "examples": ["construction_documents", "quarterly_reports"]
+          "examples": [
+            "construction_documents",
+            "quarterly_reports"
+          ]
         }
       ],
       "conf": {
@@ -80,25 +102,108 @@
         "private_key_content": "",
         "pass_phrase": ""
       },
-      "auth": { "authType": "OCI_RESOURCE_PRINCIPAL" },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
       "_uiHints": {
         "conf": {
-          "region": { "kind": "dropdown", "source": "regions" },
-          "data_lake_ocid": { "kind": "dropdown", "source": "dataLakes" },
-          "catalog": { "kind": "dropdown", "source": "catalogs" },
-          "schema": { "kind": "dropdown", "source": "schemas", "dependsOn": "catalog" },
-          "volume": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" },
-          "volume_key": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" },
-          "auth_mode": { "kind": "enum", "values": ["resource_principal", "user_principal", "instance_principal"] },
-          "private_key_content": { "kind": "secret" },
-          "pass_phrase": { "kind": "secret" }
+          "region": {
+            "kind": "dropdown",
+            "source": "regions"
+          },
+          "data_lake_ocid": {
+            "kind": "dropdown",
+            "source": "dataLakes"
+          },
+          "catalog": {
+            "kind": "dropdown",
+            "source": "catalogs"
+          },
+          "schema": {
+            "kind": "dropdown",
+            "source": "schemas",
+            "dependsOn": "catalog"
+          },
+          "volume": {
+            "kind": "dropdown",
+            "source": "volumes",
+            "dependsOn": "schema"
+          },
+          "volume_key": {
+            "kind": "dropdown",
+            "source": "volumes",
+            "dependsOn": "schema"
+          },
+          "auth_mode": {
+            "kind": "enum",
+            "values": [
+              "resource_principal",
+              "user_principal",
+              "instance_principal"
+            ],
+            "inputStyle": "singleline"
+          },
+          "private_key_content": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "pass_phrase": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "api_version": {
+            "inputStyle": "singleline"
+          },
+          "timeout": {
+            "inputStyle": "singleline"
+          },
+          "max_bytes": {
+            "inputStyle": "singleline"
+          },
+          "tenancy_ocid": {
+            "inputStyle": "singleline"
+          },
+          "user_ocid": {
+            "inputStyle": "singleline"
+          },
+          "fingerprint": {
+            "inputStyle": "singleline"
+          }
         },
         "schema": {
-          "operation": { "kind": "enum", "values": ["get", "list"] },
-          "catalog": { "kind": "dropdown", "source": "catalogs" },
-          "schema": { "kind": "dropdown", "source": "schemas", "dependsOn": "catalog" },
-          "volume": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" },
-          "volume_key": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" }
+          "operation": {
+            "kind": "enum",
+            "values": [
+              "get",
+              "list"
+            ],
+            "inputStyle": "singleline"
+          },
+          "catalog": {
+            "kind": "dropdown",
+            "source": "catalogs"
+          },
+          "schema": {
+            "kind": "dropdown",
+            "source": "schemas",
+            "dependsOn": "catalog"
+          },
+          "volume": {
+            "kind": "dropdown",
+            "source": "volumes",
+            "dependsOn": "schema"
+          },
+          "volume_key": {
+            "kind": "dropdown",
+            "source": "volumes",
+            "dependsOn": "schema"
+          },
+          "source_uri": {
+            "inputStyle": "singleline"
+          },
+          "path": {
+            "inputStyle": "singleline"
+          }
         }
       },
       "_confDescriptions": {
@@ -115,8 +220,8 @@
         "tenancy_ocid": "OCI Tenancy OCID. Auto-filled from ~/.oci/config.",
         "user_ocid": "OCI User OCID. Auto-filled from ~/.oci/config.",
         "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
-        "private_key_content": "(secret) PEM private key — DO NOT commit. Provide via secret store at deploy time.",
-        "pass_phrase": "(secret) Private key passphrase — DO NOT commit.",
+        "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
+        "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
         "service_path": "Auto-derived from api_version (20240831->dataLakes, 20260430->aiDataPlatforms). Only set if AIDP exposes a custom path."
       },
       "_schemaDescriptions": {
@@ -127,7 +232,7 @@
       "toolClassName": "VolumeWriteTool",
       "displayName": "Catalog Volume Write",
       "description": "Writes (uploads) a file into an AIDP Standard Catalog volume.\n\nWhen to use: Use when the user asks to save, persist, upload, store, or write an agent-generated artifact (report, dataset, summary, JSON, markdown) back into a catalog volume. Accepts `master:<catalog>.<schema>.<volume>:/<path>` URIs. For workspace writes use WorkspaceFileTool; to read existing files use CatalogFileTool.\n\nHow to discover inputs: If the user hasn't named a target volume, FIRST call CatalogBrowserTool(list='volumes', catalog_key=..., schema_key=...) and ask which to use.\n\nHow to communicate: Confirm the written URI and byte size in one sentence; do not echo the file content back.\n\nExample: CatalogBrowserTool(list='volumes', catalog_key='finance_catalog', schema_key='reporting_schema') -> VolumeWriteTool(dest_uri='master:finance_catalog.reporting_schema.quarterly_reports:/q3_summary.md', content='# Q3 Summary...').",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "dest_uri",
@@ -145,42 +250,60 @@
           "type": "string",
           "description": "Destination file path within the volume (e.g. `/reports/summary.md`). Ignored when `dest_uri` is set. Optional if `dest_uri` is provided.",
           "default": "/reports/q3_summary.md",
-          "examples": ["/reports/q3_summary.md", "/exports/result.json"]
+          "examples": [
+            "/reports/q3_summary.md",
+            "/exports/result.json"
+          ]
         },
         {
           "name": "content",
           "type": "string",
           "description": "The file body to write. Plain text or stringified JSON/markdown. Required for every write. Example: `# Quarterly Summary\\n\\nTotal revenue...`.",
           "default": "",
-          "examples": ["# Quarterly Summary\n\nTotal revenue: $12.3M", "{\"status\":\"ok\",\"rows\":42}"]
+          "examples": [
+            "# Quarterly Summary\n\nTotal revenue: $12.3M",
+            "{\"status\":\"ok\",\"rows\":42}"
+          ]
         },
         {
           "name": "volume_key",
           "type": "string",
           "description": "Internal UUID identifying the catalog volume. Optional if `dest_uri` is provided (preferred) or if catalog/schema/volume names are given instead. Discover keys with CatalogBrowserTool(list='volumes').",
           "default": "ocid1.volume.oc1..exampleuniqueid",
-          "examples": ["ocid1.volume.oc1..exampleuniqueid", "vol-7a3c91"]
+          "examples": [
+            "ocid1.volume.oc1..exampleuniqueid",
+            "vol-7a3c91"
+          ]
         },
         {
           "name": "catalog",
           "type": "string",
-          "description": "Catalog name (or key) when resolving by name. Optional if `dest_uri` or `volume_key` is supplied — prefer the unified URI form. Example: `finance_catalog`.",
+          "description": "Catalog name (or key) when resolving by name. Optional if `dest_uri` or `volume_key` is supplied \u2014 prefer the unified URI form. Example: `finance_catalog`.",
           "default": "finance_catalog",
-          "examples": ["finance_catalog", "construction_catalog"]
+          "examples": [
+            "finance_catalog",
+            "construction_catalog"
+          ]
         },
         {
           "name": "schema",
           "type": "string",
-          "description": "Schema name (or key) within the catalog. Optional if `dest_uri` or `volume_key` is supplied — prefer the unified URI form. Example: `reporting_schema`.",
+          "description": "Schema name (or key) within the catalog. Optional if `dest_uri` or `volume_key` is supplied \u2014 prefer the unified URI form. Example: `reporting_schema`.",
           "default": "reporting_schema",
-          "examples": ["reporting_schema", "construction_schema"]
+          "examples": [
+            "reporting_schema",
+            "construction_schema"
+          ]
         },
         {
           "name": "volume",
           "type": "string",
-          "description": "Volume name (or key) within the schema. Optional if `dest_uri` or `volume_key` is supplied — prefer the unified URI form. Example: `quarterly_reports`.",
+          "description": "Volume name (or key) within the schema. Optional if `dest_uri` or `volume_key` is supplied \u2014 prefer the unified URI form. Example: `quarterly_reports`.",
           "default": "quarterly_reports",
-          "examples": ["quarterly_reports", "construction_documents"]
+          "examples": [
+            "quarterly_reports",
+            "construction_documents"
+          ]
         }
       ],
       "conf": {
@@ -199,24 +322,100 @@
         "private_key_content": "",
         "pass_phrase": ""
       },
-      "auth": { "authType": "OCI_RESOURCE_PRINCIPAL" },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
       "_uiHints": {
         "conf": {
-          "region": { "kind": "dropdown", "source": "regions" },
-          "data_lake_ocid": { "kind": "dropdown", "source": "dataLakes" },
-          "catalog": { "kind": "dropdown", "source": "catalogs" },
-          "schema": { "kind": "dropdown", "source": "schemas", "dependsOn": "catalog" },
-          "volume": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" },
-          "volume_key": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" },
-          "auth_mode": { "kind": "enum", "values": ["resource_principal", "user_principal", "instance_principal"] },
-          "private_key_content": { "kind": "secret" },
-          "pass_phrase": { "kind": "secret" }
+          "region": {
+            "kind": "dropdown",
+            "source": "regions"
+          },
+          "data_lake_ocid": {
+            "kind": "dropdown",
+            "source": "dataLakes"
+          },
+          "catalog": {
+            "kind": "dropdown",
+            "source": "catalogs"
+          },
+          "schema": {
+            "kind": "dropdown",
+            "source": "schemas",
+            "dependsOn": "catalog"
+          },
+          "volume": {
+            "kind": "dropdown",
+            "source": "volumes",
+            "dependsOn": "schema"
+          },
+          "volume_key": {
+            "kind": "dropdown",
+            "source": "volumes",
+            "dependsOn": "schema"
+          },
+          "auth_mode": {
+            "kind": "enum",
+            "values": [
+              "resource_principal",
+              "user_principal",
+              "instance_principal"
+            ],
+            "inputStyle": "singleline"
+          },
+          "private_key_content": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "pass_phrase": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "api_version": {
+            "inputStyle": "singleline"
+          },
+          "timeout": {
+            "inputStyle": "singleline"
+          },
+          "tenancy_ocid": {
+            "inputStyle": "singleline"
+          },
+          "user_ocid": {
+            "inputStyle": "singleline"
+          },
+          "fingerprint": {
+            "inputStyle": "singleline"
+          }
         },
         "schema": {
-          "catalog": { "kind": "dropdown", "source": "catalogs" },
-          "schema": { "kind": "dropdown", "source": "schemas", "dependsOn": "catalog" },
-          "volume": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" },
-          "volume_key": { "kind": "dropdown", "source": "volumes", "dependsOn": "schema" }
+          "catalog": {
+            "kind": "dropdown",
+            "source": "catalogs"
+          },
+          "schema": {
+            "kind": "dropdown",
+            "source": "schemas",
+            "dependsOn": "catalog"
+          },
+          "volume": {
+            "kind": "dropdown",
+            "source": "volumes",
+            "dependsOn": "schema"
+          },
+          "volume_key": {
+            "kind": "dropdown",
+            "source": "volumes",
+            "dependsOn": "schema"
+          },
+          "dest_uri": {
+            "inputStyle": "singleline"
+          },
+          "path": {
+            "inputStyle": "singleline"
+          },
+          "content": {
+            "inputStyle": "multiline"
+          }
         }
       },
       "_confDescriptions": {
@@ -232,48 +431,68 @@
         "tenancy_ocid": "OCI Tenancy OCID. Auto-filled from ~/.oci/config.",
         "user_ocid": "OCI User OCID. Auto-filled from ~/.oci/config.",
         "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
-        "private_key_content": "(secret) PEM private key — DO NOT commit. Provide via secret store at deploy time.",
-        "pass_phrase": "(secret) Private key passphrase — DO NOT commit.",
+        "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
+        "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
         "service_path": "Auto-derived from api_version (20240831->dataLakes, 20260430->aiDataPlatforms). Only set if AIDP exposes a custom path."
       },
       "_schemaDescriptions": {
-        "dest_uri": "AIDP master URI form: master:<catalog>.<schema>.<volume>:/<path>. When set, supersedes the legacy volume_key / catalog / schema / volume / path fields. Workspace writes are not supported here — use the Workspace File tool. Delegated to the shared aidp_io module."
+        "dest_uri": "AIDP master URI form: master:<catalog>.<schema>.<volume>:/<path>. When set, supersedes the legacy volume_key / catalog / schema / volume / path fields. Workspace writes are not supported here \u2014 use the Workspace File tool. Delegated to the shared aidp_io module."
       }
     },
     {
       "toolClassName": "CatalogBrowserTool",
       "displayName": "Catalog Browser",
       "description": "Discovers AIDP catalog metadata: lists catalogs, schemas, tables, volumes, knowledge bases, or describes a table's columns.\n\nWhen to use: Use FIRST whenever the user mentions data assets without naming exact keys, or when another tool (CatalogFileTool, VolumeWriteTool, SqlExecTool, KBIngestTool) needs a catalog_key/schema_key/table_key/volume name you don't have. Default to listing before acting.\n\nHow to communicate: After listing, summarize the names in a short bulleted list and ask the user which to pick. For `list='table'`, return column names + types.\n\nExample: CatalogBrowserTool(list='catalogs') -> ask user -> CatalogBrowserTool(list='schemas', catalog_key='construction_catalog') -> CatalogBrowserTool(list='volumes', catalog_key='construction_catalog', schema_key='construction_schema') -> hand the chosen volume to CatalogFileTool.",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "list",
           "type": "string",
           "description": "What to discover. Use `catalogs` to enumerate top-level catalogs, `schemas` within a catalog, `tables`/`volumes`/`knowledgeBases` within a schema, or `table` to describe one table's columns. Start with `catalogs` when nothing is known.",
-          "enum": ["catalogs", "schemas", "tables", "volumes", "knowledgeBases", "table"],
+          "enum": [
+            "catalogs",
+            "schemas",
+            "tables",
+            "volumes",
+            "knowledgeBases",
+            "table"
+          ],
           "default": "catalogs",
-          "examples": ["catalogs", "volumes", "table"]
+          "examples": [
+            "catalogs",
+            "volumes",
+            "table"
+          ]
         },
         {
           "name": "catalog_key",
           "type": "string",
           "description": "Catalog key identifying the parent catalog. Required for `schemas`, `tables`, `volumes`, `knowledgeBases`, and `table`. Discover with `list='catalogs'` first. Example: `construction_catalog`.",
           "default": "construction_catalog",
-          "examples": ["construction_catalog", "finance_catalog"]
+          "examples": [
+            "construction_catalog",
+            "finance_catalog"
+          ]
         },
         {
           "name": "schema_key",
           "type": "string",
           "description": "Schema key within the catalog. Required for `tables`, `volumes`, `knowledgeBases`, and `table`. Discover with `list='schemas'` first. Example: `construction_schema`.",
           "default": "construction_schema",
-          "examples": ["construction_schema", "reporting_schema"]
+          "examples": [
+            "construction_schema",
+            "reporting_schema"
+          ]
         },
         {
           "name": "table_key",
           "type": "string",
           "description": "Table key to describe. Required only when `list='table'`. Discover with `list='tables'` first. Example: `incident_reports`.",
           "default": "incident_reports",
-          "examples": ["incident_reports", "quarterly_revenue"]
+          "examples": [
+            "incident_reports",
+            "quarterly_revenue"
+          ]
         }
       ],
       "conf": {
@@ -288,20 +507,79 @@
         "private_key_content": "",
         "pass_phrase": ""
       },
-      "auth": { "authType": "OCI_RESOURCE_PRINCIPAL" },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
       "_uiHints": {
         "conf": {
-          "region": { "kind": "dropdown", "source": "regions" },
-          "data_lake_ocid": { "kind": "dropdown", "source": "dataLakes" },
-          "auth_mode": { "kind": "enum", "values": ["resource_principal", "user_principal", "instance_principal"] },
-          "private_key_content": { "kind": "secret" },
-          "pass_phrase": { "kind": "secret" }
+          "region": {
+            "kind": "dropdown",
+            "source": "regions"
+          },
+          "data_lake_ocid": {
+            "kind": "dropdown",
+            "source": "dataLakes"
+          },
+          "auth_mode": {
+            "kind": "enum",
+            "values": [
+              "resource_principal",
+              "user_principal",
+              "instance_principal"
+            ],
+            "inputStyle": "singleline"
+          },
+          "private_key_content": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "pass_phrase": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "api_version": {
+            "inputStyle": "singleline"
+          },
+          "timeout": {
+            "inputStyle": "singleline"
+          },
+          "tenancy_ocid": {
+            "inputStyle": "singleline"
+          },
+          "user_ocid": {
+            "inputStyle": "singleline"
+          },
+          "fingerprint": {
+            "inputStyle": "singleline"
+          }
         },
         "schema": {
-          "list": { "kind": "enum", "values": ["catalogs", "schemas", "tables", "volumes", "knowledgeBases", "table"] },
-          "catalog_key": { "kind": "dropdown", "source": "catalogs" },
-          "schema_key": { "kind": "dropdown", "source": "schemas", "dependsOn": "catalog_key" },
-          "table_key": { "kind": "dropdown", "source": "tables", "dependsOn": "schema_key" }
+          "list": {
+            "kind": "enum",
+            "values": [
+              "catalogs",
+              "schemas",
+              "tables",
+              "volumes",
+              "knowledgeBases",
+              "table"
+            ],
+            "inputStyle": "singleline"
+          },
+          "catalog_key": {
+            "kind": "dropdown",
+            "source": "catalogs"
+          },
+          "schema_key": {
+            "kind": "dropdown",
+            "source": "schemas",
+            "dependsOn": "catalog_key"
+          },
+          "table_key": {
+            "kind": "dropdown",
+            "source": "tables",
+            "dependsOn": "schema_key"
+          }
         }
       },
       "_confDescriptions": {
@@ -313,8 +591,8 @@
         "tenancy_ocid": "OCI Tenancy OCID. Auto-filled from ~/.oci/config.",
         "user_ocid": "OCI User OCID. Auto-filled from ~/.oci/config.",
         "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
-        "private_key_content": "(secret) PEM private key — DO NOT commit. Provide via secret store at deploy time.",
-        "pass_phrase": "(secret) Private key passphrase — DO NOT commit.",
+        "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
+        "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
         "service_path": "Auto-derived from api_version (20240831->dataLakes, 20260430->aiDataPlatforms). Only set if AIDP exposes a custom path."
       }
     },
@@ -322,15 +600,21 @@
       "toolClassName": "KBIngestTool",
       "displayName": "KB Ingestion",
       "description": "Lists ingestion jobs for an AIDP knowledge base, or triggers an ingestion run to (re)index it.\n\nWhen to use: Use when the user asks to refresh/reindex/re-ingest a knowledge base, check ingestion status, or kick off a new RAG ingest after documents change. Supports `list_jobs` (discovery) and `trigger` (start a run). Default to `list_jobs` first when the job key is unknown.\n\nHow to discover inputs: If the user hasn't named a KB, call CatalogBrowserTool(list='knowledgeBases', catalog_key=..., schema_key=...) to enumerate KBs. Then call KBIngestTool(operation='list_jobs', kb_key=...) and ask which job to trigger.\n\nHow to communicate: For listings, show job names + last-run status. For triggers, return the run id and current state.\n\nExample: KBIngestTool(operation='list_jobs', kb_key='construction_catalog.construction_schema.safety_kb') -> KBIngestTool(operation='trigger', kb_key='...', job_key='daily_refresh').",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "operation",
           "type": "string",
           "description": "The action to perform. Use `list_jobs` to enumerate ingestion jobs for a KB, or `trigger` to start a run. Default to `list_jobs` first when the job_key is unknown.",
-          "enum": ["list_jobs", "trigger"],
+          "enum": [
+            "list_jobs",
+            "trigger"
+          ],
           "default": "list_jobs",
-          "examples": ["list_jobs", "trigger"]
+          "examples": [
+            "list_jobs",
+            "trigger"
+          ]
         },
         {
           "name": "kb_key",
@@ -347,7 +631,10 @@
           "type": "string",
           "description": "Job key identifying the ingestion job to trigger. Required when `operation='trigger'`; ignored for `list_jobs`. Discover by calling this tool with `operation='list_jobs'` first. Example: `daily_refresh`.",
           "default": "daily_refresh",
-          "examples": ["daily_refresh", "manual_reingest"]
+          "examples": [
+            "daily_refresh",
+            "manual_reingest"
+          ]
         },
         {
           "name": "run_config",
@@ -369,20 +656,77 @@
         "private_key_content": "",
         "pass_phrase": ""
       },
-      "auth": { "authType": "OCI_RESOURCE_PRINCIPAL" },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
       "_uiHints": {
         "conf": {
-          "region": { "kind": "dropdown", "source": "regions" },
-          "data_lake_ocid": { "kind": "dropdown", "source": "dataLakes" },
-          "kb_key": { "kind": "dropdown", "source": "knowledgeBases" },
-          "auth_mode": { "kind": "enum", "values": ["resource_principal", "user_principal", "instance_principal"] },
-          "private_key_content": { "kind": "secret" },
-          "pass_phrase": { "kind": "secret" }
+          "region": {
+            "kind": "dropdown",
+            "source": "regions"
+          },
+          "data_lake_ocid": {
+            "kind": "dropdown",
+            "source": "dataLakes"
+          },
+          "kb_key": {
+            "kind": "dropdown",
+            "source": "knowledgeBases"
+          },
+          "auth_mode": {
+            "kind": "enum",
+            "values": [
+              "resource_principal",
+              "user_principal",
+              "instance_principal"
+            ],
+            "inputStyle": "singleline"
+          },
+          "private_key_content": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "pass_phrase": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "api_version": {
+            "inputStyle": "singleline"
+          },
+          "timeout": {
+            "inputStyle": "singleline"
+          },
+          "tenancy_ocid": {
+            "inputStyle": "singleline"
+          },
+          "user_ocid": {
+            "inputStyle": "singleline"
+          },
+          "fingerprint": {
+            "inputStyle": "singleline"
+          }
         },
         "schema": {
-          "operation": { "kind": "enum", "values": ["list_jobs", "trigger"] },
-          "kb_key": { "kind": "dropdown", "source": "knowledgeBases" },
-          "job_key": { "kind": "dropdown", "source": "jobs", "dependsOn": "kb_key" }
+          "operation": {
+            "kind": "enum",
+            "values": [
+              "list_jobs",
+              "trigger"
+            ],
+            "inputStyle": "singleline"
+          },
+          "kb_key": {
+            "kind": "dropdown",
+            "source": "knowledgeBases"
+          },
+          "job_key": {
+            "kind": "dropdown",
+            "source": "jobs",
+            "dependsOn": "kb_key"
+          },
+          "run_config": {
+            "inputStyle": "singleline"
+          }
         }
       },
       "_confDescriptions": {
@@ -395,8 +739,8 @@
         "tenancy_ocid": "OCI Tenancy OCID. Auto-filled from ~/.oci/config.",
         "user_ocid": "OCI User OCID. Auto-filled from ~/.oci/config.",
         "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
-        "private_key_content": "(secret) PEM private key — DO NOT commit. Provide via secret store at deploy time.",
-        "pass_phrase": "(secret) Private key passphrase — DO NOT commit.",
+        "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
+        "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
         "service_path": "Auto-derived from api_version (20240831->dataLakes, 20260430->aiDataPlatforms). Only set if AIDP exposes a custom path."
       }
     },
@@ -404,36 +748,53 @@
       "toolClassName": "WorkspaceFileTool",
       "displayName": "Workspace File",
       "description": "Reads or lists files in the AIDP workspace (notebooks, scripts, configs under /Workspace).\n\nWhen to use: Use when the user asks to read, open, list, or browse a workspace file (.ipynb, .py, .md, .txt, config, log) that lives under /Workspace rather than in a catalog volume. For catalog-volume files use CatalogFileTool; for catalog writes use VolumeWriteTool. Accepts `workspace:/<path>` URIs only. Default to `operation='list'` first when the path is unknown.\n\nHow to communicate: For listings, show file names as bullets and ask which to open. For `get`, summarize content in plain prose; for binary, describe size + type.\n\nExample: WorkspaceFileTool(operation='list', source_uri='workspace:/Notebooks/') -> WorkspaceFileTool(operation='get', source_uri='workspace:/Notebooks/analysis.ipynb').",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "schema": [
         {
           "name": "operation",
           "type": "string",
           "description": "The action to perform. Use `list` to browse a folder, `get` to download a file. Default to `list` first when the target path is unknown.",
-          "enum": ["get", "list"],
+          "enum": [
+            "get",
+            "list"
+          ],
           "default": "get",
-          "examples": ["list", "get"]
+          "examples": [
+            "list",
+            "get"
+          ]
         },
         {
           "name": "source_uri",
           "type": "string",
-          "description": "Fully-qualified workspace URI to read from. Format: `workspace:/<path>` only. Master/catalog URIs are not accepted — use CatalogFileTool for those. PREFER this unified URI over the legacy `path` field. Optional if `path` is provided.",
+          "description": "Fully-qualified workspace URI to read from. Format: `workspace:/<path>` only. Master/catalog URIs are not accepted \u2014 use CatalogFileTool for those. PREFER this unified URI over the legacy `path` field. Optional if `path` is provided.",
           "default": "workspace:/Notebooks/analysis.ipynb",
-          "examples": ["workspace:/Notebooks/analysis.ipynb", "workspace:/scripts/etl.py", "workspace:/"]
+          "examples": [
+            "workspace:/Notebooks/analysis.ipynb",
+            "workspace:/scripts/etl.py",
+            "workspace:/"
+          ]
         },
         {
           "name": "dest_uri",
           "type": "string",
-          "description": "Fully-qualified workspace destination URI (reserved for future workspace-write operations). Format: `workspace:/<path>` only. Master/catalog URIs are not accepted — use VolumeWriteTool for those. Optional; currently unused for `get`/`list`.",
+          "description": "Fully-qualified workspace destination URI (reserved for future workspace-write operations). Format: `workspace:/<path>` only. Master/catalog URIs are not accepted \u2014 use VolumeWriteTool for those. Optional; currently unused for `get`/`list`.",
           "default": "workspace:/exports/result.json",
-          "examples": ["workspace:/exports/result.json", "workspace:/Notebooks/output.ipynb"]
+          "examples": [
+            "workspace:/exports/result.json",
+            "workspace:/Notebooks/output.ipynb"
+          ]
         },
         {
           "name": "path",
           "type": "string",
           "description": "Workspace path relative to `/Workspace` for `get` (e.g. `Notebooks/foo.ipynb`) or a folder for `list` (default `/`). Ignored when `source_uri`/`dest_uri` is set. Optional if a URI is provided.",
           "default": "Notebooks/analysis.ipynb",
-          "examples": ["Notebooks/analysis.ipynb", "scripts/etl.py", "/"]
+          "examples": [
+            "Notebooks/analysis.ipynb",
+            "scripts/etl.py",
+            "/"
+          ]
         }
       ],
       "conf": {
@@ -450,18 +811,78 @@
         "private_key_content": "",
         "pass_phrase": ""
       },
-      "auth": { "authType": "OCI_RESOURCE_PRINCIPAL" },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
       "_uiHints": {
         "conf": {
-          "region": { "kind": "dropdown", "source": "regions" },
-          "data_lake_ocid": { "kind": "dropdown", "source": "dataLakes" },
-          "workspace_id": { "kind": "dropdown", "source": "workspaces", "dependsOn": "data_lake_ocid" },
-          "auth_mode": { "kind": "enum", "values": ["resource_principal", "user_principal", "instance_principal"] },
-          "private_key_content": { "kind": "secret" },
-          "pass_phrase": { "kind": "secret" }
+          "region": {
+            "kind": "dropdown",
+            "source": "regions"
+          },
+          "data_lake_ocid": {
+            "kind": "dropdown",
+            "source": "dataLakes"
+          },
+          "workspace_id": {
+            "kind": "dropdown",
+            "source": "workspaces",
+            "dependsOn": "data_lake_ocid"
+          },
+          "auth_mode": {
+            "kind": "enum",
+            "values": [
+              "resource_principal",
+              "user_principal",
+              "instance_principal"
+            ],
+            "inputStyle": "singleline"
+          },
+          "private_key_content": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "pass_phrase": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "api_version": {
+            "inputStyle": "singleline"
+          },
+          "timeout": {
+            "inputStyle": "singleline"
+          },
+          "max_bytes": {
+            "inputStyle": "singleline"
+          },
+          "tenancy_ocid": {
+            "inputStyle": "singleline"
+          },
+          "user_ocid": {
+            "inputStyle": "singleline"
+          },
+          "fingerprint": {
+            "inputStyle": "singleline"
+          }
         },
         "schema": {
-          "operation": { "kind": "enum", "values": ["get", "list"] }
+          "operation": {
+            "kind": "enum",
+            "values": [
+              "get",
+              "list"
+            ],
+            "inputStyle": "singleline"
+          },
+          "source_uri": {
+            "inputStyle": "singleline"
+          },
+          "dest_uri": {
+            "inputStyle": "singleline"
+          },
+          "path": {
+            "inputStyle": "singleline"
+          }
         }
       },
       "_confDescriptions": {
@@ -475,8 +896,8 @@
         "tenancy_ocid": "OCI Tenancy OCID. Auto-filled from ~/.oci/config.",
         "user_ocid": "OCI User OCID. Auto-filled from ~/.oci/config.",
         "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
-        "private_key_content": "(secret) PEM private key — DO NOT commit. Provide via secret store at deploy time.",
-        "pass_phrase": "(secret) Private key passphrase — DO NOT commit.",
+        "private_key_content": "(secret) PEM private key \u2014 DO NOT commit. Provide via secret store at deploy time.",
+        "pass_phrase": "(secret) Private key passphrase \u2014 DO NOT commit.",
         "service_path": "Auto-derived from api_version (20240831->dataLakes, 20260430->aiDataPlatforms). Only set if AIDP exposes a custom path."
       },
       "_schemaDescriptions": {
