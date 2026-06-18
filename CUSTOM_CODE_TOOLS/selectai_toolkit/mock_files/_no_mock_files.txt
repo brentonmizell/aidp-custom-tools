@@ -1,0 +1,1 @@
+No bundled mocks. Sample SQL and rows for testing come from the developer's own ADB (e.g. the SH or HR sample schema, or the construction demo schema). See ../TESTING_INSTRUCTIONS.md.

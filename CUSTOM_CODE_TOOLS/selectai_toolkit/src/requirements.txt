@@ -1,0 +1,12 @@
+# selectai_toolkit dependencies
+#
+# Runtime-provided by AIDP (do NOT pin here):
+#   - oci         (OCI Python SDK, used for GenAI auth via resource principals)
+#   - requests    (HTTP client used by AIDP-native tools)
+#
+# Toolkit-specific:
+#   - oracledb    Oracle DB driver used to connect to Autonomous Database
+#                 and run DBMS_CLOUD_AI.GENERATE / SELECT AI calls for both
+#                 SelectAIProvisionTool (profile setup) and NL2SQLTool
+#                 (natural-language to SQL execution).
+oracledb>=2.0

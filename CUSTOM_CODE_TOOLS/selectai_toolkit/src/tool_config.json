@@ -1,0 +1,19 @@
+{
+  "displayName": "AIDP Select AI Toolkit",
+  "description": "Provision and query Oracle Autonomous Database Select AI profiles. Two-tool pair: SelectAIProvisionTool sets up the natural-language-to-SQL profile once, NL2SQLTool answers user questions against it on every turn. SQL executes directly via oracledb against the ADB (no MCP, no extra services).",
+  "tools": [
+    {
+      "toolClassName": "SelectAIProvisionTool",
+      "displayName": "Select AI Provision",
+      "description": "Provisions an Oracle ADB Select AI profile + agent tool so the companion NL2SQLTool can answer natural-language questions about a fixed set of tables. Runs DBMS_CLOUD_AI.CREATE_PROFILE and DBMS_CLOUD_AI_AGENT.CREATE_TOOL, records the result in an AIDP_NL2SQL_PROFILES audit table (auto-created on first run), and is fully idempotent: a config-hash check skips work when inputs are unchanged, and re-runs cleanly drop+recreate the profile when they change. Run this FIRST, then NL2SQLTool.\n\nWhen to use: Use ONCE per (connection, schema, table set, model) combination, BEFORE the agent's first NL2SQL turn. Use again ONLY when the user changes the target tables, target schema, LLM model, or credential — the hash check makes repeat calls safe. DO NOT use this for ad-hoc queries; NL2SQLTool is the per-turn worker.\n\nHow to discover inputs: For `aidp_catalog_key`, ask the user or call CatalogBrowserTool(list='catalogs') to enumerate AIDP catalog bindings that expose ADB credentials. For `target_schema` and `target_tables`, ask the user which schema and which comma-separated table list Select AI should reason over — do NOT default to `*` for schemas with many tables (Select AI prompts get huge fast). The `llm_model_id` defaults to a Grok 4 OCI GenAI model; override only when the user explicitly asks.\n\nHow to communicate: Report the action (`created`, `unchanged`, `recreated`) and the profile name in one sentence. On `unchanged`, confirm the agent can proceed to NL2SQLTool with no further setup. Never echo the wallet contents or the credential password.\n\nExample: SelectAIProvisionTool(profile_name='constr_demo', target_schema='ADMIN', target_tables='INCIDENT_REPORTS,WORK_ORDERS,EMPLOYEES', aidp_catalog_key='construction_catalog.construction_schema.construction_db') -> NL2SQLTool(profile_name='constr_demo', action='RUNSQL', prompt='how many open incidents last month?').",
+      "version": "1.0.0",
+      "...": "truncated for brevity — see file on disk at the same path for full contents"
+    },
+    {
+      "toolClassName": "NL2SQLTool",
+      "displayName": "NL to SQL (Select AI)",
+      "version": "1.0.0",
+      "...": "truncated — full content written to disk"
+    }
+  ]
+}

@@ -19,9 +19,10 @@ backend is required). One ZIP = one isolated deploy venv.
 | `aidp_catalog_toolkit` | CatalogFileTool, VolumeWriteTool, CatalogBrowserTool, KBIngestTool, WorkspaceFileTool | none (oci, requests pre-installed) | Needs AIDP Data Lake API + RP |
 | `document_extract_tool` | DocumentExtractTool | pypdf, pdfplumber, python-docx | text/csv yes; pdf/docx need deploy |
 | `python_runner_tool` | RunPythonTool, RunNotebookTool | websocket-client (for RunNotebook) | RunPython yes; RunNotebook needs AIDP kernel |
+| `selectai_toolkit` | SelectAIProvisionTool, NL2SQLTool | oracledb | Needs ADB + OCI GenAI |
 | `custom_tool_template` | (template, not a tool) | — | — |
 
-## The AIDP-native set (aidp_catalog_toolkit) — highest strategic value
+## The AIDP-native set (aidp_catalog_toolkit + selectai_toolkit) — highest strategic value
 Built against the real AIDP Data Lake REST API (the same calls the Flow Designer
 extension uses), resource-principal signed:
 - **CatalogFileTool** — read/list Standard Catalog volume files.
@@ -31,6 +32,10 @@ extension uses), resource-principal signed:
 Together they close the RAG loop: write files -> trigger ingestion -> the KB is
 queryable. File meta actions send the file `path` as an HTTP header (verified
 against the extension) and use the pre-authenticated-URL (parUrl) pattern.
+`selectai_toolkit` closes the NL2SQL loop alongside `aidp_catalog_toolkit`:
+CatalogBrowser surfaces the tables, SelectAIProvision wires up an Autonomous
+Database SELECT AI profile, and NL2SQL turns a natural-language question into a
+governed SQL answer against those same catalog assets.
 
 ## Built-in quality characteristics (every tool)
 - `get_cfg` unwraps `conf["conf"]` and coerces template-stringified numbers.
@@ -52,3 +57,5 @@ against the extension) and use the pre-authenticated-URL (parUrl) pattern.
 - RunPython → standalone Custom Code (DATAHUB-25052).
 - RunNotebook → run a workspace .ipynb on the AIDP kernel (reuses the Spark
   tool's signed-WebSocket notebook protocol; real Spark/datalake context).
+- selectai_toolkit → NL2SQL on Autonomous Database via SELECT AI; pairs with
+  CatalogBrowser to point profiles at governed tables.
