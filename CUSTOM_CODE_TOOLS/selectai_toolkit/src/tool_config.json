@@ -1,19 +1,352 @@
 {
   "displayName": "AIDP Select AI Toolkit",
-  "description": "Provision and query Oracle Autonomous Database Select AI profiles. Two-tool pair: SelectAIProvisionTool sets up the natural-language-to-SQL profile once, NL2SQLTool answers user questions against it on every turn. SQL executes directly via oracledb against the ADB (no MCP, no extra services).",
+  "description": "Natural-language-to-SQL on an Oracle Autonomous Database using Select AI (DBMS_CLOUD_AI). Two-tool pair: SelectAIProvisionTool sets up the NL2SQL profile once on the target ADB, NL2SQLTool turns user questions into SQL and runs them on every agent turn. This is NL2SQL ONLY \u2014 for plain SQL execution against an Oracle catalog, use AIDP's first-party SQL Tool (catalogType=EXTERNAL).",
   "tools": [
     {
       "toolClassName": "SelectAIProvisionTool",
       "displayName": "Select AI Provision",
-      "description": "Provisions an Oracle ADB Select AI profile + agent tool so the companion NL2SQLTool can answer natural-language questions about a fixed set of tables. Runs DBMS_CLOUD_AI.CREATE_PROFILE and DBMS_CLOUD_AI_AGENT.CREATE_TOOL, records the result in an AIDP_NL2SQL_PROFILES audit table (auto-created on first run), and is fully idempotent: a config-hash check skips work when inputs are unchanged, and re-runs cleanly drop+recreate the profile when they change. Run this FIRST, then NL2SQLTool.\n\nWhen to use: Use ONCE per (connection, schema, table set, model) combination, BEFORE the agent's first NL2SQL turn. Use again ONLY when the user changes the target tables, target schema, LLM model, or credential — the hash check makes repeat calls safe. DO NOT use this for ad-hoc queries; NL2SQLTool is the per-turn worker.\n\nHow to discover inputs: For `aidp_catalog_key`, ask the user or call CatalogBrowserTool(list='catalogs') to enumerate AIDP catalog bindings that expose ADB credentials. For `target_schema` and `target_tables`, ask the user which schema and which comma-separated table list Select AI should reason over — do NOT default to `*` for schemas with many tables (Select AI prompts get huge fast). The `llm_model_id` defaults to a Grok 4 OCI GenAI model; override only when the user explicitly asks.\n\nHow to communicate: Report the action (`created`, `unchanged`, `recreated`) and the profile name in one sentence. On `unchanged`, confirm the agent can proceed to NL2SQLTool with no further setup. Never echo the wallet contents or the credential password.\n\nExample: SelectAIProvisionTool(profile_name='constr_demo', target_schema='ADMIN', target_tables='INCIDENT_REPORTS,WORK_ORDERS,EMPLOYEES', aidp_catalog_key='construction_catalog.construction_schema.construction_db') -> NL2SQLTool(profile_name='constr_demo', action='RUNSQL', prompt='how many open incidents last month?').",
-      "version": "1.0.0",
-      "...": "truncated for brevity — see file on disk at the same path for full contents"
+      "description": "Provisions an Oracle ADB Select AI NL2SQL profile + agent tool so the companion NL2SQLTool can answer natural-language questions about a fixed set of tables. Runs DBMS_CLOUD_AI.CREATE_PROFILE + DBMS_CLOUD_AI_AGENT.CREATE_TOOL, records the result in an AIDP_NL2SQL_PROFILES audit table the tool auto-creates on first run, and is fully idempotent via a config-hash check.\n\nWhen to use: Run this ONCE per (connection, schema, table set, model) combination, BEFORE the agent's first NL2SQL turn. Run again ONLY when the user changes the target tables/schema/model/credential \u2014 repeat calls with the same inputs are safe (skipped via hash). DO NOT use this for ad-hoc plain-SQL execution; for that, use AIDP's first-party SQL Tool (catalogType=EXTERNAL).\n\nHow to discover inputs: For `aidp_catalog_key`, call CatalogBrowserTool(list='catalogs') and ask the user which AIDP catalog binding exposes the target ADB. For `target_schema` + `target_tables`, ask the user \u2014 never default `target_tables` to a wildcard for schemas with many tables (Select AI prompts get huge fast; 8-20 tables is the sweet spot).\n\nHow to communicate: Report the action (`created` / `unchanged` / `recreated`) and the profile name in one sentence. On `unchanged`, tell the user the agent can proceed straight to NL2SQLTool with no further setup.\n\nExample: SelectAIProvisionTool(aidp_catalog_key='construction_catalog.construction_schema.construction_db', profile_name='constr_demo', target_schema='ADMIN', target_tables='INCIDENT_REPORTS,WORK_ORDERS,EMPLOYEES') -> NL2SQLTool(profile_name='constr_demo', action='RUNSQL', prompt='how many open incidents last month?').",
+      "version": "1.1.0",
+      "schema": [
+        {
+          "name": "profile_name",
+          "type": "string",
+          "description": "Oracle identifier (<=120 chars) that names the Select AI profile + agent tool. Reused as the profile_name argument on every NL2SQLTool call. Example: `constr_demo`.",
+          "default": "constr_demo",
+          "examples": [
+            "constr_demo",
+            "sales_nl2sql",
+            "hcm_employee_qna"
+          ]
+        },
+        {
+          "name": "target_schema",
+          "type": "string",
+          "description": "Uppercase Oracle schema name that owns the listed tables. Required. Example: `ADMIN`.",
+          "default": "ADMIN",
+          "examples": [
+            "ADMIN",
+            "SALES",
+            "HCM"
+          ]
+        },
+        {
+          "name": "target_tables",
+          "type": "string",
+          "description": "Comma-separated table names within target_schema. Order-insensitive (the tool sorts before hashing). Keep this list focused \u2014 Select AI accuracy degrades sharply past ~30 tables in a single profile. Example: `INCIDENT_REPORTS,WORK_ORDERS,EMPLOYEES`.",
+          "default": "INCIDENT_REPORTS,WORK_ORDERS,EMPLOYEES",
+          "examples": [
+            "INCIDENT_REPORTS,WORK_ORDERS,EMPLOYEES",
+            "ORDERS,ORDER_ITEMS,CUSTOMERS,PRODUCTS",
+            "EMPLOYEES,DEPARTMENTS,JOBS"
+          ]
+        },
+        {
+          "name": "comments",
+          "type": "string",
+          "description": "Optional free-text description of the schema/tables fed to the LLM as a hint (helps accuracy). Example: `Construction site incident + work-order tables; PROJECT_ID joins to PROJECTS.PROJECT_ID`.",
+          "default": "",
+          "examples": [
+            "Sales tables; ORDERS joins to CUSTOMERS on CUSTOMER_ID.",
+            "HR data with employee->department->location hierarchy."
+          ]
+        },
+        {
+          "name": "force_recreate",
+          "type": "boolean",
+          "description": "When true, drop and recreate the profile even if the config hash matches. Use only if you suspect the on-ADB state is corrupted.",
+          "default": false,
+          "examples": [
+            false,
+            true
+          ]
+        }
+      ],
+      "conf": {
+        "aidp_catalog_key": "",
+        "conn_string": "",
+        "username": "",
+        "password": "",
+        "wallet_b64": "",
+        "wallet_password": "",
+        "llm_model_id": "xai.grok-4",
+        "model_provider": "oci",
+        "credential_name": "OCI$RESOURCE_PRINCIPAL",
+        "compartment_id": "",
+        "region": "us-ashburn-1",
+        "timeout": 60,
+        "auth_mode": "resource_principal",
+        "tenancy_ocid": "ocid1.tenancy.oc1..aaaaaaaapbfjybybo2ry37rdu2brudxyo3vgy6zwysu352cls5hrc57eil7q",
+        "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
+        "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
+        "private_key_content": "",
+        "pass_phrase": ""
+      },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
+      "_uiHints": {
+        "conf": {
+          "aidp_catalog_key": {
+            "kind": "dropdown",
+            "source": "catalogs",
+            "inputStyle": "singleline"
+          },
+          "conn_string": {
+            "inputStyle": "singleline"
+          },
+          "username": {
+            "inputStyle": "singleline"
+          },
+          "password": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "wallet_b64": {
+            "kind": "secret",
+            "inputStyle": "multiline"
+          },
+          "wallet_password": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "llm_model_id": {
+            "kind": "dropdown",
+            "source": "ociGenAiModels",
+            "dependsOn": "region",
+            "inputStyle": "singleline"
+          },
+          "model_provider": {
+            "kind": "enum",
+            "values": [
+              "oci"
+            ],
+            "inputStyle": "singleline"
+          },
+          "compartment_id": {
+            "kind": "dropdown",
+            "source": "compartments",
+            "inputStyle": "singleline"
+          },
+          "region": {
+            "kind": "dropdown",
+            "source": "regions",
+            "inputStyle": "singleline"
+          },
+          "auth_mode": {
+            "kind": "enum",
+            "values": [
+              "resource_principal",
+              "user_principal",
+              "instance_principal"
+            ],
+            "inputStyle": "singleline"
+          },
+          "private_key_content": {
+            "kind": "secret",
+            "inputStyle": "multiline"
+          },
+          "pass_phrase": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          }
+        },
+        "schema": {
+          "target_tables": {
+            "inputStyle": "multiline"
+          },
+          "comments": {
+            "inputStyle": "multiline"
+          }
+        }
+      },
+      "_confDescriptions": {
+        "aidp_catalog_key": "Preferred: an AIDP catalog binding (catalog.schema.dbName) that exposes ADB credentials via get_connection_data. Find via AIDP Console \u2192 Catalogs. Leave blank if using the explicit conn_string/username/password/wallet fields.",
+        "conn_string": "Fallback ADB connection string (TNS alias or full descriptor). Only use when aidp_catalog_key is blank. Example: `myadb_high`.",
+        "username": "Fallback DB user. Only use when aidp_catalog_key is blank. Example: `ADMIN`.",
+        "password": "(secret) Fallback DB password. Only use when aidp_catalog_key is blank.",
+        "wallet_b64": "(secret) Base64-encoded wallet zip for the ADB. Only use when aidp_catalog_key is blank.",
+        "wallet_password": "(secret) Wallet password (if the wallet is encrypted).",
+        "llm_model_id": "OCI GenAI model id used by Select AI. Default `xai.grok-4`. Override only when the user explicitly asks. Catalog: .aidp/knowledge/oci-genai-models.md.",
+        "model_provider": "Select AI provider. Currently only `oci` is supported by this toolkit.",
+        "credential_name": "Oracle DB credential used by Select AI to call OCI GenAI. Default `OCI$RESOURCE_PRINCIPAL` (auto-created by `ENABLE_RESOURCE_PRINCIPAL`).",
+        "compartment_id": "OCI compartment OCID for GenAI inference. OCI Console \u2192 Identity & Security \u2192 Compartments.",
+        "region": "OCI region. Auto-filled from aidp-deploy.config.json.",
+        "timeout": "Connection + query timeout in seconds.",
+        "auth_mode": "OCI auth flavor for any ADB-adjacent OCI calls. `resource_principal` is the default (works inside AIDP compute).",
+        "tenancy_ocid": "OCI tenancy OCID. Auto-filled from ~/.oci/config.",
+        "user_ocid": "OCI user OCID. Auto-filled from ~/.oci/config.",
+        "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
+        "private_key_content": "(secret) PEM private key \u2014 only needed when auth_mode=user_principal.",
+        "pass_phrase": "(secret) Private key passphrase."
+      }
     },
     {
       "toolClassName": "NL2SQLTool",
       "displayName": "NL to SQL (Select AI)",
-      "version": "1.0.0",
-      "...": "truncated — full content written to disk"
+      "description": "Answers natural-language questions about Oracle ADB tables by calling DBMS_CLOUD_AI.GENERATE against a Select AI profile that SelectAIProvisionTool created. Returns rows (RUNSQL), just the generated SQL (SHOWSQL), a natural-language summary (NARRATE), or annotated SQL (EXPLAINSQL).\n\nWhen to use: Use on every agent turn where the user asks a question about data in the ADB tables registered with the named profile. Default `action` is `RUNSQL`. For plain SQL execution where the user wrote the SQL themselves, use AIDP's first-party SQL Tool \u2014 this tool is for natural language.\n\nHow to discover inputs: `profile_name` comes from the SelectAIProvisionTool result. If the agent gets a 'profile not found' or ORA-20000-class error, call SelectAIProvisionTool FIRST then retry. For `prompt`, pass the user's question verbatim. For `action`, default to RUNSQL; pick NARRATE when the user wants a sentence answer instead of a table, SHOWSQL when the user is debugging the generated SQL, EXPLAINSQL when they want annotated SQL.\n\nHow to communicate: For RUNSQL, summarize row count + first 3 rows; for NARRATE, return the answer directly; for SHOWSQL/EXPLAINSQL, format the SQL in a code block. Read-only by construction: this tool refuses to execute generated SQL whose first keyword isn't SELECT or WITH, even if DBMS_CLOUD_AI returns DML \u2014 caller will see a `fail` envelope with a clear message, never a silent data mutation.\n\nExample: NL2SQLTool(profile_name='constr_demo', action='RUNSQL', prompt='how many open incidents last month?', max_rows=100) \u2192 {ok: true, data: {sql: 'SELECT count(*) ...', rows: [{COUNT: 47}], rows_fetched: 1}}.",
+      "version": "1.1.0",
+      "schema": [
+        {
+          "name": "profile_name",
+          "type": "string",
+          "description": "Name of the Select AI profile created by SelectAIProvisionTool. Required. Example: `constr_demo`.",
+          "default": "constr_demo",
+          "examples": [
+            "constr_demo",
+            "sales_nl2sql",
+            "hcm_employee_qna"
+          ]
+        },
+        {
+          "name": "prompt",
+          "type": "string",
+          "description": "The user's natural-language question. Pass verbatim \u2014 DBMS_CLOUD_AI converts it to SQL using the profile's table list. Example: `how many open incidents last month?`.",
+          "default": "how many open incidents last month?",
+          "examples": [
+            "how many open incidents last month?",
+            "top 5 employees by hours worked this quarter",
+            "sum of work-order costs grouped by project"
+          ]
+        },
+        {
+          "name": "action",
+          "type": "string",
+          "description": "Which DBMS_CLOUD_AI action to invoke. `RUNSQL` runs the generated SQL and returns rows. `SHOWSQL` returns the SQL string only. `NARRATE` returns a natural-language summary. `EXPLAINSQL` returns annotated SQL. Default `RUNSQL`.",
+          "enum": [
+            "RUNSQL",
+            "SHOWSQL",
+            "NARRATE",
+            "EXPLAINSQL"
+          ],
+          "default": "RUNSQL",
+          "examples": [
+            "RUNSQL",
+            "NARRATE",
+            "SHOWSQL",
+            "EXPLAINSQL"
+          ]
+        },
+        {
+          "name": "max_rows",
+          "type": "number",
+          "description": "Cap on rows fetched when action=RUNSQL. Default 100, hard ceiling 10000. Larger values can blow the agent's response budget.",
+          "default": 100,
+          "examples": [
+            100,
+            25,
+            1000
+          ]
+        }
+      ],
+      "conf": {
+        "aidp_catalog_key": "",
+        "conn_string": "",
+        "username": "",
+        "password": "",
+        "wallet_b64": "",
+        "wallet_password": "",
+        "default_action": "RUNSQL",
+        "max_rows": 100,
+        "safety_check": true,
+        "timeout": 60,
+        "auth_mode": "resource_principal",
+        "tenancy_ocid": "ocid1.tenancy.oc1..aaaaaaaapbfjybybo2ry37rdu2brudxyo3vgy6zwysu352cls5hrc57eil7q",
+        "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
+        "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
+        "private_key_content": "",
+        "pass_phrase": ""
+      },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
+      "_uiHints": {
+        "conf": {
+          "aidp_catalog_key": {
+            "kind": "dropdown",
+            "source": "catalogs",
+            "inputStyle": "singleline"
+          },
+          "conn_string": {
+            "inputStyle": "singleline"
+          },
+          "username": {
+            "inputStyle": "singleline"
+          },
+          "password": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "wallet_b64": {
+            "kind": "secret",
+            "inputStyle": "multiline"
+          },
+          "wallet_password": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "default_action": {
+            "kind": "enum",
+            "values": [
+              "RUNSQL",
+              "SHOWSQL",
+              "NARRATE",
+              "EXPLAINSQL"
+            ],
+            "inputStyle": "singleline"
+          },
+          "auth_mode": {
+            "kind": "enum",
+            "values": [
+              "resource_principal",
+              "user_principal",
+              "instance_principal"
+            ],
+            "inputStyle": "singleline"
+          },
+          "private_key_content": {
+            "kind": "secret",
+            "inputStyle": "multiline"
+          },
+          "pass_phrase": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          }
+        },
+        "schema": {
+          "prompt": {
+            "inputStyle": "multiline"
+          },
+          "action": {
+            "kind": "enum",
+            "values": [
+              "RUNSQL",
+              "SHOWSQL",
+              "NARRATE",
+              "EXPLAINSQL"
+            ],
+            "inputStyle": "singleline"
+          }
+        }
+      },
+      "_confDescriptions": {
+        "aidp_catalog_key": "Preferred ADB connection source. AIDP Console \u2192 Catalogs. Leave blank if using explicit conn_string/username/password/wallet.",
+        "conn_string": "Fallback TNS alias or descriptor. Only use when aidp_catalog_key is blank.",
+        "username": "Fallback DB user. Only use when aidp_catalog_key is blank.",
+        "password": "(secret) Fallback DB password.",
+        "wallet_b64": "(secret) Base64-encoded wallet zip.",
+        "wallet_password": "(secret) Wallet password.",
+        "default_action": "Action used when the runtime param `action` is blank. Default RUNSQL.",
+        "max_rows": "Default row cap for RUNSQL; runtime param overrides.",
+        "safety_check": "When true, run SHOWSQL first and reject anything that isn't SELECT/WITH. Always recommended; turn off only for diagnostic builds.",
+        "timeout": "Connection + query timeout in seconds.",
+        "auth_mode": "OCI auth flavor for any OCI calls. `resource_principal` works inside AIDP compute.",
+        "tenancy_ocid": "OCI tenancy OCID. Auto-filled from ~/.oci/config.",
+        "user_ocid": "OCI user OCID. Auto-filled from ~/.oci/config.",
+        "fingerprint": "OCI API key fingerprint. Auto-filled from ~/.oci/config.",
+        "private_key_content": "(secret) PEM private key \u2014 only needed when auth_mode=user_principal.",
+        "pass_phrase": "(secret) Private key passphrase."
+      }
     }
   ]
 }
