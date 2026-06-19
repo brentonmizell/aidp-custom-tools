@@ -40,10 +40,16 @@ STARTER_ZIP_DEFAULT = DIST_DIR / "aidp-tool-starter.zip"
 #
 # Each entry is (canonical_source_path, dest_filename_in_src_utils).
 SHARED_MODULES: List[Tuple[Path, str]] = [
-    (REPO_ROOT / "aidp_io"    / "aidp_io.py",    "aidp_io.py"),
-    (REPO_ROOT / "aidp_genai" / "aidp_genai.py", "aidp_genai.py"),
-    (REPO_ROOT / "aidp_kb"    / "aidp_kb.py",    "aidp_kb.py"),
+    (REPO_ROOT / "aidp_io"      / "aidp_io.py",      "aidp_io.py"),
+    (REPO_ROOT / "aidp_genai"   / "aidp_genai.py",   "aidp_genai.py"),
+    (REPO_ROOT / "aidp_kb"      / "aidp_kb.py",      "aidp_kb.py"),
+    (REPO_ROOT / "aidp_session" / "aidp_session.py", "aidp_session.py"),
 ]
+
+# Per-helper named aliases, for any external script that imports a canonical
+# source path directly (keeps the old in-repo entry points stable as we add
+# new helpers).
+SHARED_AIDP_SESSION_SRC = SHARED_MODULES[3][0]
 
 # Back-compat alias: external scripts (and old in-repo callers) imported
 # SHARED_AIDP_IO_SRC directly. Keep the name pointing at the first entry.

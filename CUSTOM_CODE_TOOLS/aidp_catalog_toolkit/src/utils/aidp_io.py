@@ -39,6 +39,11 @@ PUBLIC API
     list_kb_jobs(conf, ctx, kb_key)                  -> list[dict]
     trigger_kb_job_run(conf, ctx, kb_key, job_key, run_config=None) -> dict
 
+    # SQL-tool connection helpers (mirror AIDP connection_manager.py dispatch)
+    get_connection(catalog_key, conf, ctx)                  -> dict
+    get_standard_catalog_connection(catalog_key, conf, ctx) -> dict
+    get_external_catalog_connection(catalog_key, conf, ctx) -> dict
+
 CONFIG KEYS (conf dict, mirrors aidp_catalog_toolkit)
 -----------------------------------------------------
     region              OCI region short code (also OCI_REGION env)
@@ -166,8 +171,12 @@ def _workspace_base(conf: Dict[str, Any], context_vars: Dict[str, Any], base: st
 # HTTP helpers
 # ---------------------------------------------------------------------------
 
-def _get(requests_mod, signer, url: str, timeout: int) -> Dict[str, Any]:
-    r = requests_mod.get(url, auth=signer, timeout=timeout, headers={"Accept": "application/json"})
+def _get(requests_mod, signer, url: str, timeout: int,
+         headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    h = {"Accept": "application/json"}
+    if headers:
+        h.update(headers)
+    r = requests_mod.get(url, auth=signer, timeout=timeout, headers=h)
     r.raise_for_status()
     return r.json() if r.content else {}
 
@@ -829,6 +838,391 @@ def trigger_kb_job_run(conf: Optional[Dict[str, Any]],
     return _post(requests_mod, signer, url, timeout, body=body) or {}
 
 
+# ---------------------------------------------------------------------------
+# SQL-tool connection helpers
+# ---------------------------------------------------------------------------
+#
+# These functions mirror AIDP's ``aidputils/agents/tools/sqltool/connection_manager.py``
+# verbatim — same endpoint URLs, same auth headers, same response field names —
+# so that custom tools running outside the AIDP runtime can fetch the *exact*
+# same connection material that AIDP's first-party SQLTool would receive.
+#
+# DISPATCH OVERVIEW
+# -----------------
+# AIDP classifies every catalog as either STANDARD or EXTERNAL (defaults to
+# EXTERNAL when unset). The two branches answer fundamentally different
+# questions:
+#
+#   STANDARD catalog (e.g. lakehouse-managed Spark tables)
+#       --> the "connection" is a Spark/OCI Data Flow execution context.
+#       There is no JDBC URL or password — queries are run by submitting a
+#       Spark command to an OCI Data Flow cluster via AIDP's gateway. The
+#       caller needs: cluster_key, compute_endpoint (AIDP_GATEWAY_ENDPOINT),
+#       data_lake_id, workspace_key, and hub_dp_endpoint. Auth is OCI signing
+#       (resource principal), handled by the OCI SDK at call time.
+#
+#       Mirrors: ``_SparkSQLExecutor._resolve_dp_endpoint()`` +
+#       ``_resolve_cluster_status_context()`` in spark_sql_executor.py.
+#
+#   EXTERNAL catalog (e.g. Autonomous Database / ADW, ATP, generic Oracle)
+#       --> the "connection" is a JDBC-style credential bundle. AIDP fetches
+#       it by signing a GET request to the lakeproxy connectionData endpoint:
+#
+#           GET {lakeproxy_endpoint}/20240831/dataLakes/{datalakeId}
+#               /catalogs/{catalogKey}/connectionData
+#
+#       The response's ``connectionProperties`` object contains the keys
+#       ``user.name``, ``password``, ``tns``, and (optionally) ``wallet.content``
+#       (base64 wallet zip) and ``wallet.password``. Those map straight into
+#       an ``oracledb.SessionPool`` call. Headers always include
+#       ``dh-user-principal`` from the AIDP auth context, when available.
+#
+#       Mirrors: ``_ConnectionManager.fetch_connection_data()`` +
+#       ``get_connection_data_endpoint()`` in connection_manager.py.
+#
+# Both branches return the same envelope::
+#
+#       {
+#           "type": "STANDARD" | "EXTERNAL",
+#           "credentials": {...},   # branch-specific dict the caller passes
+#                                   # to oracledb / spark / OCI Data Flow.
+#           "raw": {...},           # full unmodified server response (or the
+#                                   # collected runtime config, for STANDARD)
+#       }
+#
+# Catalog type detection
+# ----------------------
+# ``get_connection`` will look up the catalog's type by calling
+# ``list_catalogs(conf, ctx)`` and matching ``catalog_key`` against either
+# ``displayName`` or ``key``; if a match has ``catalogType == 'STANDARD'`` it
+# routes to the standard branch, otherwise EXTERNAL. Callers can short-circuit
+# detection by setting ``conf["catalog_type"]`` (or ``conf["catalogType"]``)
+# to ``"STANDARD"`` or ``"EXTERNAL"``.
+
+
+# ---- field-name constants (mirror aidputils.agents.tools.utils.Constants) ----
+
+_CONST_DH_USER_PRINCIPAL_KEY = "dh-user-principal"
+_CONST_ACCEPT_JSON = "application/json"
+_CONST_CONTENT_TYPE_JSON = "application/json"
+_CONST_CONNECTION_PROPS_KEY = "connectionProperties"
+_CONST_USER_NAME = "user.name"
+_CONST_USER_CREDENTIAL = "password"
+_CONST_TNS = "tns"
+_CONST_WALLET_CONTENT = "wallet.content"
+_CONST_WALLET_CREDENTIAL = "wallet.password"
+
+
+def _resolve_data_lake_id(conf: Optional[Dict[str, Any]],
+                          ctx: Optional[Dict[str, Any]]) -> str:
+    """Resolve the data lake OCID from conf, env, or context (same precedence as _client)."""
+    val = (
+        _get_cfg(conf, "data_lake_ocid", "")
+        or os.environ.get("DATALAKE_ID", "")
+        or (ctx or {}).get("datalake_id", "")
+    )
+    if not val:
+        raise ValueError(
+            "data_lake_ocid is required (config 'data_lake_ocid' or DATALAKE_ID env "
+            "or ctx['datalake_id'])"
+        )
+    return str(val)
+
+
+def _resolve_lakeproxy_endpoint(conf: Optional[Dict[str, Any]],
+                                ctx: Optional[Dict[str, Any]],
+                                datalake_id: str) -> str:
+    """Resolve the lakeproxy base endpoint, mirroring auth_utils.get_lakeproxy_endpoint.
+
+    Precedence: conf['lakeproxy_endpoint'] > ctx['lakeproxy_endpoint'] >
+    env OCI_HUB_DP_ENDPOINT. If the resolved value does not already end in
+    ``dataLakes/{datalake_id}``, we append it (matching AIDP's
+    auth_utils.get_lakeproxy_endpoint behavior).
+    """
+    dp_endpoint = (
+        _get_cfg(conf, "lakeproxy_endpoint", "")
+        or (ctx or {}).get("lakeproxy_endpoint", "")
+        or os.environ.get("OCI_HUB_DP_ENDPOINT", "")
+    )
+    if not dp_endpoint:
+        raise ValueError(
+            "lakeproxy_endpoint is required (config 'lakeproxy_endpoint' or "
+            "ctx['lakeproxy_endpoint'] or OCI_HUB_DP_ENDPOINT env)"
+        )
+    dp_endpoint = str(dp_endpoint).rstrip("/")
+    suffix = f"dataLakes/{datalake_id}"
+    if dp_endpoint.endswith(suffix):
+        return dp_endpoint
+    return f"{dp_endpoint}/{suffix}"
+
+
+def _resolve_dh_user_principal(conf: Optional[Dict[str, Any]],
+                               ctx: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Resolve the dh-user-principal header value. May be None (header omitted)."""
+    val = (
+        _get_cfg(conf, "dh_user_principal", "")
+        or (ctx or {}).get("dh_user_principal", "")
+        or os.environ.get("DH_USER_PRINCIPAL", "")
+    )
+    return str(val) if val else None
+
+
+def _detect_catalog_type(catalog_key: str,
+                         conf: Optional[Dict[str, Any]],
+                         ctx: Optional[Dict[str, Any]]) -> Tuple[str, Optional[Dict[str, Any]]]:
+    """Detect a catalog's type (STANDARD vs EXTERNAL).
+
+    Resolution order (mirrors SQLTool._resolve_catalog_type semantics, then
+    falls back to a server lookup when the type is not provided by the caller):
+
+      1. If conf['catalogType'] or conf['catalog_type'] is set, use it.
+      2. Otherwise, walk list_catalogs(conf, ctx) and match catalog_key against
+         each item's ``key`` or ``displayName``. Use the matched item's
+         ``catalogType``.
+      3. If still unknown, default to ``"EXTERNAL"`` (same default as SQLTool).
+
+    Returns: (normalized_type, matched_catalog_item_or_None).
+    """
+    explicit = _get_cfg(conf, "catalogType", "") or _get_cfg(conf, "catalog_type", "")
+    if explicit:
+        return str(explicit).strip().upper() or "EXTERNAL", None
+
+    matched: Optional[Dict[str, Any]] = None
+    try:
+        catalogs = list_catalogs(conf, ctx)
+    except Exception:
+        catalogs = []
+    for it in catalogs or []:
+        if catalog_key in (it.get("key"), it.get("displayName")):
+            matched = it
+            break
+
+    if matched is None:
+        return "EXTERNAL", None
+    catalog_type = str(matched.get("catalogType") or "EXTERNAL").strip().upper()
+    return catalog_type or "EXTERNAL", matched
+
+
+def get_standard_catalog_connection(catalog_key: str,
+                                    conf: Optional[Dict[str, Any]],
+                                    ctx: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Return the standard-catalog (Spark / OCI Data Flow) connection bundle.
+
+    Mirrors AIDP's ``_SparkSQLExecutor`` setup verbatim: the "connection" is a
+    set of runtime identifiers (cluster key + gateway / hub-dp endpoints +
+    workspace key + data lake id), NOT a JDBC URL. Queries against a STANDARD
+    catalog are executed via OCI Data Flow command submission against these
+    identifiers, signed at call time by an OCI signer (resource principal by
+    default).
+
+    Resolution (matches spark_sql_executor.py):
+      - cluster_key:       conf['clusterKey'] (REQUIRED for actual execution;
+                           may be empty here — the caller decides whether
+                           cluster_key is needed before submitting a command).
+      - compute_endpoint:  env ``AIDP_GATEWAY_ENDPOINT``  (or conf override).
+      - hub_dp_endpoint:   env ``OCI_HUB_DP_ENDPOINT``    (or conf override).
+      - data_lake_id:      ctx['datalake_id'] / env DATALAKE_ID / conf.
+      - workspace_key:     ctx['AIDP_WORKSPACE_KEY'] / env AIDP_WORKSPACE_KEY.
+
+    Returns::
+
+        {
+            "type": "STANDARD",
+            "credentials": {
+                "cluster_key": str,            # may be "" if not supplied
+                "compute_endpoint": str|None,
+                "hub_dp_endpoint": str|None,
+                "data_lake_id": str,
+                "workspace_key": str|None,
+                "dh_user_principal": str|None,
+                "auth_type": "resource_principal",
+            },
+            "raw": {... same fields ...},
+        }
+
+    Raises:
+        ValueError if data_lake_id cannot be resolved.
+    """
+    if not catalog_key:
+        raise ValueError("catalog_key is required")
+
+    data_lake_id = _resolve_data_lake_id(conf, ctx)
+
+    cluster_key = _get_cfg(conf, "clusterKey", "") or _get_cfg(conf, "cluster_key", "")
+
+    compute_endpoint = (
+        _get_cfg(conf, "compute_endpoint", "")
+        or (ctx or {}).get("compute_endpoint", "")
+        or os.environ.get("AIDP_GATEWAY_ENDPOINT", "")
+    )
+
+    hub_dp_endpoint = (
+        _get_cfg(conf, "hub_dp_endpoint", "")
+        or (ctx or {}).get("hub_dp_endpoint", "")
+        or os.environ.get("OCI_HUB_DP_ENDPOINT", "")
+    )
+
+    workspace_key = (
+        _get_cfg(conf, "workspace_key", "")
+        or (ctx or {}).get("AIDP_WORKSPACE_KEY", "")
+        or (ctx or {}).get("workspace_key", "")
+        or os.environ.get("AIDP_WORKSPACE_KEY", "")
+    )
+
+    credentials = {
+        "catalog_key": str(catalog_key),
+        "cluster_key": str(cluster_key) if cluster_key else "",
+        "compute_endpoint": str(compute_endpoint) if compute_endpoint else None,
+        "hub_dp_endpoint": str(hub_dp_endpoint) if hub_dp_endpoint else None,
+        "data_lake_id": data_lake_id,
+        "workspace_key": str(workspace_key) if workspace_key else None,
+        "dh_user_principal": _resolve_dh_user_principal(conf, ctx),
+        "auth_type": "resource_principal",
+    }
+
+    return {
+        "type": "STANDARD",
+        "credentials": credentials,
+        "raw": dict(credentials),
+    }
+
+
+def get_external_catalog_connection(catalog_key: str,
+                                    conf: Optional[Dict[str, Any]],
+                                    ctx: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Return the external-catalog (oracledb) connection bundle.
+
+    Mirrors AIDP's ``_ConnectionManager.fetch_connection_data()`` verbatim:
+
+      - URL:     ``{lakeproxy_endpoint}/20240831/dataLakes/{datalakeId}
+                   /catalogs/{catalogKey}/connectionData``
+      - Auth:    OCI request signing (resource principal by default).
+      - Headers: ``accept: application/json``,
+                 ``content-type: application/json``,
+                 ``dh-user-principal: <auth context value>`` (when available).
+      - Response field: ``connectionProperties`` — a dict with keys
+                 ``user.name``, ``password``, ``tns``, and optional
+                 ``wallet.content`` (base64 wallet zip) +
+                 ``wallet.password``.
+
+    Returns::
+
+        {
+            "type": "EXTERNAL",
+            "credentials": {
+                "user.name":       str,
+                "password":        str,
+                "tns":             str,
+                "wallet.content":  str | None,   # base64-encoded wallet zip
+                "wallet.password": str | None,
+                "dh_user_principal": str | None,
+                "auth_type": "resource_principal",
+            },
+            "raw": {... full unmodified server response ...},
+        }
+
+    Raises:
+        ValueError if catalog_key, data_lake_id, or lakeproxy_endpoint cannot
+        be resolved, or if the response is missing ``connectionProperties``.
+        Any HTTP / OCI signing exception is bubbled up.
+    """
+    if not catalog_key:
+        raise ValueError("catalog_key is required")
+
+    import requests  # lazy
+
+    data_lake_id = _resolve_data_lake_id(conf, ctx)
+    lakeproxy_endpoint = _resolve_lakeproxy_endpoint(conf, ctx, data_lake_id)
+    signer = _build_signer(conf or {})
+    timeout = int(_get_cfg(conf, "timeout", 30) or 30)
+
+    # Mirror connection_manager.get_connection_data_endpoint() verbatim.
+    url = (
+        f"{lakeproxy_endpoint}/"
+        f"20240831/dataLakes/{data_lake_id}/"
+        f"catalogs/{catalog_key}/connectionData"
+    )
+
+    # Mirror _build_request_headers() verbatim, but only include
+    # dh-user-principal when we actually have a value (AIDP sets it
+    # unconditionally from auth context, but that context isn't available to
+    # custom tools).
+    headers = {
+        "accept": _CONST_ACCEPT_JSON,
+        "content-type": _CONST_CONTENT_TYPE_JSON,
+    }
+    dh_user = _resolve_dh_user_principal(conf, ctx)
+    if dh_user:
+        headers[_CONST_DH_USER_PRINCIPAL_KEY] = dh_user
+
+    r = requests.get(url, auth=signer, headers=headers, timeout=timeout)
+    r.raise_for_status()
+    conn_data = r.json() if r.content else {}
+
+    # Mirror _get_connection_properties() — must be a dict under
+    # the verbatim key 'connectionProperties'.
+    connection_props = conn_data.get(_CONST_CONNECTION_PROPS_KEY)
+    if not isinstance(connection_props, dict):
+        raise ValueError(
+            f"connectionProperties is missing from SQL connection data for "
+            f"catalog {catalog_key!r} (response keys: {list(conn_data.keys())})"
+        )
+
+    credentials = {
+        _CONST_USER_NAME:        connection_props.get(_CONST_USER_NAME),
+        _CONST_USER_CREDENTIAL:  connection_props.get(_CONST_USER_CREDENTIAL),
+        _CONST_TNS:              connection_props.get(_CONST_TNS),
+        _CONST_WALLET_CONTENT:   connection_props.get(_CONST_WALLET_CONTENT),
+        _CONST_WALLET_CREDENTIAL: connection_props.get(_CONST_WALLET_CREDENTIAL),
+        "dh_user_principal":     dh_user,
+        "auth_type":             "resource_principal",
+    }
+
+    return {
+        "type": "EXTERNAL",
+        "credentials": credentials,
+        "raw": conn_data,
+    }
+
+
+def get_connection(catalog_key: str,
+                   conf: Optional[Dict[str, Any]],
+                   ctx: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Top-level connection dispatcher (STANDARD vs EXTERNAL).
+
+    Mirrors the dispatch performed by AIDP's first-party SQLTool / connection
+    manager (see module-level "SQL-tool connection helpers" docstring for the
+    full overview):
+
+      1. Determine the catalog type:
+           - if conf['catalogType'] / conf['catalog_type'] is set, honor it;
+           - otherwise call ``list_catalogs(conf, ctx)`` and look up the
+             ``catalogType`` field for the matching item;
+           - otherwise default to ``"EXTERNAL"`` (same default as SQLTool).
+      2. If type == ``"STANDARD"`` -> ``get_standard_catalog_connection(...)``.
+         Else                       -> ``get_external_catalog_connection(...)``.
+
+    Returns::
+
+        {
+            "type": "STANDARD" | "EXTERNAL",
+            "credentials": {...},   # ready to be handed to spark / oracledb
+            "raw": {...},           # full backing response (or runtime cfg)
+        }
+
+    Raises:
+        ValueError if catalog_key is empty or required IDs cannot be resolved;
+        bubbles up HTTP / OCI exceptions from the underlying branch.
+    """
+    if not catalog_key:
+        raise ValueError("catalog_key is required")
+
+    catalog_type, _matched = _detect_catalog_type(catalog_key, conf, ctx)
+    if catalog_type == "STANDARD":
+        return get_standard_catalog_connection(catalog_key, conf, ctx)
+    return get_external_catalog_connection(catalog_key, conf, ctx)
+
+
 __all__ = [
     "parse_uri",
     "read_file",
@@ -846,4 +1240,8 @@ __all__ = [
     "describe_table",
     "list_kb_jobs",
     "trigger_kb_job_run",
+    # SQL-tool connection helpers
+    "get_connection",
+    "get_standard_catalog_connection",
+    "get_external_catalog_connection",
 ]
