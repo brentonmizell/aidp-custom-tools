@@ -66,21 +66,35 @@ Footer {
 
 #wizard-content {
     width: 1fr;
-    padding: 2 4;
+    height: 1fr;
     background: #0e1117;
+    layout: vertical;
 }
 
 #wizard-content .screen-title {
     text-style: bold;
     color: #e6edf3;
-    padding-bottom: 1;
+    padding: 2 4 1 4;
     border-bottom: solid #30363d;
-    margin-bottom: 2;
+}
+
+/* The scrolling middle pane — grows to fill space between title and pinned
+   button row. Title and #button-row sit outside this so they stay visible. */
+#wizard-scroll {
+    width: 1fr;
+    height: 1fr;
+    padding: 1 4 2 4;
+    overflow-y: auto;
+    scrollbar-color: #ff6b35 #161b22;
+    scrollbar-color-hover: #ff8a5b #161b22;
+    scrollbar-color-active: #ff8a5b #161b22;
+    scrollbar-size: 1 1;
 }
 
 #wizard-content .screen-subtitle {
     color: #8b949e;
-    margin-bottom: 2;
+    padding: 0 4 1 4;
+    border-bottom: solid #30363d;
 }
 
 #wizard-content .field-label {

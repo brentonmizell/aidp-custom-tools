@@ -18,9 +18,8 @@ from .. import code_gen
 
 class GenerateScreen(WizardScreen):
     TITLE = "Step 6 — Generate the Python"
-    SUBTITLE = ("Describe what the tool should do (optional for templated kinds). "
-                "The LLM-generated path always reviews + validates the output before "
-                "you advance.")
+    SUBTITLE = ("Pre-filled with the description you wrote in step 5. Edit if "
+                "you want to refine the prompt the LLM sees, then click Generate.")
 
     def compose_body(self) -> ComposeResult:
         with Vertical():
@@ -30,21 +29,25 @@ class GenerateScreen(WizardScreen):
                 classes="field-hint",
             )
 
-            yield Static("What should this tool do?", classes="field-label")
+            yield Static("Prompt to the LLM (editable)", classes="field-label")
             yield Static(
-                "Required for [bold]llm_custom[/]. For other kinds, "
-                "this is appended as a docstring hint.",
+                "For [bold]llm_custom[/] this is the entire generation prompt. "
+                "For templated kinds the wizard renders a Jinja template instead "
+                "and ignores this field.",
                 classes="field-hint",
             )
-            yield TextArea(text=self.state.user_intent or "", id="intent")
+            yield TextArea(text=self.state.user_intent or self.state.tool_description or "",
+                           id="intent")
 
             with Horizontal(id="gen-row"):
                 yield Button("Generate code", id="generate", classes="-primary")
                 yield Button("Re-generate", id="regenerate", classes="-secondary")
 
             yield Static("Generated code (read-only preview)", classes="field-label")
+            # NOTE: no language= — tree-sitter isn't a default dep; the preview
+            # is intentionally plain text so the wizard works in any env.
             yield TextArea(text=self.state.generated_code or "",
-                           id="code-preview", read_only=True, language="python")
+                           id="code-preview", read_only=True)
 
             yield Static("", id="gen-status", classes="status-dim")
 

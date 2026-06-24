@@ -15,7 +15,7 @@ Subclasses override:
 from __future__ import annotations
 
 from textual.app import ComposeResult
-from textual.containers import Vertical, Horizontal
+from textual.containers import Vertical, Horizontal, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Button, Static
 
@@ -35,7 +35,9 @@ class WizardScreen(Screen):
             yield Static(f"[bold]{self.TITLE}[/]", classes="screen-title")
             if self.SUBTITLE:
                 yield Static(self.SUBTITLE, classes="screen-subtitle")
-            yield from self.compose_body()
+            # Body scrolls on its own so the Back/Cancel/Next row stays pinned.
+            with VerticalScroll(id="wizard-scroll"):
+                yield from self.compose_body()
             with Horizontal(id="button-row"):
                 yield Button("← Back", id="back", classes="-secondary")
                 yield Button("Cancel", id="cancel", classes="-danger")
