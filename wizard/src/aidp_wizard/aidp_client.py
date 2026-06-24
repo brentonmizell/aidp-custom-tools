@@ -97,6 +97,64 @@ def list_oci_profiles() -> List[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# OCI session creation + manual profile entry (used by step 2 helpers)
+# ---------------------------------------------------------------------------
+
+def oci_cli_installed() -> bool:
+    """True if the `oci` CLI is on PATH (needed for browser session auth)."""
+    import shutil
+    return shutil.which("oci") is not None
+
+
+def build_session_auth_argv(region: str, profile_name: str,
+                            tenancy_name: Optional[str] = None) -> List[str]:
+    """Argv the wizard shells out to. Kept separate so tests can introspect it."""
+    argv = ["oci", "session", "authenticate",
+            "--region", region,
+            "--profile-name", profile_name]
+    if tenancy_name:
+        argv += ["--tenancy-name", tenancy_name]
+    return argv
+
+
+def write_api_key_profile(profile_name: str, *, tenancy_ocid: str, user_ocid: str,
+                          fingerprint: str, key_file: str, region: str) -> Tuple[bool, str]:
+    """Append (or overwrite) a permanent API-key profile in ~/.oci/config.
+    Returns (ok, message). Does NOT touch DEFAULT — always a named section."""
+    if not profile_name or profile_name.upper() == "DEFAULT":
+        return False, "Pick a profile name other than DEFAULT."
+    for field, val in (("tenancy_ocid", tenancy_ocid), ("user_ocid", user_ocid),
+                       ("fingerprint", fingerprint), ("key_file", key_file),
+                       ("region", region)):
+        if not val.strip():
+            return False, f"{field} is required."
+    key_path = Path(key_file).expanduser()
+    if not key_path.is_file():
+        return False, f"Key file not found: {key_path}"
+
+    cfg_path = Path.home() / ".oci" / "config"
+    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    cp = configparser.ConfigParser()
+    if cfg_path.is_file():
+        cp.read(cfg_path)
+    cp[profile_name] = {
+        "tenancy": tenancy_ocid.strip(),
+        "user": user_ocid.strip(),
+        "fingerprint": fingerprint.strip(),
+        "key_file": str(key_path),
+        "region": region.strip(),
+    }
+    with cfg_path.open("w", encoding="utf-8") as fh:
+        cp.write(fh)
+    try:
+        import os as _os
+        _os.chmod(cfg_path, 0o600)
+    except Exception:
+        pass
+    return True, f"Profile [{profile_name}] written to {cfg_path}."
+
+
+# ---------------------------------------------------------------------------
 # Conf builder — turn wizard state into the shape aidp_io expects
 # ---------------------------------------------------------------------------
 
