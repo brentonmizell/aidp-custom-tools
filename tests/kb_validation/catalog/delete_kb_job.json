@@ -1,0 +1,164 @@
+[
+  {
+    "method": "DeleteKnowledgeBaseJob",
+    "scenario": "idlOcid missing or blank",
+    "class": "noop",
+    "notes": "No guaranteed required-param message; feature flag check comes first.",
+    "expected_status": [
+      400,
+      404
+    ],
+    "id": "DKBJ-001",
+    "source": "Confluence > DeleteKnowledgeBaseJob"
+  },
+  {
+    "method": "DeleteKnowledgeBaseJob",
+    "scenario": "catalogId / schemaId / kb / job missing after feature validation",
+    "class": "validation",
+    "verb": "DELETE",
+    "path_template": "/knowledgeBases/{kb_key}/jobs/{job_key}",
+    "variants": [
+      {
+        "name": "blank job_key",
+        "path_params": {
+          "kb_key": "kb1",
+          "job_key": " "
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Invalid request. The parameter",
+    "expected_message_param_filled": true,
+    "id": "DKBJ-002",
+    "source": "Confluence > DeleteKnowledgeBaseJob"
+  },
+  {
+    "method": "DeleteKnowledgeBaseJob",
+    "scenario": "KB feature config unreadable",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. Unable to read Knowledge Base feature configuration",
+    "id": "DKBJ-003",
+    "source": "Confluence > DeleteKnowledgeBaseJob"
+  },
+  {
+    "method": "DeleteKnowledgeBaseJob",
+    "scenario": "KB feature disabled",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Knowledge Base not enabled.",
+    "id": "DKBJ-004",
+    "source": "Confluence > DeleteKnowledgeBaseJob"
+  },
+  {
+    "method": "DeleteKnowledgeBaseJob",
+    "scenario": "Parent KB not found",
+    "class": "fixture",
+    "fixture_required": "request_nonexistent_kb",
+    "verb": "DELETE",
+    "path_template": "/knowledgeBases/{kb_key}/jobs/{job_key}",
+    "variants": [
+      {
+        "name": "nonexistent target",
+        "path_params": {
+          "kb_key": "kb_does_not_exist"
+        }
+      }
+    ],
+    "expected_status": [
+      404
+    ],
+    "expected_message_substring": "Not found. The requested Knowledge Base job",
+    "id": "DKBJ-005",
+    "source": "Confluence > DeleteKnowledgeBaseJob"
+  },
+  {
+    "method": "DeleteKnowledgeBaseJob",
+    "scenario": "KB job not found",
+    "class": "fixture",
+    "fixture_required": "request_nonexistent_kb",
+    "verb": "DELETE",
+    "path_template": "/knowledgeBases/{kb_key}/jobs/{job_key}",
+    "variants": [
+      {
+        "name": "nonexistent target",
+        "path_params": {
+          "kb_key": "kb_does_not_exist"
+        }
+      }
+    ],
+    "expected_status": [
+      404
+    ],
+    "expected_message_substring": "Not found. The requested Knowledge Base job",
+    "id": "DKBJ-006",
+    "source": "Confluence > DeleteKnowledgeBaseJob"
+  },
+  {
+    "method": "DeleteKnowledgeBaseJob",
+    "scenario": "Embedding model does not exist",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection.",
+    "expected_message_substring": "Embedding model is not found.",
+    "id": "DKBJ-007",
+    "source": "Confluence > DeleteKnowledgeBaseJob"
+  },
+  {
+    "method": "DeleteKnowledgeBaseJob",
+    "scenario": "Invalid request signal reaches job-delete classifier",
+    "class": "validation",
+    "verb": "DELETE",
+    "path_template": "/knowledgeBases/{kb_key}/jobs/{job_key}",
+    "variants": [
+      {
+        "name": "wildcards",
+        "path_params": {
+          "kb_key": "***",
+          "job_key": "***"
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Invalid request. Some required fields are missing or invalid.",
+    "expected_message_param_filled": false,
+    "id": "DKBJ-008",
+    "source": "Confluence > DeleteKnowledgeBaseJob"
+  },
+  {
+    "method": "DeleteKnowledgeBaseJob",
+    "scenario": "Delete job operation times out",
+    "class": "race",
+    "skip_reason": "Timing-dependent.",
+    "expected_message_substring": "Operation timed out. Knowledge Base job deletion did not complete in time.",
+    "id": "DKBJ-009",
+    "source": "Confluence > DeleteKnowledgeBaseJob"
+  },
+  {
+    "method": "DeleteKnowledgeBaseJob",
+    "scenario": "Workflow service delete / metadata count / dep failure",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. A dependent service failed while deleting the Knowledge Base job.",
+    "id": "DKBJ-010",
+    "source": "Confluence > DeleteKnowledgeBaseJob"
+  },
+  {
+    "method": "DeleteKnowledgeBaseJob",
+    "scenario": "Success callback fails to publish delete-job event",
+    "class": "noop",
+    "expected_status": [
+      200,
+      201,
+      202,
+      204
+    ],
+    "id": "DKBJ-011",
+    "source": "Confluence > DeleteKnowledgeBaseJob"
+  }
+]

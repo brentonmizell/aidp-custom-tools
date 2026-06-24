@@ -1,0 +1,193 @@
+[
+  {
+    "method": "DeleteKnowledgeBase",
+    "scenario": "idlOcid / catalogId / schemaId / kb missing or blank",
+    "class": "validation",
+    "verb": "DELETE",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "blank kb_key",
+        "path_params": {
+          "kb_key": " "
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Invalid request. The parameter",
+    "expected_message_param_filled": true,
+    "id": "DKB-001",
+    "source": "Confluence > DeleteKnowledgeBase"
+  },
+  {
+    "method": "DeleteKnowledgeBase",
+    "scenario": "KB feature config unreadable",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. Unable to read Knowledge Base feature configuration",
+    "id": "DKB-002",
+    "source": "Confluence > DeleteKnowledgeBase"
+  },
+  {
+    "method": "DeleteKnowledgeBase",
+    "scenario": "KB feature disabled",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Knowledge Base not enabled.",
+    "id": "DKB-003",
+    "source": "Confluence > DeleteKnowledgeBase"
+  },
+  {
+    "method": "DeleteKnowledgeBase",
+    "scenario": "Normal delete lookup does not find the KB",
+    "class": "noop",
+    "expected_status": [
+      200,
+      201,
+      202,
+      204
+    ],
+    "notes": "KbService.deleteKnowledgeBase returns without creating async work.",
+    "id": "DKB-004",
+    "source": "Confluence > DeleteKnowledgeBase"
+  },
+  {
+    "method": "DeleteKnowledgeBase",
+    "scenario": "Downstream delete exception contains 'not found'",
+    "class": "fixture",
+    "fixture_required": "request_nonexistent_kb",
+    "verb": "DELETE",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "nonexistent target",
+        "path_params": {
+          "kb_key": "kb_does_not_exist"
+        }
+      }
+    ],
+    "expected_status": [
+      404
+    ],
+    "expected_message_substring": "Not found. The requested Knowledge Base",
+    "id": "DKB-005",
+    "source": "Confluence > DeleteKnowledgeBase"
+  },
+  {
+    "method": "DeleteKnowledgeBase",
+    "scenario": "Default cluster unavailable",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. The default cluster is currently unavailable.",
+    "id": "DKB-006",
+    "source": "Confluence > DeleteKnowledgeBase"
+  },
+  {
+    "method": "DeleteKnowledgeBase",
+    "scenario": "Delete-table DDL reports ORA-00942 (table not found)",
+    "class": "noop",
+    "expected_status": [
+      200,
+      201,
+      202,
+      204
+    ],
+    "notes": "Intentionally ignored.",
+    "id": "DKB-007",
+    "source": "Confluence > DeleteKnowledgeBase"
+  },
+  {
+    "method": "DeleteKnowledgeBase",
+    "scenario": "Failure deleting child KB jobs",
+    "class": "noop",
+    "expected_status": [
+      200,
+      201,
+      202,
+      204
+    ],
+    "notes": "Logged and ignored.",
+    "id": "DKB-008",
+    "source": "Confluence > DeleteKnowledgeBase"
+  },
+  {
+    "method": "DeleteKnowledgeBase",
+    "scenario": "Metadata delete affects zero rows",
+    "class": "noop",
+    "expected_status": [
+      200,
+      201,
+      202,
+      204
+    ],
+    "notes": "Final delete count not validated.",
+    "id": "DKB-009",
+    "source": "Confluence > DeleteKnowledgeBase"
+  },
+  {
+    "method": "DeleteKnowledgeBase",
+    "scenario": "Embedding model does not exist",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection.",
+    "expected_message_substring": "Embedding model is not found.",
+    "id": "DKB-010",
+    "source": "Confluence > DeleteKnowledgeBase"
+  },
+  {
+    "method": "DeleteKnowledgeBase",
+    "scenario": "Invalid request signal reaches delete classifier",
+    "class": "validation",
+    "verb": "DELETE",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "wildcards",
+        "path_params": {
+          "kb_key": "***"
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Invalid request. Some required fields are missing or invalid.",
+    "expected_message_param_filled": false,
+    "id": "DKB-011",
+    "source": "Confluence > DeleteKnowledgeBase"
+  },
+  {
+    "method": "DeleteKnowledgeBase",
+    "scenario": "Delete operation times out",
+    "class": "race",
+    "skip_reason": "Timing-dependent.",
+    "expected_message_substring": "Operation timed out. Knowledge Base deletion did not complete in time.",
+    "id": "DKB-012",
+    "source": "Confluence > DeleteKnowledgeBase"
+  },
+  {
+    "method": "DeleteKnowledgeBase",
+    "scenario": "Other dependency failure while deleting",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. A dependent service failed while deleting",
+    "id": "DKB-013",
+    "source": "Confluence > DeleteKnowledgeBase"
+  },
+  {
+    "method": "DeleteKnowledgeBase",
+    "scenario": "Success callback fails to publish the delete event",
+    "class": "noop",
+    "expected_status": [
+      200,
+      201,
+      202,
+      204
+    ],
+    "id": "DKB-014",
+    "source": "Confluence > DeleteKnowledgeBase"
+  }
+]

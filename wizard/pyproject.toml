@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aidp-tool-wizard"
+version = "0.1.0"
+description = "Visual TUI wizard for building AIDP Custom Code tools with LLM-assisted generation."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Brenton Mizell", email = "brenton.mizell@oracle.com" }]
+license = { text = "UPL-1.0" }
+dependencies = [
+    "textual>=0.85.0",          # the TUI framework
+    "rich>=13.7.0",             # syntax highlighting + tables in screens
+    "anthropic>=0.40.0",        # Claude API (default LLM provider)
+    "openai>=1.50.0",           # OpenAI API (alt provider)
+    "oci>=2.130.0",             # OCI signing for AIDP REST
+    "requests>=2.31.0",         # HTTP
+    "jinja2>=3.1.0",            # template-based code generation fallback
+]
+
+[project.scripts]
+aidp-wizard = "aidp_wizard.app:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]

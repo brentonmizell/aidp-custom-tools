@@ -1,0 +1,221 @@
+[
+  {
+    "method": "ListKnowledgeBaseJobRun",
+    "scenario": "idlOcid / catalogId / schemaId missing",
+    "class": "validation",
+    "verb": "GET",
+    "path_template": "/knowledgeBases/{kb_key}/jobs/{job_key}/runs",
+    "variants": [
+      {
+        "name": "blank kb",
+        "path_params": {
+          "kb_key": " ",
+          "job_key": "j1"
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Invalid request. The parameter",
+    "expected_message_param_filled": true,
+    "id": "LKBJR-001",
+    "source": "Confluence > ListKnowledgeBaseJobRun"
+  },
+  {
+    "method": "ListKnowledgeBaseJobRun",
+    "scenario": "knowledgeBaseId / knowledgeBaseJobId missing or blank",
+    "class": "noop",
+    "notes": "No direct required-param message; validates parent existence instead.",
+    "expected_status": [
+      200,
+      404
+    ],
+    "id": "LKBJR-002",
+    "source": "Confluence > ListKnowledgeBaseJobRun"
+  },
+  {
+    "method": "ListKnowledgeBaseJobRun",
+    "scenario": "limit zero, negative, or over 1000",
+    "class": "noop",
+    "expected_status": [
+      200,
+      201,
+      202,
+      204
+    ],
+    "notes": "Pagination not validated.",
+    "id": "LKBJR-003",
+    "source": "Confluence > ListKnowledgeBaseJobRun"
+  },
+  {
+    "method": "ListKnowledgeBaseJobRun",
+    "scenario": "page token blank",
+    "class": "noop",
+    "expected_status": [
+      200,
+      201,
+      202,
+      204
+    ],
+    "notes": "Token ignored.",
+    "id": "LKBJR-004",
+    "source": "Confluence > ListKnowledgeBaseJobRun"
+  },
+  {
+    "method": "ListKnowledgeBaseJobRun",
+    "scenario": "Nonblank page token malformed",
+    "class": "noop",
+    "expected_status": [
+      200,
+      201,
+      202,
+      204
+    ],
+    "notes": "Parse error logged; pagination ignored.",
+    "id": "LKBJR-005",
+    "source": "Confluence > ListKnowledgeBaseJobRun"
+  },
+  {
+    "method": "ListKnowledgeBaseJobRun",
+    "scenario": "KB feature config unreadable",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. Unable to read Knowledge Base feature configuration",
+    "id": "LKBJR-006",
+    "source": "Confluence > ListKnowledgeBaseJobRun"
+  },
+  {
+    "method": "ListKnowledgeBaseJobRun",
+    "scenario": "KB feature disabled",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Knowledge Base not enabled.",
+    "id": "LKBJR-007",
+    "source": "Confluence > ListKnowledgeBaseJobRun"
+  },
+  {
+    "method": "ListKnowledgeBaseJobRun",
+    "scenario": "Parent KB not found",
+    "class": "fixture",
+    "fixture_required": "request_nonexistent_kb",
+    "verb": "GET",
+    "path_template": "/knowledgeBases/{kb_key}/jobs/{job_key}/runs",
+    "variants": [
+      {
+        "name": "nonexistent target",
+        "path_params": {
+          "kb_key": "kb_does_not_exist"
+        }
+      }
+    ],
+    "expected_status": [
+      404
+    ],
+    "expected_message_substring": "Not found. The requested Knowledge Base job",
+    "id": "LKBJR-008",
+    "source": "Confluence > ListKnowledgeBaseJobRun"
+  },
+  {
+    "method": "ListKnowledgeBaseJobRun",
+    "scenario": "Parent KB job not found",
+    "class": "fixture",
+    "fixture_required": "request_nonexistent_kb",
+    "verb": "GET",
+    "path_template": "/knowledgeBases/{kb_key}/jobs/{job_key}/runs",
+    "variants": [
+      {
+        "name": "nonexistent target",
+        "path_params": {
+          "kb_key": "kb_does_not_exist"
+        }
+      }
+    ],
+    "expected_status": [
+      404
+    ],
+    "expected_message_substring": "Not found. The requested Knowledge Base job",
+    "id": "LKBJR-009",
+    "source": "Confluence > ListKnowledgeBaseJobRun"
+  },
+  {
+    "method": "ListKnowledgeBaseJobRun",
+    "scenario": "Accepted job-run workflow status check fails",
+    "class": "noop",
+    "expected_status": [
+      200,
+      201,
+      202,
+      204
+    ],
+    "notes": "Existing job run returned.",
+    "id": "LKBJR-010",
+    "source": "Confluence > ListKnowledgeBaseJobRun"
+  },
+  {
+    "method": "ListKnowledgeBaseJobRun",
+    "scenario": "Accepted workflow failed; fail-fast had no runData",
+    "class": "noop",
+    "expected_status": [
+      200,
+      201,
+      202,
+      204
+    ],
+    "notes": "Pre-update row shown; no standardized lifecycle detail.",
+    "id": "LKBJR-011",
+    "source": "Confluence > ListKnowledgeBaseJobRun"
+  },
+  {
+    "method": "ListKnowledgeBaseJobRun",
+    "scenario": "Embedding model does not exist",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection.",
+    "expected_message_substring": "Embedding model is not found.",
+    "id": "LKBJR-012",
+    "source": "Confluence > ListKnowledgeBaseJobRun"
+  },
+  {
+    "method": "ListKnowledgeBaseJobRun",
+    "scenario": "Invalid request signal reaches job-run-list classifier",
+    "class": "validation",
+    "verb": "GET",
+    "path_template": "/knowledgeBases/{kb_key}/jobs/{job_key}/runs",
+    "variants": [
+      {
+        "name": "wildcards",
+        "path_params": {
+          "kb_key": "***",
+          "job_key": "***"
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Invalid request. Some required fields are missing or invalid.",
+    "expected_message_param_filled": false,
+    "id": "LKBJR-013",
+    "source": "Confluence > ListKnowledgeBaseJobRun"
+  },
+  {
+    "method": "ListKnowledgeBaseJobRun",
+    "scenario": "List job runs operation times out",
+    "class": "race",
+    "skip_reason": "Timing-dependent.",
+    "expected_message_substring": "Operation timed out. Listing Knowledge Base job runs did not complete in time.",
+    "id": "LKBJR-014",
+    "source": "Confluence > ListKnowledgeBaseJobRun"
+  },
+  {
+    "method": "ListKnowledgeBaseJobRun",
+    "scenario": "Other dependency failure while listing job runs",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. A dependent service failed while listing Knowledge Base job runs.",
+    "id": "LKBJR-015",
+    "source": "Confluence > ListKnowledgeBaseJobRun"
+  }
+]

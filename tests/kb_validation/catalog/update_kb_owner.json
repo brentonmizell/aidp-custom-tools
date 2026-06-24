@@ -1,0 +1,182 @@
+[
+  {
+    "method": "UpdateKnowledgeBaseOwner",
+    "scenario": "idlOcid missing or blank",
+    "class": "noop",
+    "notes": "No guaranteed required-param message; feature flag check first.",
+    "expected_status": [
+      400,
+      404
+    ],
+    "id": "UKBO-001",
+    "source": "Confluence > UpdateKnowledgeBaseOwner"
+  },
+  {
+    "method": "UpdateKnowledgeBaseOwner",
+    "scenario": "Request body is null",
+    "class": "validation",
+    "verb": "POST",
+    "path_template": "/knowledgeBases/{kb_key}/actions/updateOwner",
+    "variants": [
+      {
+        "name": "null body",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "body": null
+      }
+    ],
+    "expected_status": [
+      400,
+      415,
+      500
+    ],
+    "expected_message_substring": "",
+    "notes": "Framework handles null body.",
+    "id": "UKBO-002",
+    "source": "Confluence > UpdateKnowledgeBaseOwner"
+  },
+  {
+    "method": "UpdateKnowledgeBaseOwner",
+    "scenario": "catalogKey / schemaKey / knowledgeBaseName missing after feature validation",
+    "class": "validation",
+    "verb": "POST",
+    "path_template": "/knowledgeBases/{kb_key}/actions/updateOwner",
+    "variants": [
+      {
+        "name": "blank fields",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "body": {
+          "catalogKey": "",
+          "schemaKey": ""
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Invalid request. The parameter",
+    "expected_message_param_filled": true,
+    "id": "UKBO-003",
+    "source": "Confluence > UpdateKnowledgeBaseOwner"
+  },
+  {
+    "method": "UpdateKnowledgeBaseOwner",
+    "scenario": "KB feature config unreadable",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. Unable to read Knowledge Base feature configuration",
+    "id": "UKBO-004",
+    "source": "Confluence > UpdateKnowledgeBaseOwner"
+  },
+  {
+    "method": "UpdateKnowledgeBaseOwner",
+    "scenario": "KB feature disabled",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Knowledge Base not enabled.",
+    "id": "UKBO-005",
+    "source": "Confluence > UpdateKnowledgeBaseOwner"
+  },
+  {
+    "method": "UpdateKnowledgeBaseOwner",
+    "scenario": "Normal owner update path cannot load KB row",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. A dependent service failed while updating the Knowledge Base owner.",
+    "id": "UKBO-006",
+    "source": "Confluence > UpdateKnowledgeBaseOwner"
+  },
+  {
+    "method": "UpdateKnowledgeBaseOwner",
+    "scenario": "Downstream owner-update exception contains 'not found'",
+    "class": "fixture",
+    "fixture_required": "request_nonexistent_kb",
+    "verb": "PUT",
+    "path_template": "/knowledgeBases/{kb_key}/actions/updateOwner",
+    "variants": [
+      {
+        "name": "nonexistent target",
+        "path_params": {
+          "kb_key": "kb_does_not_exist"
+        }
+      }
+    ],
+    "expected_status": [
+      404
+    ],
+    "expected_message_substring": "Not found. The requested Knowledge Base",
+    "id": "UKBO-007",
+    "source": "Confluence > UpdateKnowledgeBaseOwner"
+  },
+  {
+    "method": "UpdateKnowledgeBaseOwner",
+    "scenario": "Ownership already revoked or flag is null",
+    "class": "noop",
+    "expected_status": [
+      200,
+      201,
+      202,
+      204
+    ],
+    "notes": "Treated as no-op.",
+    "id": "UKBO-008",
+    "source": "Confluence > UpdateKnowledgeBaseOwner"
+  },
+  {
+    "method": "UpdateKnowledgeBaseOwner",
+    "scenario": "Embedding model does not exist",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection.",
+    "expected_message_substring": "Embedding model is not found.",
+    "id": "UKBO-009",
+    "source": "Confluence > UpdateKnowledgeBaseOwner"
+  },
+  {
+    "method": "UpdateKnowledgeBaseOwner",
+    "scenario": "Invalid request signal reaches owner-update classifier",
+    "class": "validation",
+    "verb": "POST",
+    "path_template": "/knowledgeBases/{kb_key}/actions/updateOwner",
+    "variants": [
+      {
+        "name": "wildcards",
+        "path_params": {
+          "kb_key": "***"
+        },
+        "body": {
+          "x": 1
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Invalid request. Some required fields are missing or invalid.",
+    "expected_message_param_filled": false,
+    "id": "UKBO-010",
+    "source": "Confluence > UpdateKnowledgeBaseOwner"
+  },
+  {
+    "method": "UpdateKnowledgeBaseOwner",
+    "scenario": "Owner update operation times out",
+    "class": "race",
+    "skip_reason": "Timing-dependent.",
+    "expected_message_substring": "Operation timed out. Updating the Knowledge Base owner did not complete in time.",
+    "id": "UKBO-011",
+    "source": "Confluence > UpdateKnowledgeBaseOwner"
+  },
+  {
+    "method": "UpdateKnowledgeBaseOwner",
+    "scenario": "Other dependency failure",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. A dependent service failed while updating the Knowledge Base owner.",
+    "id": "UKBO-012",
+    "source": "Confluence > UpdateKnowledgeBaseOwner"
+  }
+]

@@ -1,0 +1,150 @@
+[
+  {
+    "id": "CKB-001",
+    "method": "CreateKnowledgeBase",
+    "verb": "POST",
+    "path_template": "/knowledgeBases",
+    "scenario": "Request body is null",
+    "class": "validation",
+    "notes": "Body dereferenced before KB catalog — global handler responds. Asserts SOME 4xx, but message text comes from framework.",
+    "variants": [
+      {"name": "literal null body", "body": null}
+    ],
+    "expected_status": [400, 415, 500],
+    "expected_message_substring": "",
+    "expected_class": "global_handler",
+    "source": "Confluence > CreateKnowledgeBase"
+  },
+  {
+    "id": "CKB-002",
+    "method": "CreateKnowledgeBase",
+    "verb": "POST",
+    "path_template": "/knowledgeBases",
+    "scenario": "idlOcid / catalogId / schemaId / displayName missing or blank",
+    "class": "validation",
+    "variants": [
+      {"name": "missing idlOcid",     "body": {"catalogId": "c1", "schemaId": "s1", "displayName": "kb_test"}},
+      {"name": "missing catalogId",   "body": {"idlOcid": "ocid1.aidataplatform.oc1..a", "schemaId": "s1", "displayName": "kb_test"}},
+      {"name": "missing schemaId",    "body": {"idlOcid": "ocid1.aidataplatform.oc1..a", "catalogId": "c1", "displayName": "kb_test"}},
+      {"name": "missing displayName", "body": {"idlOcid": "ocid1.aidataplatform.oc1..a", "catalogId": "c1", "schemaId": "s1"}},
+      {"name": "blank displayName",   "body": {"idlOcid": "ocid1.aidataplatform.oc1..a", "catalogId": "c1", "schemaId": "s1", "displayName": "   "}}
+    ],
+    "expected_status": [400, 422],
+    "expected_message_substring": "Invalid request. The parameter",
+    "expected_message_param_filled": true,
+    "source": "Confluence > CreateKnowledgeBase"
+  },
+  {
+    "id": "CKB-003",
+    "method": "CreateKnowledgeBase",
+    "scenario": "Knowledge Base feature configuration cannot be read from the lake property bag",
+    "class": "infra",
+    "skip_reason": "Requires AIDP-side: empty/corrupt lake property bag.",
+    "expected_message_substring": "Service unavailable. Unable to read Knowledge Base feature configuration"
+  },
+  {
+    "id": "CKB-004",
+    "method": "CreateKnowledgeBase",
+    "scenario": "Knowledge Base feature is disabled",
+    "class": "infra",
+    "skip_reason": "Requires AIDP-side: feature flag toggle on the tenancy.",
+    "expected_message_substring": "Knowledge Base not enabled."
+  },
+  {
+    "id": "CKB-005",
+    "method": "CreateKnowledgeBase",
+    "scenario": "Default cluster is not active or is unavailable",
+    "class": "infra",
+    "skip_reason": "Requires AIDP-side: cluster lifecycle.",
+    "expected_message_substring": "Service unavailable. The default cluster is currently unavailable."
+  },
+  {
+    "id": "CKB-006",
+    "method": "CreateKnowledgeBase",
+    "verb": "POST",
+    "path_template": "/knowledgeBases",
+    "scenario": "Duplicate KB / already-exists signal reaches the KB framework",
+    "class": "fixture",
+    "fixture_required": "create_then_recreate",
+    "expected_status": [409],
+    "expected_message_substring": "Knowledge Base already exists.",
+    "source": "Confluence > CreateKnowledgeBase"
+  },
+  {
+    "id": "CKB-007",
+    "method": "CreateKnowledgeBase",
+    "scenario": "Metadata insert throws BmcException 409 inside CreateKnowledgeBaseAsyncTask",
+    "class": "noop",
+    "notes": "Task logs 'Kb record already exists' and continues as success.",
+    "expected_status": [200, 201, 202]
+  },
+  {
+    "id": "CKB-008",
+    "method": "CreateKnowledgeBase",
+    "scenario": "DB connection timed out (ORA-12170 / TCPS connect timeout)",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection.",
+    "expected_message_substring": "Database connection timed out."
+  },
+  {
+    "id": "CKB-009",
+    "method": "CreateKnowledgeBase",
+    "scenario": "DB connection failed (ORA-12514, network adapter, TNS, cannot-connect)",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection.",
+    "expected_message_substring": "Database connection failed."
+  },
+  {
+    "id": "CKB-010",
+    "method": "CreateKnowledgeBase",
+    "scenario": "DB resources insufficient (ORA-65114 / ORA-51906)",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection.",
+    "expected_message_substring": "Database resources unavailable."
+  },
+  {
+    "id": "CKB-011",
+    "method": "CreateKnowledgeBase",
+    "scenario": "Embedding model does not exist (ORA-40284)",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection or model removal.",
+    "expected_message_substring": "Embedding model is not found."
+  },
+  {
+    "id": "CKB-012",
+    "method": "CreateKnowledgeBase",
+    "verb": "POST",
+    "path_template": "/knowledgeBases",
+    "scenario": "Invalid request signal reaches create classifier (catch-all)",
+    "class": "validation",
+    "variants": [
+      {"name": "malformed JSON body", "raw_body": "{not-json", "headers": {"Content-Type": "application/json"}}
+    ],
+    "expected_status": [400, 422],
+    "expected_message_substring": "Invalid request. Some required fields are missing or invalid."
+  },
+  {
+    "id": "CKB-013",
+    "method": "CreateKnowledgeBase",
+    "scenario": "Create task times out or async DB DDL does not complete",
+    "class": "race",
+    "skip_reason": "Timing-dependent; not reproducible from a client.",
+    "expected_message_substring": "Operation timed out. Knowledge Base setup did not complete in time."
+  },
+  {
+    "id": "CKB-014",
+    "method": "CreateKnowledgeBase",
+    "scenario": "Other dependency failure while provisioning KB storage / metadata",
+    "class": "infra",
+    "skip_reason": "Requires AIDP-side dependency failure injection.",
+    "expected_message_substring": "Service unavailable. A dependent service failed while provisioning"
+  },
+  {
+    "id": "CKB-015",
+    "method": "CreateKnowledgeBase",
+    "scenario": "Success callback fails to publish the create event",
+    "class": "noop",
+    "notes": "Task remains successful; only logs/metrics affected.",
+    "expected_status": [200, 201, 202]
+  }
+]

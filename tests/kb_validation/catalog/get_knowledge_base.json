@@ -1,0 +1,124 @@
+[
+  {
+    "method": "GetKnowledgeBase",
+    "scenario": "idlOcid / catalogId / schemaId / displayName missing or blank",
+    "class": "validation",
+    "verb": "GET",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "blank kb_key",
+        "path_params": {
+          "kb_key": " "
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Invalid request. The parameter",
+    "expected_message_param_filled": true,
+    "id": "GKB-001",
+    "source": "Confluence > GetKnowledgeBase"
+  },
+  {
+    "method": "GetKnowledgeBase",
+    "scenario": "KB feature configuration cannot be read from the lake property bag",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. Unable to read Knowledge Base feature configuration",
+    "id": "GKB-002",
+    "source": "Confluence > GetKnowledgeBase"
+  },
+  {
+    "method": "GetKnowledgeBase",
+    "scenario": "KB feature is disabled (DISABLING allowed)",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Knowledge Base not enabled.",
+    "id": "GKB-003",
+    "source": "Confluence > GetKnowledgeBase"
+  },
+  {
+    "method": "GetKnowledgeBase",
+    "scenario": "Knowledge Base not found by validateKnowledgeBaseExist",
+    "class": "fixture",
+    "fixture_required": "request_nonexistent_kb",
+    "verb": "GET",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "nonexistent target",
+        "path_params": {
+          "kb_key": "kb_does_not_exist"
+        }
+      }
+    ],
+    "expected_status": [
+      404
+    ],
+    "expected_message_substring": "Not found. The requested Knowledge Base",
+    "id": "GKB-004",
+    "source": "Confluence > GetKnowledgeBase"
+  },
+  {
+    "method": "GetKnowledgeBase",
+    "scenario": "DB connection failed while getting the Knowledge Base",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection.",
+    "expected_message_substring": "Database connection failed.",
+    "id": "GKB-005",
+    "source": "Confluence > GetKnowledgeBase"
+  },
+  {
+    "method": "GetKnowledgeBase",
+    "scenario": "Embedding model does not exist (ORA-40284)",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection.",
+    "expected_message_substring": "Embedding model is not found.",
+    "id": "GKB-006",
+    "source": "Confluence > GetKnowledgeBase"
+  },
+  {
+    "method": "GetKnowledgeBase",
+    "scenario": "Invalid request signal reaches get classifier",
+    "class": "validation",
+    "verb": "GET",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "wildcard chars",
+        "path_params": {
+          "kb_key": "***"
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Invalid request. Some required fields are missing or invalid.",
+    "expected_message_param_filled": false,
+    "id": "GKB-007",
+    "source": "Confluence > GetKnowledgeBase"
+  },
+  {
+    "method": "GetKnowledgeBase",
+    "scenario": "Get operation times out",
+    "class": "race",
+    "skip_reason": "Timing-dependent.",
+    "expected_message_substring": "Operation timed out. Getting the Knowledge Base did not complete in time.",
+    "id": "GKB-008",
+    "source": "Confluence > GetKnowledgeBase"
+  },
+  {
+    "method": "GetKnowledgeBase",
+    "scenario": "Other dependency failure while getting the Knowledge Base",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. A dependent service failed while getting",
+    "id": "GKB-009",
+    "source": "Confluence > GetKnowledgeBase"
+  }
+]

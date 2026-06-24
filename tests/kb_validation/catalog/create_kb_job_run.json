@@ -1,0 +1,180 @@
+[
+  {
+    "method": "CreateKnowledgeBaseJobRun",
+    "scenario": "Request body is null",
+    "class": "validation",
+    "verb": "POST",
+    "path_template": "/knowledgeBases/{kb_key}/jobs/{job_key}/runs",
+    "variants": [
+      {
+        "name": "null body",
+        "path_params": {
+          "kb_key": "kb1",
+          "job_key": "j1"
+        },
+        "body": null
+      }
+    ],
+    "expected_status": [
+      400,
+      415,
+      500
+    ],
+    "expected_message_substring": "",
+    "notes": "Framework handles null body.",
+    "id": "CKBJR-001",
+    "source": "Confluence > CreateKnowledgeBaseJobRun"
+  },
+  {
+    "method": "CreateKnowledgeBaseJobRun",
+    "scenario": "idlOcid / knowledgeBaseId / knowledgeBaseJobId / catalog / schema missing",
+    "class": "validation",
+    "verb": "POST",
+    "path_template": "/knowledgeBases/{kb_key}/jobs/{job_key}/runs",
+    "variants": [
+      {
+        "name": "blank kb",
+        "path_params": {
+          "kb_key": " ",
+          "job_key": "j1"
+        },
+        "body": {
+          "x": 1
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Invalid request. The parameter",
+    "expected_message_param_filled": true,
+    "id": "CKBJR-002",
+    "source": "Confluence > CreateKnowledgeBaseJobRun"
+  },
+  {
+    "method": "CreateKnowledgeBaseJobRun",
+    "scenario": "KB feature config unreadable",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. Unable to read Knowledge Base feature configuration",
+    "id": "CKBJR-003",
+    "source": "Confluence > CreateKnowledgeBaseJobRun"
+  },
+  {
+    "method": "CreateKnowledgeBaseJobRun",
+    "scenario": "KB feature disabled",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Knowledge Base not enabled.",
+    "id": "CKBJR-004",
+    "source": "Confluence > CreateKnowledgeBaseJobRun"
+  },
+  {
+    "method": "CreateKnowledgeBaseJobRun",
+    "scenario": "Parent KB not found",
+    "class": "fixture",
+    "fixture_required": "request_nonexistent_kb",
+    "verb": "POST",
+    "path_template": "/knowledgeBases/{kb_key}/jobs/{job_key}/runs",
+    "variants": [
+      {
+        "name": "nonexistent target",
+        "path_params": {
+          "kb_key": "kb_does_not_exist"
+        }
+      }
+    ],
+    "expected_status": [
+      404
+    ],
+    "expected_message_substring": "Not found. The requested Knowledge Base job run",
+    "id": "CKBJR-005",
+    "source": "Confluence > CreateKnowledgeBaseJobRun"
+  },
+  {
+    "method": "CreateKnowledgeBaseJobRun",
+    "scenario": "Parent KB job not found",
+    "class": "fixture",
+    "fixture_required": "request_nonexistent_kb",
+    "verb": "POST",
+    "path_template": "/knowledgeBases/{kb_key}/jobs/{job_key}/runs",
+    "variants": [
+      {
+        "name": "nonexistent target",
+        "path_params": {
+          "kb_key": "kb_does_not_exist"
+        }
+      }
+    ],
+    "expected_status": [
+      404
+    ],
+    "expected_message_substring": "Not found. The requested Knowledge Base job run",
+    "id": "CKBJR-006",
+    "source": "Confluence > CreateKnowledgeBaseJobRun"
+  },
+  {
+    "method": "CreateKnowledgeBaseJobRun",
+    "scenario": "Job definition checksum changed before run created",
+    "class": "race",
+    "skip_reason": "Timing-dependent.",
+    "expected_message_substring": "Conflict. The Knowledge Base job definition changed",
+    "id": "CKBJR-007",
+    "source": "Confluence > CreateKnowledgeBaseJobRun"
+  },
+  {
+    "method": "CreateKnowledgeBaseJobRun",
+    "scenario": "Embedding model does not exist",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection.",
+    "expected_message_substring": "Embedding model is not found.",
+    "id": "CKBJR-008",
+    "source": "Confluence > CreateKnowledgeBaseJobRun"
+  },
+  {
+    "method": "CreateKnowledgeBaseJobRun",
+    "scenario": "Invalid request signal reaches job-run-create classifier",
+    "class": "validation",
+    "verb": "POST",
+    "path_template": "/knowledgeBases/{kb_key}/jobs/{job_key}/runs",
+    "variants": [
+      {
+        "name": "wildcards",
+        "path_params": {
+          "kb_key": "***",
+          "job_key": "***"
+        },
+        "body": {
+          "x": 1
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Invalid request. Some required fields are missing or invalid.",
+    "expected_message_param_filled": false,
+    "id": "CKBJR-009",
+    "source": "Confluence > CreateKnowledgeBaseJobRun"
+  },
+  {
+    "method": "CreateKnowledgeBaseJobRun",
+    "scenario": "Create job run operation times out",
+    "class": "race",
+    "skip_reason": "Timing-dependent.",
+    "expected_message_substring": "Operation timed out. Knowledge Base job run did not start in time.",
+    "id": "CKBJR-010",
+    "source": "Confluence > CreateKnowledgeBaseJobRun"
+  },
+  {
+    "method": "CreateKnowledgeBaseJobRun",
+    "scenario": "Job-run metadata insert / workflow / dep failure",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. A dependent service failed while starting the Knowledge Base job run.",
+    "id": "CKBJR-011",
+    "source": "Confluence > CreateKnowledgeBaseJobRun"
+  }
+]

@@ -1,0 +1,126 @@
+[
+  {
+    "id": "LKB-001",
+    "method": "ListKnowledgeBases",
+    "verb": "GET",
+    "path_template": "/knowledgeBases",
+    "scenario": "idlOcid / catalogId / schemaId missing or blank",
+    "class": "validation",
+    "notes": "List uses query params; missing-param tests use empty string for each.",
+    "variants": [
+      {"name": "no params",       "query": {}},
+      {"name": "missing catalog", "query": {"schemaKey": "s1"}},
+      {"name": "missing schema",  "query": {"catalogKey": "c1"}},
+      {"name": "blank catalogKey","query": {"catalogKey": "", "schemaKey": "s1"}}
+    ],
+    "expected_status": [400, 422],
+    "expected_message_substring": "Invalid request. The parameter",
+    "expected_message_param_filled": true
+  },
+  {
+    "id": "LKB-002",
+    "method": "ListKnowledgeBases",
+    "scenario": "Knowledge Base feature configuration cannot be read from the lake property bag",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. Unable to read Knowledge Base feature configuration"
+  },
+  {
+    "id": "LKB-003",
+    "method": "ListKnowledgeBases",
+    "scenario": "Knowledge Base feature is disabled (DISABLING allowed)",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Knowledge Base not enabled."
+  },
+  {
+    "id": "LKB-004",
+    "method": "ListKnowledgeBases",
+    "verb": "GET",
+    "path_template": "/knowledgeBases",
+    "scenario": "page token is blank",
+    "class": "noop",
+    "notes": "Token ignored; pagination not applied. No error expected.",
+    "variants": [
+      {"name": "blank page", "query": {"catalogKey": "c1", "schemaKey": "s1", "page": ""}}
+    ],
+    "expected_status": [200, 400]
+  },
+  {
+    "id": "LKB-005",
+    "method": "ListKnowledgeBases",
+    "verb": "GET",
+    "path_template": "/knowledgeBases",
+    "scenario": "Nonblank page token is malformed",
+    "class": "noop",
+    "notes": "Logs parse error, ignores pagination.",
+    "variants": [
+      {"name": "garbage page", "query": {"catalogKey": "c1", "schemaKey": "s1", "page": "not-a-token"}}
+    ],
+    "expected_status": [200, 400]
+  },
+  {
+    "id": "LKB-006",
+    "method": "ListKnowledgeBases",
+    "verb": "GET",
+    "path_template": "/knowledgeBases",
+    "scenario": "limit is null, zero, or negative",
+    "class": "noop",
+    "notes": "Query generated without a fetch limit. Documented as no-error path.",
+    "variants": [
+      {"name": "limit=0",  "query": {"catalogKey": "c1", "schemaKey": "s1", "limit": "0"}},
+      {"name": "limit=-5", "query": {"catalogKey": "c1", "schemaKey": "s1", "limit": "-5"}}
+    ],
+    "expected_status": [200, 400]
+  },
+  {
+    "id": "LKB-007",
+    "method": "ListKnowledgeBases",
+    "verb": "GET",
+    "path_template": "/knowledgeBases",
+    "scenario": "limit > 1000",
+    "class": "noop",
+    "notes": "High limit passed into fetch clause; documented as no-error path.",
+    "variants": [
+      {"name": "limit=50000", "query": {"catalogKey": "c1", "schemaKey": "s1", "limit": "50000"}}
+    ],
+    "expected_status": [200, 400]
+  },
+  {
+    "id": "LKB-008",
+    "method": "ListKnowledgeBases",
+    "scenario": "Embedding model does not exist (ORA-40284)",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection.",
+    "expected_message_substring": "Embedding model is not found."
+  },
+  {
+    "id": "LKB-009",
+    "method": "ListKnowledgeBases",
+    "verb": "GET",
+    "path_template": "/knowledgeBases",
+    "scenario": "Invalid request signal reaches list classifier",
+    "class": "validation",
+    "variants": [
+      {"name": "broken query",  "query": {"catalogKey": " ", "schemaKey": " "}}
+    ],
+    "expected_status": [400, 422],
+    "expected_message_substring": "Invalid request. Some required fields are missing or invalid."
+  },
+  {
+    "id": "LKB-010",
+    "method": "ListKnowledgeBases",
+    "scenario": "List operation times out",
+    "class": "race",
+    "skip_reason": "Timing-dependent.",
+    "expected_message_substring": "Operation timed out. Listing Knowledge Bases did not complete in time."
+  },
+  {
+    "id": "LKB-011",
+    "method": "ListKnowledgeBases",
+    "scenario": "Other dependency failure while listing",
+    "class": "infra",
+    "skip_reason": "AIDP-side dependency injection.",
+    "expected_message_substring": "Service unavailable. A dependent service failed while listing"
+  }
+]

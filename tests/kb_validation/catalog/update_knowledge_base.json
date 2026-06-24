@@ -1,0 +1,724 @@
+[
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "knowledgebase / idlOcid / catalog / schema missing or blank",
+    "class": "validation",
+    "verb": "PUT",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "blank kb_key",
+        "path_params": {
+          "kb_key": " "
+        },
+        "body": {
+          "action": "UPDATE_METADATA",
+          "metadataUpdate": {
+            "description": "x"
+          }
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Invalid request. The parameter",
+    "expected_message_param_filled": true,
+    "id": "UKB-001",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Update request body is null",
+    "class": "validation",
+    "verb": "PUT",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "null body",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "body": null
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Input - updateKnowledgeBaseDetails is null",
+    "expected_message_param_filled": true,
+    "id": "UKB-002",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Update action missing",
+    "class": "validation",
+    "verb": "PUT",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "no action",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "body": {}
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "no action (KnowledgeBaseUpdateOperationType) specified",
+    "expected_message_param_filled": true,
+    "id": "UKB-003",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Metadata update details missing",
+    "class": "validation",
+    "verb": "PUT",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "no metadataUpdate",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "body": {
+          "action": "UPDATE_METADATA"
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Input for KB metadata update",
+    "expected_message_param_filled": true,
+    "id": "UKB-004",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Metadata update both name and description empty",
+    "class": "validation",
+    "verb": "PUT",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "both empty",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "body": {
+          "action": "UPDATE_METADATA",
+          "metadataUpdate": {
+            "description": "",
+            "name": ""
+          }
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "both name and description are empty",
+    "expected_message_param_filled": true,
+    "id": "UKB-005",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Source update details missing",
+    "class": "validation",
+    "verb": "PUT",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "no source body",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "body": {
+          "action": "UPDATE_SOURCES"
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Input for KB source update",
+    "expected_message_param_filled": true,
+    "id": "UKB-006",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Source update list empty",
+    "class": "validation",
+    "verb": "PUT",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "empty sources list",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "body": {
+          "action": "UPDATE_SOURCES",
+          "sourceUpdate": {
+            "sources": []
+          }
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "empty payload",
+    "expected_message_param_filled": true,
+    "id": "UKB-007",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Add-source payload null",
+    "class": "validation",
+    "verb": "PUT",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "null add payload",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "body": {
+          "action": "UPDATE_SOURCES",
+          "sourceUpdate": {
+            "sources": [
+              {
+                "action": "ADD",
+                "addSource": null
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Null payload for Add source",
+    "expected_message_param_filled": true,
+    "id": "UKB-008",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Add-source missing name/type/location",
+    "class": "validation",
+    "verb": "PUT",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "incomplete add",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "body": {
+          "action": "UPDATE_SOURCES",
+          "sourceUpdate": {
+            "sources": [
+              {
+                "action": "ADD",
+                "addSource": {
+                  "name": "x"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Add source body not well formed",
+    "expected_message_param_filled": true,
+    "id": "UKB-009",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Add-source uses unsupported Table type",
+    "class": "validation",
+    "verb": "PUT",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "table type",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "body": {
+          "action": "UPDATE_SOURCES",
+          "sourceUpdate": {
+            "sources": [
+              {
+                "action": "ADD",
+                "addSource": {
+                  "name": "x",
+                  "type": "Table",
+                  "location": "..."
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Table is not supported yet",
+    "expected_message_param_filled": true,
+    "id": "UKB-010",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Delete-source payload null",
+    "class": "validation",
+    "verb": "PUT",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "null delete payload",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "body": {
+          "action": "UPDATE_SOURCES",
+          "sourceUpdate": {
+            "sources": [
+              {
+                "action": "DELETE",
+                "deleteSource": null
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Null payload for Delete source",
+    "expected_message_param_filled": true,
+    "id": "UKB-011",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Delete-source missing name/type",
+    "class": "validation",
+    "verb": "PUT",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "incomplete delete",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "body": {
+          "action": "UPDATE_SOURCES",
+          "sourceUpdate": {
+            "sources": [
+              {
+                "action": "DELETE",
+                "deleteSource": {}
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Delete source body not well formed",
+    "expected_message_param_filled": true,
+    "id": "UKB-012",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Add-index missing indexDetails",
+    "class": "validation",
+    "verb": "PUT",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "no indexDetails",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "body": {
+          "action": "ADD_INDEX"
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Index details are required",
+    "expected_message_param_filled": true,
+    "id": "UKB-013",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Add-index missing index type",
+    "class": "validation",
+    "verb": "PUT",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "no index type",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "body": {
+          "action": "ADD_INDEX",
+          "indexDetails": {}
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Index type is required",
+    "expected_message_param_filled": true,
+    "id": "UKB-014",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Add-source name already exists",
+    "class": "fixture",
+    "fixture_required": "create_kb_with_source_then_add_same",
+    "expected_status": [
+      400,
+      409
+    ],
+    "expected_message_substring": "already exists in this Knowledge Base.",
+    "id": "UKB-015",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Add-source location already tracked",
+    "class": "fixture",
+    "fixture_required": "create_kb_with_location_then_add_same",
+    "expected_status": [
+      400,
+      409
+    ],
+    "expected_message_substring": "is already tracked by this Knowledge Base.",
+    "id": "UKB-016",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Add-source location overlaps existing source",
+    "class": "fixture",
+    "fixture_required": "create_kb_with_location_then_add_overlap",
+    "expected_status": [
+      400
+    ],
+    "expected_message_substring": "sources cannot have overlapping locations.",
+    "id": "UKB-017",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Add-index when KB already has index metadata",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. A dependent service failed while updating",
+    "id": "UKB-018",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Add-index unsupported index type after validation",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. A dependent service failed while updating",
+    "id": "UKB-019",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Drop-index when KB has no index type",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. A dependent service failed while updating",
+    "id": "UKB-020",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Drop-index finds type but stored index name is missing",
+    "class": "fixture",
+    "fixture_required": "request_nonexistent_kb",
+    "verb": "PUT",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "nonexistent target",
+        "path_params": {
+          "kb_key": "kb_does_not_exist"
+        }
+      }
+    ],
+    "expected_status": [
+      404
+    ],
+    "expected_message_substring": "Not found. The requested Knowledge Base",
+    "id": "UKB-021",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Delete-source target name/type does not match any current source row",
+    "class": "noop",
+    "expected_status": [
+      200,
+      201,
+      202,
+      204
+    ],
+    "notes": "Delete SQL result not validated; continues without reporting no match.",
+    "id": "UKB-022",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Drop-index DDL fails but metadata cleanup succeeds",
+    "class": "noop",
+    "expected_status": [
+      200,
+      201,
+      202,
+      204
+    ],
+    "notes": "DDL failure logged; metadata still cleared.",
+    "id": "UKB-023",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "KB feature configuration cannot be read",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. Unable to read Knowledge Base feature configuration",
+    "id": "UKB-024",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "KB feature is disabled",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Knowledge Base not enabled.",
+    "id": "UKB-025",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Normal update path cannot load the KB row",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. A dependent service failed while updating",
+    "id": "UKB-026",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Downstream update exception contains 'not found' / 'does not exist'",
+    "class": "fixture",
+    "fixture_required": "request_nonexistent_kb",
+    "verb": "PUT",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "nonexistent target",
+        "path_params": {
+          "kb_key": "kb_does_not_exist"
+        }
+      }
+    ],
+    "expected_status": [
+      404
+    ],
+    "expected_message_substring": "Not found. The requested Knowledge Base",
+    "id": "UKB-027",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Default cluster is not active or is unavailable",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. The default cluster is currently unavailable.",
+    "id": "UKB-028",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Job definition/checksum changed before inline job run could start",
+    "class": "race",
+    "skip_reason": "Timing-dependent.",
+    "expected_message_substring": "Conflict. The Knowledge Base job definition changed",
+    "id": "UKB-029",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "DB connection timed out during update (ORA-12170)",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection.",
+    "expected_message_substring": "Database connection timed out.",
+    "id": "UKB-030",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "DB connection failed during update (ORA-12514 / TNS)",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection.",
+    "expected_message_substring": "Database connection failed.",
+    "id": "UKB-031",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "DB resources insufficient during update (ORA-65114)",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection.",
+    "expected_message_substring": "Database resources unavailable.",
+    "id": "UKB-032",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Embedding model does not exist (ORA-40284)",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection.",
+    "expected_message_substring": "Embedding model is not found.",
+    "id": "UKB-033",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Other database-originated update error (ORA / SQLException)",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection.",
+    "expected_message_substring": "Database operation failed.",
+    "id": "UKB-034",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Inline job-run fails with standardized message already persisted",
+    "class": "noop",
+    "notes": "Async preserves rendered job-run message; not testable from update API.",
+    "expected_status": [
+      200,
+      202
+    ],
+    "id": "UKB-035",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Inline job-run Failed but fail-fast had no runData",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. A dependent service failed while updating",
+    "id": "UKB-036",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Invalid request signal reaches update classifier",
+    "class": "validation",
+    "verb": "PUT",
+    "path_template": "/knowledgeBases/{kb_key}",
+    "variants": [
+      {
+        "name": "malformed",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "body": {
+          "action": "BOGUS_ACTION"
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Invalid request. Some required fields are missing or invalid.",
+    "expected_message_param_filled": false,
+    "id": "UKB-037",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Update operation times out",
+    "class": "race",
+    "skip_reason": "Timing-dependent.",
+    "expected_message_substring": "Operation timed out. Knowledge Base update did not complete in time.",
+    "id": "UKB-038",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Other dependency failure while updating",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. A dependent service failed while updating",
+    "id": "UKB-039",
+    "source": "Confluence > UpdateKnowledgeBase"
+  },
+  {
+    "method": "UpdateKnowledgeBase",
+    "scenario": "Success callback fails to publish metadata/source lineage events",
+    "class": "noop",
+    "expected_status": [
+      200,
+      201,
+      202,
+      204
+    ],
+    "id": "UKB-040",
+    "source": "Confluence > UpdateKnowledgeBase"
+  }
+]

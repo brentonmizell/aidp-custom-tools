@@ -1,0 +1,204 @@
+[
+  {
+    "method": "ListKnowledgeBaseJobs",
+    "scenario": "idlOcid / catalogId / schemaId / knowledgeBaseId missing",
+    "class": "validation",
+    "verb": "GET",
+    "path_template": "/knowledgeBases/{kb_key}/jobs",
+    "variants": [
+      {
+        "name": "blank kb",
+        "path_params": {
+          "kb_key": " "
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Invalid request. The parameter",
+    "expected_message_param_filled": true,
+    "id": "LKBJ-001",
+    "source": "Confluence > ListKnowledgeBaseJobs"
+  },
+  {
+    "method": "ListKnowledgeBaseJobs",
+    "scenario": "limit outside 1..1000",
+    "class": "validation",
+    "verb": "GET",
+    "path_template": "/knowledgeBases/{kb_key}/jobs",
+    "variants": [
+      {
+        "name": "limit=0",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "query": {
+          "limit": "0"
+        }
+      },
+      {
+        "name": "limit=10000",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "query": {
+          "limit": "10000"
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Limit must be between 1 and 1000",
+    "expected_message_param_filled": false,
+    "id": "LKBJ-002",
+    "source": "Confluence > ListKnowledgeBaseJobs"
+  },
+  {
+    "method": "ListKnowledgeBaseJobs",
+    "scenario": "page token blank",
+    "class": "validation",
+    "verb": "GET",
+    "path_template": "/knowledgeBases/{kb_key}/jobs",
+    "variants": [
+      {
+        "name": "blank page",
+        "path_params": {
+          "kb_key": "kb1"
+        },
+        "query": {
+          "page": ""
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Page token cannot be empty",
+    "expected_message_param_filled": false,
+    "id": "LKBJ-003",
+    "source": "Confluence > ListKnowledgeBaseJobs"
+  },
+  {
+    "method": "ListKnowledgeBaseJobs",
+    "scenario": "Nonblank page token malformed",
+    "class": "noop",
+    "expected_status": [
+      200,
+      201,
+      202,
+      204
+    ],
+    "notes": "Logs parse error, ignores pagination.",
+    "id": "LKBJ-004",
+    "source": "Confluence > ListKnowledgeBaseJobs"
+  },
+  {
+    "method": "ListKnowledgeBaseJobs",
+    "scenario": "KB feature config unreadable",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. Unable to read Knowledge Base feature configuration",
+    "id": "LKBJ-005",
+    "source": "Confluence > ListKnowledgeBaseJobs"
+  },
+  {
+    "method": "ListKnowledgeBaseJobs",
+    "scenario": "KB feature disabled",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Knowledge Base not enabled.",
+    "id": "LKBJ-006",
+    "source": "Confluence > ListKnowledgeBaseJobs"
+  },
+  {
+    "method": "ListKnowledgeBaseJobs",
+    "scenario": "Parent KB does not exist in normal list query",
+    "class": "noop",
+    "expected_status": [
+      200,
+      201,
+      202,
+      204
+    ],
+    "notes": "Subquery returns no jobs; empty collection.",
+    "id": "LKBJ-007",
+    "source": "Confluence > ListKnowledgeBaseJobs"
+  },
+  {
+    "method": "ListKnowledgeBaseJobs",
+    "scenario": "Downstream list-jobs exception contains 'not found'",
+    "class": "fixture",
+    "fixture_required": "request_nonexistent_kb",
+    "verb": "GET",
+    "path_template": "/knowledgeBases/{kb_key}/jobs",
+    "variants": [
+      {
+        "name": "nonexistent target",
+        "path_params": {
+          "kb_key": "kb_does_not_exist"
+        }
+      }
+    ],
+    "expected_status": [
+      404
+    ],
+    "expected_message_substring": "Not found. The requested Knowledge Base",
+    "id": "LKBJ-008",
+    "source": "Confluence > ListKnowledgeBaseJobs"
+  },
+  {
+    "method": "ListKnowledgeBaseJobs",
+    "scenario": "Embedding model does not exist",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection.",
+    "expected_message_substring": "Embedding model is not found.",
+    "id": "LKBJ-009",
+    "source": "Confluence > ListKnowledgeBaseJobs"
+  },
+  {
+    "method": "ListKnowledgeBaseJobs",
+    "scenario": "Invalid request signal reaches job-list classifier",
+    "class": "validation",
+    "verb": "GET",
+    "path_template": "/knowledgeBases/{kb_key}/jobs",
+    "variants": [
+      {
+        "name": "wildcards",
+        "path_params": {
+          "kb_key": "***"
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Invalid request. Some required fields are missing or invalid.",
+    "expected_message_param_filled": false,
+    "id": "LKBJ-010",
+    "source": "Confluence > ListKnowledgeBaseJobs"
+  },
+  {
+    "method": "ListKnowledgeBaseJobs",
+    "scenario": "List jobs operation times out",
+    "class": "race",
+    "skip_reason": "Timing-dependent.",
+    "expected_message_substring": "Operation timed out. Listing Knowledge Base jobs did not complete in time.",
+    "id": "LKBJ-011",
+    "source": "Confluence > ListKnowledgeBaseJobs"
+  },
+  {
+    "method": "ListKnowledgeBaseJobs",
+    "scenario": "Other dependency failure while listing jobs",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. A dependent service failed while listing",
+    "id": "LKBJ-012",
+    "source": "Confluence > ListKnowledgeBaseJobs"
+  }
+]

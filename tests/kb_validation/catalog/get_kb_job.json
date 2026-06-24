@@ -1,0 +1,139 @@
+[
+  {
+    "method": "GetKnowledgeBaseJob",
+    "scenario": "idlOcid / catalogId / schemaId / kbName / jobName missing",
+    "class": "validation",
+    "verb": "GET",
+    "path_template": "/knowledgeBases/{kb_key}/jobs/{job_key}",
+    "variants": [
+      {
+        "name": "blank job_key",
+        "path_params": {
+          "kb_key": "kb1",
+          "job_key": " "
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Invalid request. The parameter",
+    "expected_message_param_filled": true,
+    "id": "GKBJ-001",
+    "source": "Confluence > GetKnowledgeBaseJob"
+  },
+  {
+    "method": "GetKnowledgeBaseJob",
+    "scenario": "KB feature config unreadable",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. Unable to read Knowledge Base feature configuration",
+    "id": "GKBJ-002",
+    "source": "Confluence > GetKnowledgeBaseJob"
+  },
+  {
+    "method": "GetKnowledgeBaseJob",
+    "scenario": "KB feature disabled",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Knowledge Base not enabled.",
+    "id": "GKBJ-003",
+    "source": "Confluence > GetKnowledgeBaseJob"
+  },
+  {
+    "method": "GetKnowledgeBaseJob",
+    "scenario": "Parent KB not found",
+    "class": "fixture",
+    "fixture_required": "request_nonexistent_kb",
+    "verb": "GET",
+    "path_template": "/knowledgeBases/{kb_key}/jobs/{job_key}",
+    "variants": [
+      {
+        "name": "nonexistent target",
+        "path_params": {
+          "kb_key": "kb_does_not_exist"
+        }
+      }
+    ],
+    "expected_status": [
+      404
+    ],
+    "expected_message_substring": "Not found. The requested Knowledge Base job",
+    "id": "GKBJ-004",
+    "source": "Confluence > GetKnowledgeBaseJob"
+  },
+  {
+    "method": "GetKnowledgeBaseJob",
+    "scenario": "KB job not found",
+    "class": "fixture",
+    "fixture_required": "request_nonexistent_kb",
+    "verb": "GET",
+    "path_template": "/knowledgeBases/{kb_key}/jobs/{job_key}",
+    "variants": [
+      {
+        "name": "nonexistent target",
+        "path_params": {
+          "kb_key": "kb_does_not_exist"
+        }
+      }
+    ],
+    "expected_status": [
+      404
+    ],
+    "expected_message_substring": "Not found. The requested Knowledge Base job",
+    "id": "GKBJ-005",
+    "source": "Confluence > GetKnowledgeBaseJob"
+  },
+  {
+    "method": "GetKnowledgeBaseJob",
+    "scenario": "Embedding model does not exist",
+    "class": "db_inject",
+    "skip_reason": "Requires DB-level fault injection.",
+    "expected_message_substring": "Embedding model is not found.",
+    "id": "GKBJ-006",
+    "source": "Confluence > GetKnowledgeBaseJob"
+  },
+  {
+    "method": "GetKnowledgeBaseJob",
+    "scenario": "Invalid request signal reaches job-get classifier",
+    "class": "validation",
+    "verb": "GET",
+    "path_template": "/knowledgeBases/{kb_key}/jobs/{job_key}",
+    "variants": [
+      {
+        "name": "wildcards",
+        "path_params": {
+          "kb_key": "***",
+          "job_key": "***"
+        }
+      }
+    ],
+    "expected_status": [
+      400,
+      422
+    ],
+    "expected_message_substring": "Invalid request. Some required fields are missing or invalid.",
+    "expected_message_param_filled": false,
+    "id": "GKBJ-007",
+    "source": "Confluence > GetKnowledgeBaseJob"
+  },
+  {
+    "method": "GetKnowledgeBaseJob",
+    "scenario": "Get job operation times out",
+    "class": "race",
+    "skip_reason": "Timing-dependent.",
+    "expected_message_substring": "Operation timed out. Getting the Knowledge Base job did not complete in time.",
+    "id": "GKBJ-008",
+    "source": "Confluence > GetKnowledgeBaseJob"
+  },
+  {
+    "method": "GetKnowledgeBaseJob",
+    "scenario": "Other dependency failure while getting the job",
+    "class": "infra",
+    "skip_reason": "AIDP-side state.",
+    "expected_message_substring": "Service unavailable. A dependent service failed while getting",
+    "id": "GKBJ-009",
+    "source": "Confluence > GetKnowledgeBaseJob"
+  }
+]
