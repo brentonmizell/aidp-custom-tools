@@ -92,37 +92,166 @@ def _get_cfg(conf: Optional[Dict[str, Any]], key: str, default: Any = "") -> Any
 def _build_signer(conf: Dict[str, Any]):
     """Build the OCI request signer for the configured auth_mode.
 
-    Mirrors aidp_catalog_toolkit._build_signer. Supported modes:
-      - resource_principal (default)
-      - user_principal
-      - instance_principal
+    Supported modes (auth_mode):
+      - resource_principal (default; cluster injects identity)
+      - instance_principal (OCI VM with instance principals)
+      - session_token     (~/.oci/sessions/<profile>/ from `oci session authenticate`
+                           — no permanent PEM, auto-rotating)
+      - user_principal    (full tenancy + user + fingerprint + private_key_content)
+      - auto              (try resource_principal -> session_token -> user_principal
+                           in order; first one that constructs without error wins)
+
+    The `auto` mode is the recommended choice for tools deployed across
+    cluster (resource_principal works) and developer-local (session_token
+    works) contexts. It removes the need to think about auth at all.
     """
     import oci  # lazy
-    mode = (_get_cfg(conf, "auth_mode", "resource_principal") or "resource_principal").lower()
+
+    mode = (_get_cfg(conf, "auth_mode", "resource_principal")
+            or "resource_principal").lower()
+
+    if mode == "auto":
+        return _build_auto_signer(conf)
+    if mode in ("session", "session_token"):
+        return _build_session_token_signer(conf)
     if mode in ("user", "user_principal"):
-        tenancy = _get_cfg(conf, "tenancy_ocid", "")
-        user = _get_cfg(conf, "user_ocid", "")
-        fingerprint = _get_cfg(conf, "fingerprint", "")
-        key = _get_cfg(conf, "private_key_content", "")
-        passphrase = _get_cfg(conf, "pass_phrase", "") or None
-        missing = [
-            k for k, v in (
-                ("tenancy_ocid", tenancy),
-                ("user_ocid", user),
-                ("fingerprint", fingerprint),
-                ("private_key_content", key),
-            ) if not v
-        ]
-        if missing:
-            raise ValueError(f"user_principal auth needs {missing} in config")
-        return oci.signer.Signer(
-            tenancy=tenancy, user=user, fingerprint=fingerprint,
-            private_key_file_location=None,
-            private_key_content=key, pass_phrase=passphrase,
-        )
+        return _build_user_principal_signer(conf)
     if mode in ("instance", "instance_principal"):
         return oci.auth.signers.InstancePrincipalsSecurityTokenSigner()
+    # Default: resource_principal.
     return oci.auth.signers.get_resource_principals_signer()
+
+
+def _build_auto_signer(conf: Dict[str, Any]):
+    """Try every available auth mode in priority order; return the first
+    that constructs. Logs which one was picked so debugging is possible."""
+    import oci
+    attempts = [
+        ("resource_principal", lambda: oci.auth.signers.get_resource_principals_signer()),
+        ("session_token", lambda: _build_session_token_signer(conf)),
+        ("user_principal", lambda: _build_user_principal_signer(conf)),
+    ]
+    last_err = None
+    for name, build in attempts:
+        try:
+            signer = build()
+            try:
+                from aidp_debug import debug  # type: ignore
+                debug("aidp_io._build_signer: auto picked", mode=name)
+            except Exception:
+                pass
+            return signer
+        except Exception as e:
+            last_err = (name, e)
+            continue
+    raise ValueError(
+        f"auth_mode=auto: no usable signer available. Last error from "
+        f"{last_err[0] if last_err else '?'}: {last_err[1] if last_err else 'n/a'}. "
+        f"Either deploy on AIDP compute (resource_principal), run "
+        f"`oci session authenticate` (session_token), or set tenancy_ocid + "
+        f"user_ocid + fingerprint + private_key_content (user_principal)."
+    )
+
+
+def _build_session_token_signer(conf: Dict[str, Any]):
+    """Use a session token from `oci session authenticate`.
+
+    Two input shapes (checked in order):
+
+      1. **Inline** — conf carries the session token + session private key
+         as strings. Used when the tool's zip is built with `--test-creds`
+         and the OCI profile is a session profile. Conf keys:
+           - `session_token`        (the JWT string from the token file)
+           - `session_key_content`  (the PEM string from the session key file)
+
+      2. **File-based** — read ~/.oci/config[profile] and its referenced
+         `security_token_file` / `key_file`. Profile selection order:
+            a. conf['oci_config_profile']
+            b. AIDP_OCI_PROFILE env var
+            c. 'DEFAULT'
+         Used for local dev where the home directory is reachable.
+
+    Either way, the session key is rotated by `oci session authenticate`,
+    so callers never handle a permanent PEM.
+    """
+    import oci
+
+    # 1. Inline (the zip-embedded path).
+    token = _get_cfg(conf, "session_token", "")
+    key_content = _get_cfg(conf, "session_key_content", "")
+    if token and key_content:
+        from cryptography.hazmat.primitives import serialization as _ser
+        from cryptography.hazmat.backends import default_backend as _backend
+        private_key = _ser.load_pem_private_key(
+            key_content.encode("utf-8") if isinstance(key_content, str) else key_content,
+            password=None,
+            backend=_backend(),
+        )
+        return oci.auth.signers.SecurityTokenSigner(token, private_key)
+
+    # 2. File-based fallback.
+    import configparser
+    from pathlib import Path
+    import os
+
+    profile = (
+        _get_cfg(conf, "oci_config_profile", "")
+        or os.environ.get("AIDP_OCI_PROFILE", "")
+        or "DEFAULT"
+    )
+    cfg_path = Path(os.environ.get("OCI_CONFIG_FILE", "")
+                    or (Path.home() / ".oci" / "config"))
+    if not cfg_path.is_file():
+        raise ValueError(
+            f"session_token auth requires inline `session_token` + "
+            f"`session_key_content` in conf, or {cfg_path}. "
+            f"Run `oci session authenticate` to create the file."
+        )
+    cp = configparser.ConfigParser()
+    cp.read(cfg_path)
+    if profile not in cp:
+        raise ValueError(
+            f"session_token auth: profile [{profile}] not found in {cfg_path}. "
+            f"Available: {', '.join(cp.sections()) or '(none)'}"
+        )
+    section = cp[profile]
+    token_path = section.get("security_token_file", "").strip()
+    key_path = section.get("key_file", "").strip()
+    if not token_path or not key_path:
+        raise ValueError(
+            f"profile [{profile}] is not a session profile (no security_token_file). "
+            f"Run `oci session authenticate --profile-name {profile}` to create one."
+        )
+    token = Path(token_path).expanduser().read_text(encoding="utf-8").strip()
+    private_key = oci.signer.load_private_key_from_file(
+        str(Path(key_path).expanduser()), None,
+    )
+    return oci.auth.signers.SecurityTokenSigner(token, private_key)
+
+
+def _build_user_principal_signer(conf: Dict[str, Any]):
+    """Classic API-key signer. PEM private key embedded in conf."""
+    import oci
+    tenancy = _get_cfg(conf, "tenancy_ocid", "")
+    user = _get_cfg(conf, "user_ocid", "")
+    fingerprint = _get_cfg(conf, "fingerprint", "")
+    key = _get_cfg(conf, "private_key_content", "")
+    passphrase = _get_cfg(conf, "pass_phrase", "") or None
+    missing = [
+        k for k, v in (
+            ("tenancy_ocid", tenancy),
+            ("user_ocid", user),
+            ("fingerprint", fingerprint),
+            ("private_key_content", key),
+        ) if not v
+    ]
+    if missing:
+        raise ValueError(f"user_principal auth needs {missing} in config")
+    return oci.signer.Signer(
+        tenancy=tenancy, user=user, fingerprint=fingerprint,
+        private_key_file_location=None,
+        private_key_content=key, pass_phrase=passphrase,
+    )
 
 
 def _client(conf: Optional[Dict[str, Any]], context_vars: Optional[Dict[str, Any]]):
@@ -611,6 +740,167 @@ def write_text(uri: str, content_str: str,
 # Error contract: same as the rest of aidp_io — raise Python exceptions. Tool
 # wrappers should catch and translate to the standard {"ok": false, "error":
 # ...} envelope.
+
+
+# ---------------------------------------------------------------------------
+# Fuzzy / forgiving name resolvers
+# ---------------------------------------------------------------------------
+#
+# The first-party AIDP SQL tool's Test panel can't pick names from a dropdown,
+# so users end up typing partial / wrong-case / wrong-form names and getting
+# 404 NotAuthorizedOrNotFound. These helpers accept any of:
+#
+#   - exact key                ("construction_catalog")
+#   - exact display name       ("Construction Catalog")
+#   - case-insensitive match
+#   - unique prefix            ("construct" matches "construction_catalog")
+#   - unique substring         ("ction_cat" also matches)
+#
+# Tools that take a catalog/schema/volume/table/kb name should call these
+# from _execute_tool BEFORE building the URL — turns the user's "construct"
+# into the canonical "construction_catalog" deterministically. If the input
+# is ambiguous (>1 hit) or missing (0 hits), the helper raises ValueError
+# with the candidates listed, so the tool can surface a useful error envelope.
+
+
+def _fuzzy_pick(items: List[Dict[str, Any]],
+                needle: str,
+                *,
+                key_field: str = "key",
+                name_field: str = "displayName",
+                what: str = "item") -> Dict[str, Any]:
+    """Pick exactly one item from `items` whose key or display name matches
+    `needle`. Match order (first to win):
+      1. exact key
+      2. exact display name (case-sensitive)
+      3. exact display name (case-insensitive)
+      4. unique prefix on key OR display name (case-insensitive)
+      5. unique substring on key OR display name (case-insensitive)
+
+    Raises ValueError on 0 matches or >1 ambiguous matches at any stage.
+    """
+    if not needle or not str(needle).strip():
+        raise ValueError(f"{what}: empty name provided")
+    n = str(needle).strip()
+    nl = n.lower()
+
+    # 1. exact key
+    hits = [it for it in items if str(it.get(key_field, "")) == n]
+    if len(hits) == 1:
+        return hits[0]
+
+    # 2. exact display name (case-sensitive)
+    hits = [it for it in items if str(it.get(name_field, "")) == n]
+    if len(hits) == 1:
+        return hits[0]
+
+    # 3. exact display name (case-insensitive)
+    hits = [it for it in items if str(it.get(name_field, "")).lower() == nl]
+    if len(hits) == 1:
+        return hits[0]
+    if len(hits) > 1:
+        names = [it.get(name_field) or it.get(key_field) for it in hits]
+        raise ValueError(
+            f"{what} '{needle}': ambiguous case-insensitive match in {names}"
+        )
+
+    # 4. unique prefix
+    hits = [
+        it for it in items
+        if str(it.get(key_field, "")).lower().startswith(nl)
+        or str(it.get(name_field, "")).lower().startswith(nl)
+    ]
+    if len(hits) == 1:
+        return hits[0]
+    if len(hits) > 1:
+        names = [it.get(name_field) or it.get(key_field) for it in hits]
+        raise ValueError(
+            f"{what} prefix '{needle}': ambiguous, matches {names}"
+        )
+
+    # 5. unique substring
+    hits = [
+        it for it in items
+        if nl in str(it.get(key_field, "")).lower()
+        or nl in str(it.get(name_field, "")).lower()
+    ]
+    if len(hits) == 1:
+        return hits[0]
+    if len(hits) > 1:
+        names = [it.get(name_field) or it.get(key_field) for it in hits]
+        raise ValueError(
+            f"{what} substring '{needle}': ambiguous, matches {names}"
+        )
+
+    # 0 matches anywhere.
+    available = [it.get(name_field) or it.get(key_field) for it in items][:20]
+    raise ValueError(
+        f"{what} '{needle}': not found. Available: {available}"
+        + (" (+ more)" if len(items) > 20 else "")
+    )
+
+
+def resolve_catalog(conf: Optional[Dict[str, Any]],
+                    ctx: Optional[Dict[str, Any]],
+                    name_or_key: str) -> Dict[str, Any]:
+    """Fuzzy-match a catalog by name, key, prefix, or substring.
+    Returns the full catalog dict including `key` and `displayName`."""
+    items = list_catalogs(conf, ctx)
+    return _fuzzy_pick(items, name_or_key, what="catalog")
+
+
+def resolve_schema(conf: Optional[Dict[str, Any]],
+                   ctx: Optional[Dict[str, Any]],
+                   catalog_name_or_key: str,
+                   schema_name_or_key: str) -> Dict[str, Any]:
+    """Fuzzy-match a schema within a (fuzzy-matched) catalog."""
+    cat = resolve_catalog(conf, ctx, catalog_name_or_key)
+    items = list_schemas(conf, ctx, cat["key"])
+    schema = _fuzzy_pick(items, schema_name_or_key, what="schema")
+    schema["_catalog"] = cat
+    return schema
+
+
+def resolve_table(conf: Optional[Dict[str, Any]],
+                  ctx: Optional[Dict[str, Any]],
+                  catalog_name_or_key: str,
+                  schema_name_or_key: str,
+                  table_name_or_key: str) -> Dict[str, Any]:
+    """Fuzzy-match a table within a (fuzzy-matched) catalog + schema."""
+    sch = resolve_schema(conf, ctx, catalog_name_or_key, schema_name_or_key)
+    items = list_tables(conf, ctx, sch["_catalog"]["key"], sch["key"])
+    table = _fuzzy_pick(items, table_name_or_key, what="table")
+    table["_schema"] = sch
+    return table
+
+
+def resolve_volume(conf: Optional[Dict[str, Any]],
+                   ctx: Optional[Dict[str, Any]],
+                   catalog_name_or_key: str,
+                   schema_name_or_key: str,
+                   volume_name_or_key: str) -> Dict[str, Any]:
+    """Fuzzy-match a volume within a (fuzzy-matched) catalog + schema."""
+    sch = resolve_schema(conf, ctx, catalog_name_or_key, schema_name_or_key)
+    items = list_volumes(conf, ctx, sch["_catalog"]["key"], sch["key"])
+    vol = _fuzzy_pick(items, volume_name_or_key, what="volume")
+    vol["_schema"] = sch
+    return vol
+
+
+def resolve_kb(conf: Optional[Dict[str, Any]],
+               ctx: Optional[Dict[str, Any]],
+               name_or_key: str,
+               *,
+               catalog_name_or_key: Optional[str] = None,
+               schema_name_or_key: Optional[str] = None) -> Dict[str, Any]:
+    """Fuzzy-match a knowledge base. If catalog + schema are given, scope
+    the search; otherwise search all visible KBs."""
+    if catalog_name_or_key and schema_name_or_key:
+        sch = resolve_schema(conf, ctx, catalog_name_or_key, schema_name_or_key)
+        items = list_knowledge_bases(conf, ctx, sch["_catalog"]["key"], sch["key"])
+    else:
+        items = list_knowledge_bases(conf, ctx)
+    return _fuzzy_pick(items, name_or_key, what="knowledge base")
 
 
 def resolve_volume_key(conf: Optional[Dict[str, Any]],
@@ -1244,4 +1534,10 @@ __all__ = [
     "get_connection",
     "get_standard_catalog_connection",
     "get_external_catalog_connection",
+    # Fuzzy name resolvers (the SQL-tool dropdown alternative)
+    "resolve_catalog",
+    "resolve_schema",
+    "resolve_table",
+    "resolve_volume",
+    "resolve_kb",
 ]

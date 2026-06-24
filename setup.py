@@ -622,17 +622,18 @@ def cmd_build(args) -> int:
     if args.dry_run or args.no_zip:
         return 0
 
-    # Optional user-principal credential embedding for Test-panel testing.
+    # Optional credential embedding for Test-panel testing. Picks the
+    # short-lived session-token form if the OCI profile has one (recommended);
+    # falls back to user_principal PEM otherwise.
     creds = None
     test_creds_requested = getattr(args, "test_creds", False)
     if test_creds_requested:
         profile = args.profile or "DEFAULT"
-        creds = _load_user_principal_creds(profile)
+        creds = _load_test_creds(profile)
         if not creds:
             print(yellow("[skip] not embedding credentials (config read failed)"))
         else:
-            _warn_test_creds()
-            print(f"[creds] profile=[{profile}] tenancy={creds['tenancy'][:32]}... key={len(creds['private_key'])} bytes")
+            _warn_test_creds(kind=creds.get("kind", "user_principal"))
     _rebuild_zips(creds=creds)
 
     # After every successful build, regenerate the starter zip so its bundled
@@ -870,33 +871,55 @@ def _strip_extension_only_keys(tool_config: Dict) -> bool:
 
 
 def _inject_credentials(tool_config: Dict, creds: Dict) -> int:
-    """Mutate tool_config so every tool whose conf already declares user-
-    principal fields has them filled in + auth_mode flipped to user_principal.
-    Returns the number of tools touched."""
+    """Mutate tool_config so every tool whose conf already declares auth
+    fields has them filled in. Returns the number of tools touched.
+
+    Two creds shapes supported (creds['kind'] selects):
+      - 'session_token'   — embeds session_token + session_key_content,
+                            auth_mode flipped to 'session_token'. Short-lived
+                            (~1h); no permanent PEM in the zip.
+      - 'user_principal'  — embeds tenancy/user/fingerprint/private_key,
+                            auth_mode flipped to 'user_principal'. Permanent.
+    """
     touched = 0
+    kind = creds.get("kind", "user_principal")
     for tool in tool_config.get("tools") or []:
         conf = tool.get("conf")
         if not isinstance(conf, dict):
             continue
-        # Only patch tools that even know about user-principal auth — others
-        # (e.g. compute_toolkit MathTool) are unaffected by these fields.
-        if not any(k in conf for k in ("tenancy_ocid", "user_ocid", "fingerprint",
-                                       "private_key_content", "auth_mode")):
+        # Only patch tools that know about auth (any auth-shaped key present).
+        if not any(k in conf for k in (
+            "auth_mode", "tenancy_ocid", "user_ocid", "fingerprint",
+            "private_key_content", "session_token", "session_key_content",
+        )):
             continue
-        if "tenancy_ocid" in conf:        conf["tenancy_ocid"] = creds["tenancy"]
-        if "user_ocid" in conf:           conf["user_ocid"] = creds["user"]
-        if "fingerprint" in conf:         conf["fingerprint"] = creds["fingerprint"]
-        if "private_key_content" in conf: conf["private_key_content"] = creds["private_key"]
-        if "pass_phrase" in conf and creds.get("pass_phrase"):
-            conf["pass_phrase"] = creds["pass_phrase"]
-        if "auth_mode" in conf:           conf["auth_mode"] = "user_principal"
+        if kind == "session_token":
+            # Ensure the conf has the inline session fields (added on patch
+            # even if the source tool_config.json didn't declare them).
+            conf["session_token"] = creds["session_token"]
+            conf["session_key_content"] = creds["session_key_content"]
+            # tenancy/user_ocid stay as identity context (some tools log them).
+            if "tenancy_ocid" in conf and creds.get("tenancy"):
+                conf["tenancy_ocid"] = creds["tenancy"]
+            # Always flip auth_mode.
+            conf["auth_mode"] = "session_token"
+        else:  # user_principal
+            if "tenancy_ocid" in conf:        conf["tenancy_ocid"] = creds["tenancy"]
+            if "user_ocid" in conf:           conf["user_ocid"] = creds["user"]
+            if "fingerprint" in conf:         conf["fingerprint"] = creds["fingerprint"]
+            if "private_key_content" in conf: conf["private_key_content"] = creds["private_key"]
+            if "pass_phrase" in conf and creds.get("pass_phrase"):
+                conf["pass_phrase"] = creds["pass_phrase"]
+            if "auth_mode" in conf:           conf["auth_mode"] = "user_principal"
         touched += 1
     return touched
 
 
-def _load_user_principal_creds(profile: str) -> Optional[Dict]:
-    """Read ~/.oci/config + the PEM file. Return a dict with tenancy / user /
-    fingerprint / private_key / pass_phrase, or None on failure."""
+def _load_test_creds(profile: str) -> Optional[Dict]:
+    """Read ~/.oci/config[profile] and return either session-token or
+    user-principal creds depending on the profile shape. Session tokens
+    are preferred — they're short-lived and avoid embedding a permanent
+    PEM in the zip output."""
     cfg_path = Path.home() / ".oci" / "config"
     if not cfg_path.is_file():
         print(red(f"[err] {cfg_path} not found"))
@@ -909,36 +932,87 @@ def _load_user_principal_creds(profile: str) -> Optional[Dict]:
         return None
     section = cp[profile]
     tenancy = section.get("tenancy", "").strip()
-    user = section.get("user", "").strip()
     fingerprint = section.get("fingerprint", "").strip()
     key_file = section.get("key_file", "").strip()
+    security_token_file = section.get("security_token_file", "").strip()
+
+    # Session-token branch: profile has a security_token_file.
+    if security_token_file and key_file:
+        token_path = Path(security_token_file).expanduser()
+        key_path = Path(key_file).expanduser()
+        if not token_path.is_file():
+            print(red(f"[err] session token file missing: {token_path}"))
+            print(dim(f"      run `oci session authenticate --profile-name {profile}`"))
+            return None
+        if not key_path.is_file():
+            print(red(f"[err] session key file missing: {key_path}"))
+            return None
+        token = token_path.read_text(encoding="utf-8").strip()
+        session_key = key_path.read_text(encoding="utf-8")
+        # Detect expiry from the JWT (best-effort; just informational).
+        exp_note = ""
+        try:
+            import base64, json as _json, time as _time
+            payload = token.split(".")[1]
+            payload += "=" * (-len(payload) % 4)
+            j = _json.loads(base64.urlsafe_b64decode(payload).decode("utf-8"))
+            if "exp" in j:
+                mins_left = int((j["exp"] - _time.time()) / 60)
+                exp_note = f" (~{mins_left} min remaining)"
+        except Exception:
+            pass
+        print(yellow(f"[creds] using session_token from [{profile}]{exp_note}"))
+        return {
+            "kind": "session_token",
+            "session_token": token,
+            "session_key_content": session_key,
+            "tenancy": tenancy,
+            "_profile": profile,
+        }
+
+    # User-principal branch: classic API-key profile.
+    user = section.get("user", "").strip()
     pass_phrase = section.get("pass_phrase", "").strip() or None
     if not (tenancy and user and fingerprint and key_file):
-        print(red(f"[err] profile [{profile}] is missing one of tenancy/user/fingerprint/key_file"))
+        print(red(f"[err] profile [{profile}] is missing required keys"))
         return None
     pem_path = Path(key_file).expanduser()
     if not pem_path.is_file():
         print(red(f"[err] PEM key file not found at {pem_path}"))
         return None
     pem = pem_path.read_text(encoding="utf-8")
-    # Strip the trailing OCI_API_KEY marker line if present — some signer libs
-    # trip on extra content after END PRIVATE KEY.
     if pem.rstrip().endswith("OCI_API_KEY"):
         pem = pem[: pem.rfind("-----END PRIVATE KEY-----") + len("-----END PRIVATE KEY-----")] + "\n"
+    print(yellow(f"[creds] using user_principal (PEM) from [{profile}] — "
+                 f"consider switching to `oci session authenticate` for short-lived tokens"))
     return {
+        "kind": "user_principal",
         "tenancy": tenancy, "user": user, "fingerprint": fingerprint,
         "private_key": pem, "pass_phrase": pass_phrase,
         "_profile": profile,
     }
 
 
-def _warn_test_creds() -> None:
-    """One-time loud warning before embedding a private key in the zips."""
+# Back-compat alias for any external scripts that imported the old name.
+_load_user_principal_creds = _load_test_creds
+
+
+def _warn_test_creds(kind: str = "user_principal") -> None:
+    """One-time loud warning before embedding credentials in the zips."""
     print()
     print(yellow(bold("===========================================================")))
     print(yellow(bold("  WARNING — building zips with credentials embedded.")))
-    print(yellow(bold("  The .zip artifacts will contain your OCI private key.")))
-    print(yellow(bold("  Treat them as secrets: don't share, don't commit.")))
+    if kind == "session_token":
+        print(yellow(bold("  The .zip artifacts contain a short-lived OCI session")))
+        print(yellow(bold("  token (~1h lifetime) + the matching session key.")))
+        print(yellow(bold("  Re-run `oci session authenticate` + `setup.py build")))
+        print(yellow(bold("  --test-creds` to refresh after the token expires.")))
+    else:
+        print(yellow(bold("  The .zip artifacts contain your OCI PRIVATE KEY")))
+        print(yellow(bold("  (permanent). Consider switching to a session profile")))
+        print(yellow(bold("  via `oci session authenticate` so future builds use")))
+        print(yellow(bold("  short-lived tokens instead of a permanent PEM.")))
+    print(yellow(bold("  Treat the zips as secrets: don't share, don't commit.")))
     print(yellow(bold("  Source files under CUSTOM_CODE_TOOLS/<pkg>/src/ are")))
     print(yellow(bold("  NEVER modified by this flag — only the zip output.")))
     print(yellow(bold("===========================================================")))
