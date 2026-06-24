@@ -159,10 +159,17 @@ def write_api_key_profile(profile_name: str, *, tenancy_ocid: str, user_ocid: st
 # ---------------------------------------------------------------------------
 
 def conf_from_state(state) -> Dict[str, Any]:
-    """Build the conf dict aidp_io functions consume."""
+    """Build the conf dict aidp_io functions consume.
+
+    Pins the live AIDP REST surface: /20260430/aiDataPlatforms/{lakeOcid}/.
+    aidp_io.py defaults service_path to the old "dataLakes" — passing the
+    explicit value is what stops the 404 on /catalogs.
+    """
     return {
         "region": state.region,
         "data_lake_ocid": state.data_lake_ocid,
+        "api_version": "20260430",
+        "service_path": "aiDataPlatforms",
         "auth_mode": state.oci_auth_mode or "auto",
         "oci_config_profile": state.oci_profile or "DEFAULT",
     }

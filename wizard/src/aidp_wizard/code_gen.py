@@ -55,6 +55,7 @@ def build_tool_config(state) -> str:
                 "region": state.region,
                 "data_lake_ocid": state.data_lake_ocid,
                 "api_version": "20260430",
+                "service_path": "aiDataPlatforms",
                 "auth_mode": "auto",
                 "timeout": 30,
                 # Resource defaults — the LLM-generated code can read these.
