@@ -5,6 +5,11 @@ Jinja2 template rendering, regex extract/replace, and JSONPath transforms.
 Built on the AIDP Custom Tools framework. Each tool class is registered with
 `@CustomToolBase.register` and configured in `tool_config.json`.
 
+## Credentials
+**None required.** Jinja rendering, regex, and JSONPath are pure-Python ops on
+strings you pass in. No network calls. Leave `conf.credential_name` empty.
+See [`../CREDENTIALS.md`](../CREDENTIALS.md) for the toolkit-wide reference.
+
 ## Build
 ```bash
 zip -r text_utils_toolkit.zip tool_implementation.py tool_config.json requirements.txt utils/ -x "*__pycache__*" "*.pyc"

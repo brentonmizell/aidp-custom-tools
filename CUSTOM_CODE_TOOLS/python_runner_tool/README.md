@@ -26,6 +26,24 @@ session, datalake), unlike RunPythonTool.
   `utils/oci_signer.py`) — the same signed-WebSocket path the Spark tool uses.
 - Dependency: `websocket-client` (installs at deploy).
 
+## Credentials
+**Mixed — depends on which tool you call.**
+
+- **`RunPythonTool`** runs Python in a local subprocess. **No credential
+  required.** Leave `conf.credential_name` empty.
+- **`RunNotebookTool`** opens a signed WebSocket against the AIDP notebook
+  kernel — that's a public AIDP API call and **needs an OCI signer**.
+  Create a `SECRET_TOKEN` credential in AIDP's Credential Store with keys
+  `tenancy` / `user` / `fingerprint` / `private_key`, set
+  `conf.credential_name` to its display name. The current implementation
+  reads `oci_config_profile` and signs from a local `~/.oci/config` — that's
+  a known gap. To migrate to the Credential Store path, swap the
+  `utils/oci_signer.py` import for `aidputils.secrets.get(name)` →
+  `oci.signer.Signer(private_key_content=...)`. Reference pattern:
+  [`../credential_store_auth_sample/`](../credential_store_auth_sample/README.md).
+
+See the toolkit-wide reference [`../CREDENTIALS.md`](../CREDENTIALS.md).
+
 ## Build
 ```bash
 zip -r python_runner_tool.zip tool_implementation.py tool_config.json requirements.txt README.md utils/ -x "*__pycache__*" "*.pyc"

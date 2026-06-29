@@ -54,6 +54,63 @@ tools.
    table listed in `target_tables`. The audit table is created in the
    connecting user's own schema, so no extra grant is needed for it.
 
+## Credentials
+
+Three different credential surfaces touch this toolkit. Don't mix them up.
+
+### 1. AIDP catalog binding (recommended) — no extra credential needed
+
+If you set `catalog_key` to a value like
+`construction_catalog.construction_schema.construction_db`, the toolkit calls
+`aidp_io.get_connection_data(catalog_key, ...)` to fetch the wallet + DB
+connection info from the catalog. The catalog binding's owner already wired up
+the credentials — you don't add anything per-tool. **Leave `conf.credential_name`
+empty in this case.**
+
+### 2. Standalone DB connection (no catalog binding) — AIDP Credential Store
+
+If you leave `catalog_key` empty and want the toolkit to connect to an ADB
+directly, store the DB connect info as a `SECRET_TOKEN` credential:
+
+| Key | Value |
+|---|---|
+| `username` | DB username (often `ADMIN`) |
+| `password` | DB password |
+| `connection_string` | TNS connect descriptor / DSN |
+| `wallet_b64` | base64-encoded wallet zip body (mTLS-only ADB) |
+
+Set `conf.credential_name` to the credential's display name. The tool calls
+`aidputils.secrets.get(name)` per invocation — no plaintext passwords in source
+or zip.
+
+### 3. `DBMS_CLOUD` credential inside the ADB (for OCI GenAI from SQL) — NOT the AIDP Credential Store
+
+This one lives **inside the ADB itself**, not in AIDP. It's how Select AI
+authenticates outbound to OCI GenAI from the database side. Two options:
+
+- **Resource principal (recommended).** Run **once** as `ADMIN`:
+  ```sql
+  BEGIN DBMS_CLOUD_ADMIN.ENABLE_RESOURCE_PRINCIPAL(); END;
+  /
+  ```
+  Leave the toolkit's `credential_name` runtime param empty and Select AI will
+  call OCI GenAI under the ADB's own principal. **No keys stored anywhere.**
+
+- **Explicit DBMS_CLOUD credential.** Create a credential via
+  `DBMS_CLOUD.CREATE_CREDENTIAL` and pass its name as the
+  `credential_name` **runtime param** (not `conf.credential_name`) to
+  `SelectAIProvisionTool`. This is a SQL-side concept, *not* an entry in
+  AIDP's Credential Store.
+
+> **Two `credential_name`s, two different stores.** `conf.credential_name`
+> (cases 1 + 2 above) is the AIDP Credential Store entry for the DB connection.
+> The runtime-param `credential_name` for `SelectAIProvisionTool` is the
+> in-ADB `DBMS_CLOUD` credential for OCI GenAI. Keep them distinct.
+
+Full toolkit-wide reference: [`../CREDENTIALS.md`](../CREDENTIALS.md). Working
+sample for the AIDP Credential Store half:
+[`../credential_store_auth_sample/`](../credential_store_auth_sample/README.md).
+
 ## Quickstart
 
 ### 1. Build and upload the zip
@@ -83,8 +140,24 @@ Add both tools to your agent's tool list. Configure either pattern:
 
 ### 3. Provision once
 
-Call `SelectAIProvisionTool` from a setup step or the agent's first message:
+`SelectAIProvisionTool` is the **one-time setup call** that creates the Select
+AI profile + agent tool in the ADB. You only run it again when you want to
+add/remove tables or change the model. There are three places to fire it from,
+in increasing automation:
 
+**Option A (recommended for demos): the AIDP Test panel.**
+Open the tool in AIDP → Tools → `SelectAIProvisionTool` → **Test** tab. Fill
+in `profile_name`, `target_schema`, `target_tables`, `catalog_key`, click
+**Run**. You should see `action: "created"` on first run, `action: "unchanged"`
+on subsequent runs. This is the easiest way to provision before deploying the
+agent.
+
+**Option B: as a node in the agent flow that runs once.**
+Wire `SelectAIProvisionTool` as a step *before* the conversational loop, so
+the agent provisions on first start. The tool is idempotent — re-running with
+identical inputs is a no-op (`action: "unchanged"`).
+
+**Option C: from the SDK / Python directly.**
 ```python
 provision = SelectAIProvisionTool.invoke({
     "profile_name":  "constr_demo",
@@ -95,9 +168,9 @@ provision = SelectAIProvisionTool.invoke({
 # -> {"ok": true, "data": {"action": "created", "profile_name": "constr_demo", ...}}
 ```
 
-Subsequent calls with identical inputs return `action: "unchanged"` and do no
-DDL. Change a table or the model id and the next call returns
-`action: "recreated"`.
+Whichever path you use: subsequent calls with identical inputs return
+`action: "unchanged"` and do no DDL. Change a table or the model id and the
+next call returns `action: "recreated"`.
 
 ### 4. Answer questions every turn
 

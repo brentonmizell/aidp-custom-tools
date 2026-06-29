@@ -5,6 +5,14 @@ Convert tabular data between CSV, JSON, Parquet, and Excel.
 Built on the AIDP Custom Tools framework. Each tool class is registered with
 `@CustomToolBase.register` and configured in `tool_config.json`.
 
+## Credentials
+**None required.** Format conversion runs in-process on bytes you pass in. No
+network calls. Leave `conf.credential_name` empty.
+
+If you're piping data **from** a volume / object-storage source into this tool,
+the fetcher tool (CatalogFileTool / ObjectStorageTool) is the one that needs the
+credential — not this one. See [`../CREDENTIALS.md`](../CREDENTIALS.md).
+
 ## Build
 ```bash
 zip -r convert_file_tool.zip tool_implementation.py tool_config.json requirements.txt utils/ -x "*__pycache__*" "*.pyc"

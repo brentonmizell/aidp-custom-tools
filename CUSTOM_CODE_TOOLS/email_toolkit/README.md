@@ -12,13 +12,39 @@ Built on the AIDP Custom Tools framework. stdlib only — no dependencies.
 - **ImapReadTool** — read/search a mailbox over IMAP, returns summaries.
   Overlaps the Gmail/Outlook OAuth integrations; prefer those for full access.
 
+## Credentials — REQUIRED for SmtpEmailTool
+
+**Use the AIDP Credential Store. Do not hand-paste passwords into conf.**
+
+1. AIDP → Settings → Credentials → New. Type: `SECRET_TOKEN`.
+2. Display name: e.g. `smtp_oci_email`.
+3. Keys:
+
+   | Key | Value |
+   |---|---|
+   | `host` | e.g. `smtp.email.us-ashburn-1.oci.oraclecloud.com` |
+   | `port` | typically `587` |
+   | `username` | OCI SMTP credential username |
+   | `password` | OCI SMTP credential password |
+   | `from_address` | the approved sender `From:` |
+
+4. Set `conf.credential_name` to the display name above. The tool calls
+   `aidputils.secrets.get(name)` at invoke time — no plaintext password in
+   conf, in source, or in the zip.
+
+For OCI Email Delivery: generate SMTP credentials under the sending user
+*after* verifying the `from_address` as an approved sender. **ImapReadTool**
+uses a separate IMAP credential with the same `SECRET_TOKEN` pattern (keys:
+`host` / `port` / `username` / `password`); use a second credential with a
+different display name and a per-tool `conf.credential_name`.
+
+Full pattern: [`../CREDENTIALS.md`](../CREDENTIALS.md) and the working
+reference at
+[`../credential_store_auth_sample/`](../credential_store_auth_sample/README.md).
+
 ## Config notes
-- Passwords via `{{template}}` variables, never hard-coded.
-- For OCI Email Delivery: set `smtp_host` to
-  `smtp.email.<region>.oci.oraclecloud.com`, generate SMTP credentials for the
-  sending user, and verify the `from_addr` as an approved sender.
-- Set `allowed_recipient_domains` (comma-separated) to restrict who the tool can
-  email — a useful guardrail for an agent-driven sender.
+- Set `allowed_recipient_domains` (comma-separated) to restrict who the tool
+  can email — a useful guardrail for an agent-driven sender.
 
 ## Build
 ```bash

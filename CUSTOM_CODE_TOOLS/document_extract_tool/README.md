@@ -19,6 +19,13 @@ source:
 Text/CSV need nothing. PDF/DOCX need pypdf, pdfplumber, python-docx (install at
 deploy; bundle wheels for offline test pods).
 
+## Credentials
+**None required.** Extraction runs in-process on bytes you pass in. Leave
+`conf.credential_name` empty.
+
+The fetcher in the chain (CatalogFileTool / WorkspaceFileTool / ObjectStorageTool)
+is what needs the OCI credential — see [`../CREDENTIALS.md`](../CREDENTIALS.md).
+
 ## Build
 ```bash
 zip -r document_extract_tool.zip tool_implementation.py tool_config.json requirements.txt README.md utils/ -x "*__pycache__*" "*.pyc"

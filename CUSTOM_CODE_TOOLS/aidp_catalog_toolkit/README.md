@@ -15,16 +15,32 @@ Catalogs, workspace files, and KB ingestion. oci + requests are pre-installed.
 - `api_version` default `20260430`; resource segment `aiDataPlatforms`
   (both config-overridable: `api_version`, `service_path`).
 
-## Auth (auth_mode in config)
-The control plane enforces OCI IAM RBAC on whatever identity signs the request.
-- `resource_principal` (default): the agent deployment's identity. Grant the
-  deployment's dynamic group the IAM policy to access AIDP. No keys. **Preferred.**
-- `user_principal`: act as a specific IAM user. Supply `tenancy_ocid`,
-  `user_ocid`, `fingerprint`, `private_key_content` (and `pass_phrase` if any) in
-  config. **Provide these through the Credential Store / OCI Vault as templated
-  `{{...}}` values — never hard-code a private key in the tool source or commit
-  it in plaintext.** Note this authorizes that one configured user, not the
-  end user of the chat.
+## Credentials — REQUIRED (every tool in this toolkit calls public AIDP APIs)
+
+Every tool here hits `aidp.<region>.oci.oraclecloud.com/.../aiDataPlatforms/...`
+— these are **public AIDP data-plane endpoints**. The Jun-17 JR/Sambit thread
+confirmed: **`resource_principal` returns 401 against these endpoints today.**
+Until that's fixed service-side, you must use the Credential Store path.
+
+**Quick setup:**
+
+1. AIDP → Settings → Credentials → New. Type: `SECRET_TOKEN`.
+2. Keys: `tenancy` / `user` / `fingerprint` / `private_key` (PEM body).
+3. Set this tool's `conf.credential_name` to the credential's display name.
+4. The tools call `aidputils.secrets.get(name)` →
+   `oci.signer.Signer(private_key_content=...)` at invoke time.
+
+Full how-to + verification harness:
+[`../credential_store_auth_sample/`](../credential_store_auth_sample/README.md).
+Toolkit-wide reference: [`../CREDENTIALS.md`](../CREDENTIALS.md).
+
+### auth_mode values (legacy; prefer credential_name)
+- `auto` / `user_principal`: works with `credential_name` (the recommended path
+  above) or with hand-supplied `tenancy_ocid` / `user_ocid` / `fingerprint` /
+  `private_key_content` in conf — but you should not hand-supply those in
+  plaintext, use the Credential Store.
+- `resource_principal`: kept for AIDP-internal-only API calls (where it works).
+  For the public endpoints this toolkit hits, **it 401s**.
 - `instance_principal`: instance-based compute.
 
 True per-end-user delegation needs token exchange / aidpUtils, which isn't
