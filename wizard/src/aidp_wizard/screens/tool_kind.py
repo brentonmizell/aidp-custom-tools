@@ -1,9 +1,9 @@
-"""Step 5 — Describe the tool, then pick template + name it.
+"""Step 6 — Confirm template + class name.
 
-Order matters: the wizard asks "what should this tool do?" FIRST so
-the developer's intent is captured before any template decision.
-Step 6 (generate) seeds its LLM prompt from this description, so the
-LLM sees the goal up-front rather than asking after the fact.
+The description + LLM-suggested template come from step 3 (Describe).
+This screen exists to let the developer override the LLM's pick or
+rename the class before code generation. If they accepted everything,
+they can just click Next.
 """
 
 from __future__ import annotations
@@ -12,66 +12,59 @@ import re
 
 from textual.app import ComposeResult
 from textual.containers import Vertical
-from textual.widgets import Input, RadioButton, RadioSet, Static, TextArea
+from textual.widgets import Input, RadioButton, RadioSet, Static
 
 from ._base import WizardScreen
 
 
 TOOL_KINDS = [
-    ("llm_custom",  "LLM-generated (recommended for new tools)",
-     "Best for non-trivial logic: the LLM writes the Python from your "
-     "description above. Validation runs before you advance."),
+    ("llm_custom",  "LLM-generated (default, best for non-trivial logic)",
+     "The LLM writes the Python from your description. Validation runs "
+     "before you advance."),
     ("file_reader", "File reader",
      "Reads a file from an AIDP volume. Inputs: volume + path."),
     ("sql",         "SQL runner",
-     "Runs SQL via dynamic_query against the catalog you picked in step 4."),
+     "Runs SQL via dynamic_query against the catalog you picked in step 5."),
     ("rest",        "REST caller",
      "Calls a REST endpoint with bearer / API-key auth + JSON body."),
     ("rag",         "RAG retriever",
-     "Queries the knowledge base you picked in step 4."),
+     "Queries the knowledge base you picked in step 5."),
     ("echo_stub",   "Echo / stub",
      "Minimal scaffold that echoes its inputs — useful for smoke tests."),
 ]
 
 
 class ToolKindScreen(WizardScreen):
-    TITLE = "Step 5 — Describe the tool, pick a template"
-    SUBTITLE = ("Tell the wizard what the tool should do — this becomes the "
-                "LLM's primary input in step 6. Then pick the template that "
-                "best fits.")
+    TITLE = "Step 6 — Confirm template + class name"
+    SUBTITLE = ("The LLM's suggestions from step 3 are pre-filled. Override "
+                "anything that doesn't fit, then continue to code generation.")
 
     def compose_body(self) -> ComposeResult:
         with Vertical():
-            yield Static("What should this tool do?", classes="field-label")
+            yield Static("Description from step 3 (read-only here — go back "
+                         "to edit)", classes="field-label")
             yield Static(
-                "2–5 sentences. Be concrete: inputs, what it returns, any APIs "
-                "or data sources it touches. Example: 'Reads safety manuals "
-                "from the docs volume, extracts the section about lockout/"
-                "tagout, and returns the matching paragraphs.'",
-                classes="field-hint",
+                self.state.user_intent or self.state.tool_description
+                or "[#f85149](no description — go back to step 3)[/]",
+                classes="field-hint", id="desc-display",
             )
-            yield TextArea(text=self.state.tool_description or "", id="description")
 
             yield Static("Template", classes="field-label")
-            yield Static(
-                "Pick LLM-generated unless one of the canned templates is an "
-                "exact fit. The description above drives the generation.",
-                classes="field-hint",
-            )
+            current = self.state.tool_kind or "llm_custom"
             with RadioSet(id="kind"):
-                # Default = llm_custom (first in TOOL_KINDS).
-                current = self.state.tool_kind or "llm_custom"
                 for kid, label, _desc in TOOL_KINDS:
                     yield RadioButton(label, value=(current == kid),
                                       id=f"rb-{kid}")
-            yield Static(self._desc_for(self.state.tool_kind or "llm_custom"),
-                         id="kind-desc", classes="field-hint")
+            yield Static(self._desc_for(current), id="kind-desc",
+                         classes="field-hint")
 
-            yield Static("Class name (PascalCase, no spaces)", classes="field-label")
+            yield Static("Class name (PascalCase, no spaces)",
+                         classes="field-label")
             yield Input(value=self.state.tool_class_name or "MyCustomTool",
                         id="class-name", placeholder="MyCustomTool")
 
-            yield Static("Display name (shown in the AIDP UI)", classes="field-label")
+            yield Static("Display name (shown in the AIDP UI)",
+                         classes="field-label")
             yield Input(value=self.state.tool_display_name or "My Custom Tool",
                         id="display-name", placeholder="My Custom Tool")
 
@@ -94,15 +87,9 @@ class ToolKindScreen(WizardScreen):
     def on_next(self) -> bool:
         status = self.query_one("#kind-status", Static)
 
-        desc = self.query_one("#description", TextArea).text.strip()
-        if not desc:
-            status.update("[#f85149]Tell the wizard what the tool does first.[/]")
+        if not (self.state.user_intent or self.state.tool_description):
+            status.update("[#f85149]Missing description — go back to step 3.[/]")
             return False
-        self.state.tool_description = desc
-        # Pre-seed the step-6 LLM intent from this description so the user
-        # doesn't have to re-type it. They can still edit on step 6.
-        if not self.state.user_intent:
-            self.state.user_intent = desc
 
         if not self.state.tool_kind:
             self.state.tool_kind = "llm_custom"

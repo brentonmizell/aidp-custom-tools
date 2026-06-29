@@ -118,6 +118,7 @@ class WizardState:
 STEPS: List[Dict[str, str]] = [
     {"id": "llm",       "title": "LLM token",      "screen": "LLMTokenScreen"},
     {"id": "auth",      "title": "AIDP auth",      "screen": "AuthScreen"},
+    {"id": "describe",  "title": "Describe",       "screen": "DescribeScreen"},
     {"id": "workspace", "title": "Workspace",      "screen": "WorkspaceScreen"},
     {"id": "resources", "title": "Resources",      "screen": "ResourcesScreen"},
     {"id": "kind",      "title": "Tool kind",      "screen": "ToolKindScreen"},

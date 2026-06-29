@@ -2,6 +2,7 @@
 
 from .llm_token import LLMTokenScreen
 from .auth import AuthScreen
+from .describe import DescribeScreen
 from .workspace import WorkspaceScreen
 from .resources import ResourcesScreen
 from .tool_kind import ToolKindScreen
@@ -11,6 +12,7 @@ from .build import BuildScreen
 __all__ = [
     "LLMTokenScreen",
     "AuthScreen",
+    "DescribeScreen",
     "WorkspaceScreen",
     "ResourcesScreen",
     "ToolKindScreen",
