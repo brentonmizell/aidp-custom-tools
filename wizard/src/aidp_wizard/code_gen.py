@@ -30,6 +30,11 @@ HELPERS_SUMMARY = """\
   AIDP knowledge base.
 - aidp_session.resolve_session_variable_references(value, session) — replace
   {{var}} placeholders from a session dict.
+- aidputils.secrets.get(name, key=None) — resolve an AIDP Credential Store
+  entry by display name. For OCI API-key auth: create a SECRET_TOKEN
+  credential with keys tenancy/user/fingerprint/private_key, then call
+  secrets.get(name) to get the full bundle. See
+  CUSTOM_CODE_TOOLS/credential_store_auth_sample for the full pattern.
 """
 
 
@@ -58,6 +63,13 @@ def build_tool_config(state) -> str:
                 "service_path": "aiDataPlatforms",
                 "auth_mode": "auto",
                 "timeout": 30,
+                # AIDP Credential Store reference (Jun-26 JR/Sambit guidance).
+                # Operator creates a SECRET_TOKEN credential with keys
+                # tenancy/user/fingerprint/private_key; the tool resolves it
+                # via aidputils.secrets.get(name) at invoke time. Leave empty
+                # to fall back to resource principal (will 401 against public
+                # AIDP data-plane endpoints — kept only for AIDP-internal use).
+                "credential_name": "",
                 # Resource defaults — the LLM-generated code can read these.
                 "catalog": state.catalog_name,
                 "schema": state.schema_name,
@@ -68,12 +80,14 @@ def build_tool_config(state) -> str:
             "auth": {"authType": "OCI_RESOURCE_PRINCIPAL"},
             "_uiHints": {
                 "conf": {
-                    "region":         {"kind": "dropdown", "source": "regions"},
-                    "data_lake_ocid": {"kind": "dropdown", "source": "dataLakes"},
-                    "catalog":        {"kind": "dropdown", "source": "catalogs"},
-                    "schema":         {"kind": "dropdown", "source": "schemas", "dependsOn": "catalog"},
-                    "volume":         {"kind": "dropdown", "source": "volumes", "dependsOn": "schema"},
-                    "auth_mode":      {"kind": "enum", "values": ["auto", "resource_principal", "session_token", "user_principal"]},
+                    "region":          {"kind": "dropdown", "source": "regions"},
+                    "data_lake_ocid":  {"kind": "dropdown", "source": "dataLakes"},
+                    "catalog":         {"kind": "dropdown", "source": "catalogs"},
+                    "schema":          {"kind": "dropdown", "source": "schemas", "dependsOn": "catalog"},
+                    "volume":          {"kind": "dropdown", "source": "volumes", "dependsOn": "schema"},
+                    "auth_mode":       {"kind": "enum", "values": ["auto", "resource_principal", "session_token", "user_principal"]},
+                    "credential_name": {"kind": "input", "inputStyle": "singleline",
+                                        "help": "Display name of a SECRET_TOKEN credential in AIDP's Credential Store. Required for public AIDP data-plane calls (resource principal returns 401)."},
                 },
                 "schema": {},
             },

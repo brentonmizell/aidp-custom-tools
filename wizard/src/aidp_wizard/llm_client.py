@@ -165,6 +165,29 @@ Mandatory conventions:
 - Wrap the entire `_execute_tool` body in try/except — exceptions become `fail(...)`.
 - Cap any read/fetch/load with explicit bytes/rows limits + a `truncated:true` flag.
 
+OCI authentication — REQUIRED for any tool calling public AIDP / OCI APIs:
+- Never embed PEM files or ~/.oci/config in the zip. Never hardcode keys.
+- Do NOT rely on `oci.auth.signers.get_resource_principals_signer()` for the
+  public AIDP data-plane endpoints (catalogs / schemas / volumes / KBs) —
+  resource principal currently returns 401 there.
+- Use AIDP's Credential Store. The tool accepts a `credential_name` runtime
+  param (or conf default) and resolves the bundle at invoke time:
+    import aidputils.secrets as secrets
+    bundle = secrets.get(credential_name)        # SECRET_TOKEN credential
+    # bundle has keys: tenancy, user, fingerprint, private_key (PEM body)
+    import oci
+    signer = oci.signer.Signer(
+        tenancy=bundle["tenancy"], user=bundle["user"],
+        fingerprint=bundle["fingerprint"],
+        private_key_content=bundle["private_key"],
+    )
+    requests.get(url, auth=signer, timeout=timeout)
+- ALWAYS mask credential values in any debug output / returned envelope.
+  Never log the PEM. Truncate fingerprints / OCIDs to first+last few chars.
+- Validate the bundle before constructing the signer: if any of the four
+  required keys is missing, fail() with `CredentialStoreError` naming the
+  missing key. Don't pass through to oci.signer.Signer with partial data.
+
 Available shared helpers (already bundled into the package's src/utils/):
 {helpers_summary}
 

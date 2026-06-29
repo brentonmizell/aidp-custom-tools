@@ -1,0 +1,80 @@
+{
+  "displayName": "Credential Store Auth Sample",
+  "description": "Reference implementation: call public AIDP / OCI APIs from a custom code tool using an OCI API-key signer resolved at runtime from AIDP's Credential Store. No PEM files in the zip; no hardcoded keys in source.",
+  "tools": [
+    {
+      "toolClassName": "CredentialStoreAuthSample",
+      "displayName": "Credential Store Auth Sample",
+      "description": "Demonstrates aidputils.secrets.get(...) + oci.signer.Signer(private_key_content=...). Validates the signer with op='whoami', then exercises the failing list_volumes endpoint with op='list_volumes'.",
+      "version": "1.0.0",
+      "schema": [
+        {
+          "name": "op",
+          "type": "string",
+          "description": "Which operation to run. 'whoami' calls the OCI Identity service to prove the signer works end-to-end. 'list_volumes' calls the public AIDP volumes endpoint (the one that returned 401 under resource principal).",
+          "enum": ["whoami", "list_volumes"],
+          "default": "whoami",
+          "examples": ["whoami", "list_volumes"]
+        },
+        {
+          "name": "credential_name",
+          "type": "string",
+          "description": "Display name of the SECRET_TOKEN credential in AIDP's Credential Store. Must have four secret keys: tenancy, user, fingerprint, private_key (PEM body, not a path). Leave blank to fall back to conf.credential_name.",
+          "examples": ["my_oci_api_key", "aidp_demo_key"]
+        },
+        {
+          "name": "data_lake_ocid",
+          "type": "string",
+          "description": "Data Lake OCID. Only used for op='list_volumes'. Falls back to conf.data_lake_ocid.",
+          "examples": ["ocid1.aidataplatform.oc1.iad.aaaaaaaaxxxxxxx"]
+        },
+        {
+          "name": "catalog_key",
+          "type": "string",
+          "description": "Catalog key (NOT display name). Only used for op='list_volumes'. Falls back to conf.catalog_key."
+        },
+        {
+          "name": "schema_key",
+          "type": "string",
+          "description": "Schema key (NOT display name). Only used for op='list_volumes'. Falls back to conf.schema_key."
+        }
+      ],
+      "conf": {
+        "region": "us-ashburn-1",
+        "credential_name": "",
+        "data_lake_ocid": "",
+        "catalog_key": "",
+        "schema_key": "",
+        "api_version": "20260430",
+        "service_path": "aiDataPlatforms",
+        "timeout": 30
+      },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL",
+        "note": "The agent runtime uses resource principal to call aidputils.secrets internally. The credential the tool then uses for downstream OCI calls is resolved per-invocation from the Credential Store — no permanent PEM in this zip."
+      },
+      "_uiHints": {
+        "conf": {
+          "region":          {"kind": "dropdown", "source": "regions"},
+          "credential_name": {"kind": "input", "inputStyle": "singleline",
+                              "placeholder": "Display name of the SECRET_TOKEN credential in AIDP",
+                              "help": "Create the credential in AIDP → Settings → Credentials. Type: SECRET_TOKEN. Keys: tenancy / user / fingerprint / private_key."},
+          "data_lake_ocid":  {"kind": "dropdown", "source": "dataLakes"},
+          "catalog_key":     {"kind": "dropdown", "source": "catalogs"},
+          "schema_key":      {"kind": "dropdown", "source": "schemas",
+                              "dependsOn": "catalog_key"},
+          "api_version":     {"kind": "readonly"},
+          "service_path":    {"kind": "readonly"}
+        },
+        "schema": {
+          "op":              {"kind": "enum"},
+          "credential_name": {"inputStyle": "singleline"},
+          "data_lake_ocid":  {"kind": "dropdown", "source": "dataLakes"},
+          "catalog_key":     {"kind": "dropdown", "source": "catalogs"},
+          "schema_key":      {"kind": "dropdown", "source": "schemas",
+                              "dependsOn": "catalog_key"}
+        }
+      }
+    }
+  ]
+}
