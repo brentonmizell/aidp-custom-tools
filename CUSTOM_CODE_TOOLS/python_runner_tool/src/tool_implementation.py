@@ -480,6 +480,7 @@ class RunNotebookTool(CustomToolBase):
         workspace_key = get_cfg(conf, "workspace_key", "default")
         cluster_key = get_cfg(conf, "cluster_key", "default_cluster")
         oci_profile = get_cfg(conf, "oci_config_profile", "DEFAULT")
+        credential_name = get_cfg(conf, "credential_name", "")
         api_version = get_cfg(conf, "api_version", _API_VERSION) or _API_VERSION
         # AIDP's live REST surface uses /aiDataPlatforms/. Override only if
         # AIDP exposes a non-standard path on a specific tenancy.
@@ -502,7 +503,7 @@ class RunNotebookTool(CustomToolBase):
         base_url = f"{aidp_endpoint}/{api_version}/{service_path}/{_quote(lake_ocid, safe='')}"
 
         try:
-            signer = get_auth_provider(oci_profile)
+            signer = get_auth_provider(oci_profile, credential_name=credential_name)
         except Exception as e:
             debug_error(f"RunNotebookTool: signer init failed: {e}")
             return DebugLog.embed(err(f"could not initialize OCI signer: {e}", "AuthError"))

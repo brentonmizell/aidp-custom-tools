@@ -29,6 +29,37 @@ from email.utils import parseaddr, getaddresses, parsedate_to_datetime
 from aidputils.agents.tools.custom_tools.base import CustomToolBase
 from .utils.config_utils import get_cfg
 
+
+def _resolve_creds_from_store(conf, expected_keys):
+    """Look up conf.credential_name in the AIDP Credential Store and return
+    the subset of bundle entries matching expected_keys.
+
+    Returns {} when credential_name is not set (so callers can OR-fall through
+    to existing plaintext-conf fields). Returns {} silently on lookup failure
+    too — the existing path can still take over. Errors surface in debug only.
+    """
+    cred_name = get_cfg(conf, "credential_name", "")
+    if not cred_name:
+        return {}
+    try:
+        from .utils.credential_resolver import resolve_bundle
+    except ImportError:
+        return {}
+    bundle, err = resolve_bundle(cred_name)
+    if err or not bundle:
+        return {}
+    return {k: bundle.get(k) for k in expected_keys if bundle.get(k)}
+
+
+def _resolve_smtp_creds_from_store(conf):
+    return _resolve_creds_from_store(
+        conf, ("host", "port", "username", "password", "from_address"))
+
+
+def _resolve_imap_creds_from_store(conf):
+    return _resolve_creds_from_store(
+        conf, ("host", "port", "username", "password"))
+
 # --------------------------------------------------------------------------- #
 # Debug Channel (with no-op fallback if runtime doesn't inject aidp_debug)
 # --------------------------------------------------------------------------- #
@@ -108,11 +139,15 @@ class SmtpEmailTool(CustomToolBase):
     @classmethod
     def _execute_tool(cls, conf, runtime_params, **context_vars):
         debug("SmtpEmailTool._execute_tool start", tool="SmtpEmailTool")
-        host = get_cfg(conf, "smtp_host", "")
-        port = get_cfg(conf, "smtp_port", 587)
-        username = get_cfg(conf, "smtp_username", "")
-        password = get_cfg(conf, "smtp_password", "")
-        from_addr = get_cfg(conf, "from_addr", "")
+        # Credential resolution: if conf.credential_name is set, pull SMTP
+        # creds (host/port/username/password/from_address) from the Credential
+        # Store bundle. Otherwise fall back to plaintext conf fields (legacy).
+        smtp_creds = _resolve_smtp_creds_from_store(conf)
+        host = smtp_creds.get("host") or get_cfg(conf, "smtp_host", "")
+        port = smtp_creds.get("port") or get_cfg(conf, "smtp_port", 587)
+        username = smtp_creds.get("username") or get_cfg(conf, "smtp_username", "")
+        password = smtp_creds.get("password") or get_cfg(conf, "smtp_password", "")
+        from_addr = smtp_creds.get("from_address") or get_cfg(conf, "from_addr", "")
         use_ssl = get_cfg(conf, "use_ssl", False)            # implicit TLS (port 465)
         use_starttls = get_cfg(conf, "use_starttls", True)   # STARTTLS (port 587)
         timeout = get_cfg(conf, "timeout", 30)
@@ -409,10 +444,13 @@ class ImapReadTool(CustomToolBase):
     @classmethod
     def _execute_tool(cls, conf, runtime_params, **context_vars):
         debug("ImapReadTool._execute_tool start", tool="ImapReadTool")
-        host = get_cfg(conf, "imap_host", "")
-        port = get_cfg(conf, "imap_port", 993)
-        username = get_cfg(conf, "imap_username", "")
-        password = get_cfg(conf, "imap_password", "")
+        # Credential resolution: if conf.credential_name is set, pull IMAP
+        # creds from the Credential Store. Otherwise fall back to plaintext.
+        imap_creds = _resolve_imap_creds_from_store(conf)
+        host = imap_creds.get("host") or get_cfg(conf, "imap_host", "")
+        port = imap_creds.get("port") or get_cfg(conf, "imap_port", 993)
+        username = imap_creds.get("username") or get_cfg(conf, "imap_username", "")
+        password = imap_creds.get("password") or get_cfg(conf, "imap_password", "")
         use_ssl = get_cfg(conf, "use_ssl", True)
         timeout = get_cfg(conf, "timeout", 30)
         # Server-side hard cap so the model can't ask for the world.

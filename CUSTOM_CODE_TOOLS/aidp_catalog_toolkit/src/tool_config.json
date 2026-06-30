@@ -100,7 +100,8 @@
         "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
         "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
-        "pass_phrase": ""
+        "pass_phrase": "",
+        "credential_name": ""
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
@@ -168,6 +169,11 @@
           },
           "fingerprint": {
             "inputStyle": "singleline"
+          },
+          "credential_name": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "help": "Display name of a SECRET_TOKEN credential in AIDPs Credential Store. Leave empty to fall back to resource_principal (which 401s against public AIDP data-plane endpoints per the Jun-17 thread)."
           }
         },
         "schema": {
@@ -320,7 +326,8 @@
         "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
         "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
-        "pass_phrase": ""
+        "pass_phrase": "",
+        "credential_name": ""
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
@@ -385,6 +392,11 @@
           },
           "fingerprint": {
             "inputStyle": "singleline"
+          },
+          "credential_name": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "help": "Display name of a SECRET_TOKEN credential in AIDPs Credential Store. Leave empty to fall back to resource_principal (which 401s against public AIDP data-plane endpoints per the Jun-17 thread)."
           }
         },
         "schema": {
@@ -505,7 +517,8 @@
         "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
         "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
-        "pass_phrase": ""
+        "pass_phrase": "",
+        "credential_name": ""
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
@@ -551,6 +564,11 @@
           },
           "fingerprint": {
             "inputStyle": "singleline"
+          },
+          "credential_name": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "help": "Display name of a SECRET_TOKEN credential in AIDPs Credential Store. Leave empty to fall back to resource_principal (which 401s against public AIDP data-plane endpoints per the Jun-17 thread)."
           }
         },
         "schema": {
@@ -654,7 +672,8 @@
         "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
         "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
-        "pass_phrase": ""
+        "pass_phrase": "",
+        "credential_name": ""
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
@@ -704,6 +723,11 @@
           },
           "fingerprint": {
             "inputStyle": "singleline"
+          },
+          "credential_name": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "help": "Display name of a SECRET_TOKEN credential in AIDPs Credential Store. Leave empty to fall back to resource_principal (which 401s against public AIDP data-plane endpoints per the Jun-17 thread)."
           }
         },
         "schema": {
@@ -809,7 +833,8 @@
         "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
         "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
         "private_key_content": "",
-        "pass_phrase": ""
+        "pass_phrase": "",
+        "credential_name": ""
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
@@ -863,6 +888,11 @@
           },
           "fingerprint": {
             "inputStyle": "singleline"
+          },
+          "credential_name": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "help": "Display name of a SECRET_TOKEN credential in AIDPs Credential Store. Leave empty to fall back to resource_principal (which 401s against public AIDP data-plane endpoints per the Jun-17 thread)."
           }
         },
         "schema": {

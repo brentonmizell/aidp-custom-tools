@@ -16,13 +16,33 @@ import requests as req_lib
 logger = logging.getLogger(__name__)
 
 
-def get_auth_provider(oci_config_profile="DEFAULT"):
+def get_auth_provider(oci_config_profile="DEFAULT", credential_name=""):
     """Get OCI authentication provider (signer).
 
-    On compute: uses CustomRemoteSigner (signs via lakeproxy using dh_user_principal).
-    Locally: falls back to config file auth (security token or API key).
+    Resolution order:
+      1. credential_name set        -> aidputils.secrets bundle ->
+                                       oci.signer.Signer(private_key_content=...)
+      2. OCI_RESOURCE_PRINCIPAL_VERSION env set -> CustomRemoteSigner
+                                       (lakeproxy delegation, on AIDP compute)
+      3. local oci_config_profile   -> security token or API key file
     """
-    # On AIDP compute, use CustomRemoteSigner which delegates signing to lakeproxy
+    # 1. Credential Store path — works on compute AND local; preferred for
+    #    public AIDP data-plane calls that resource principal can't make.
+    if credential_name:
+        try:
+            from .credential_resolver import resolve_oci_signer
+            signer, _meta, err = resolve_oci_signer(credential_name)
+            if err:
+                raise ValueError(
+                    f"credential_name='{credential_name}' failed: {err}")
+            if signer is not None:
+                logger.info(f"Using Credential Store signer ({credential_name})")
+                return signer
+        except ImportError:
+            logger.warning("credential_resolver not bundled; "
+                           "ignoring credential_name and falling back")
+
+    # 2. On AIDP compute, use CustomRemoteSigner which delegates signing to lakeproxy
     if os.environ.get("OCI_RESOURCE_PRINCIPAL_VERSION"):
         try:
             from aidputils.agents.auth.signer.custom_remote_signer import CustomRemoteSigner

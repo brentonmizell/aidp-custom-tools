@@ -190,15 +190,34 @@ class WebhookSenderTool(CustomToolBase):
             debug_error("WebhookSenderTool: missing message")
             return _err("message is required", "ValidationError")
 
-        # Conf takes precedence over the runtime-supplied webhook_url so an
-        # operator-configured destination cannot be overridden by LLM input.
-        url = (get_cfg(conf, "webhook_url", "") or "").strip()
+        # URL resolution priority:
+        #   1. AIDP Credential Store via conf.credential_name (recommended —
+        #      the URL is a secret for Slack/Teams incoming webhooks)
+        #   2. conf.webhook_url (legacy plaintext)
+        #   3. runtime_params.webhook_url (last resort; allows LLM override
+        #      only when operator did not configure either of the above)
+        url = ""
+        cred_name = (get_cfg(conf, "credential_name", "") or "").strip()
+        if cred_name:
+            try:
+                from .utils.credential_resolver import resolve_bundle
+                bundle, cred_err = resolve_bundle(cred_name)
+                if cred_err:
+                    debug_error(f"WebhookSenderTool: credential_name='{cred_name}' "
+                                f"failed: {cred_err}")
+                    return _err(cred_err, "CredentialStoreError")
+                if bundle:
+                    url = (bundle.get("webhook_url") or "").strip()
+            except ImportError:
+                pass
+        if not url:
+            url = (get_cfg(conf, "webhook_url", "") or "").strip()
         if not url:
             url = (runtime_params.get("webhook_url") or "").strip()
         if not url:
             debug_error("WebhookSenderTool: missing webhook_url")
-            return _err("webhook_url must be set in config or passed as a parameter",
-                        "ValidationError")
+            return _err("webhook_url must be set via credential_name (recommended), "
+                        "conf, or runtime param", "ValidationError")
 
         style = (get_cfg(conf, "style", "slack") or "slack").lower()
         method = (get_cfg(conf, "method", "POST") or "POST").upper()

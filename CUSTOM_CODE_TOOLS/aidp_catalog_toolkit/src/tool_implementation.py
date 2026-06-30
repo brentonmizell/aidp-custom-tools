@@ -180,8 +180,28 @@ def _client(conf, context_vars):
 def _build_signer(conf):
     """Build the OCI request signer.
 
-    Delegates to aidp_io._build_signer when available.
+    Resolution order:
+      1. conf.credential_name  → resolve via aidputils.secrets.get(name) and
+         build an oci.signer.Signer(private_key_content=...). This is the
+         supported production path for public AIDP data-plane calls per the
+         Jun-17 JR/Sambit thread (resource principal 401s those endpoints).
+      2. aidp_io._build_signer  (legacy fallback if the shared module exists)
+      3. auth_mode-based legacy paths (user_principal / instance_principal /
+         resource_principal) — kept for backwards compat.
     """
+    # 1. Credential Store (preferred).
+    try:
+        from .utils.credential_resolver import resolve_oci_signer
+        cred_name = get_cfg(conf, "credential_name", "")
+        signer, _meta, err = resolve_oci_signer(cred_name)
+        if err:
+            raise ValueError(f"credential_name='{cred_name}' failed: {err}")
+        if signer is not None:
+            return signer
+    except ImportError:
+        pass  # helper not bundled in this build — fall through
+
+    # 2. Legacy aidp_io path.
     if _io_build_signer is not None:
         return _io_build_signer(conf)
 

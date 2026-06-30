@@ -55,7 +55,8 @@
         "prefix": "",
         "max_keys": 200,
         "max_bytes": 1048576,
-        "max_retries": 3
+        "max_retries": 3,
+        "credential_name": ""
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
@@ -86,6 +87,11 @@
           },
           "max_retries": {
             "inputStyle": "singleline"
+          },
+          "credential_name": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "help": "Display name of a SECRET_TOKEN credential in AIDPs Credential Store. Leave empty to fall back to resource_principal (which 401s against public AIDP data-plane endpoints per the Jun-17 thread)."
           }
         },
         "schema": {

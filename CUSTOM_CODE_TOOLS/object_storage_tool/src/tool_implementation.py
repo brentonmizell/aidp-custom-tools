@@ -100,7 +100,25 @@ class ObjectStorageTool(CustomToolBase):
 
         try:
             import oci
-            signer = oci.auth.signers.get_resource_principals_signer()
+            # Auth resolution:
+            #   1. conf.credential_name -> aidputils.secrets bundle -> Signer
+            #   2. else fall through to resource principal (existing behavior)
+            signer = None
+            try:
+                from .utils.credential_resolver import resolve_oci_signer
+                cred_name = get_cfg(conf, "credential_name", "")
+                signer, _meta, cred_err = resolve_oci_signer(cred_name)
+                if cred_err:
+                    debug_error(f"object_storage: credential_name='{cred_name}' failed: {cred_err}")
+                    result = _err(cred_err, "CredentialStoreError")
+                    return DebugLog.embed(result)
+            except ImportError:
+                pass
+            if signer is None:
+                signer = oci.auth.signers.get_resource_principals_signer()
+                debug("object_storage: using resource principal signer (credential_name not set)")
+            else:
+                debug("object_storage: using Credential Store signer")
             client_kwargs = {"config": {}, "signer": signer}
             if region:
                 client_kwargs["config"] = {"region": region}

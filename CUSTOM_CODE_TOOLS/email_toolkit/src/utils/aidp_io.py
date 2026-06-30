@@ -49,7 +49,7 @@ CONFIG KEYS (conf dict, mirrors aidp_catalog_toolkit)
     region              OCI region short code (also OCI_REGION env)
     data_lake_ocid      data lake OCID (also DATALAKE_ID env / ctx["datalake_id"])
     api_version         default "20260430"
-    service_path        default "aiDataPlatforms"
+    service_path        default "dataLakes"
     timeout             HTTP timeout seconds, default 30
     auth_mode           "resource_principal" (default) | "user_principal" | "instance_principal"
     tenancy_ocid        (user_principal only)
@@ -268,7 +268,7 @@ def _client(conf: Optional[Dict[str, Any]], context_vars: Optional[Dict[str, Any
         or context_vars.get("datalake_id", "")
     )
     api_version = _get_cfg(conf, "api_version", "20260430") or "20260430"
-    service_path = _get_cfg(conf, "service_path", "aiDataPlatforms") or "aiDataPlatforms"
+    service_path = _get_cfg(conf, "service_path", "dataLakes") or "dataLakes"
     timeout = _get_cfg(conf, "timeout", 30) or 30
     if not region or not data_lake:
         raise ValueError(

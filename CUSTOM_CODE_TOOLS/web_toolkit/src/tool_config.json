@@ -25,7 +25,8 @@
         "max_chars": 20000,
         "max_bytes": 5242880,
         "return_raw_html": false,
-        "user_agent": "AIDP-Agent/1.0"
+        "user_agent": "AIDP-Agent/1.0",
+        "credential_name": ""
       },
       "_confDescriptions": {
         "timeout": "HTTP timeout in seconds for the fetch request.",
@@ -55,6 +56,11 @@
           },
           "user_agent": {
             "inputStyle": "singleline"
+          },
+          "credential_name": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "help": "Display name of a SECRET_TOKEN credential in AIDPs Credential Store. Leave empty to fall back to resource_principal (which 401s against public AIDP data-plane endpoints per the Jun-17 thread)."
           }
         },
         "schema": {
@@ -108,7 +114,8 @@
         "webhook_url": "",
         "style": "slack",
         "method": "POST",
-        "timeout": 30
+        "timeout": 30,
+        "credential_name": ""
       },
       "_confDescriptions": {
         "webhook_url": "(secret) Incoming webhook URL \u2014 DO NOT commit. Provide via secret store at deploy time. Slack/Teams app config or generic endpoint.",
@@ -142,6 +149,11 @@
           },
           "timeout": {
             "inputStyle": "singleline"
+          },
+          "credential_name": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "help": "Display name of a SECRET_TOKEN credential in AIDPs Credential Store. Leave empty to fall back to resource_principal (which 401s against public AIDP data-plane endpoints per the Jun-17 thread)."
           }
         },
         "schema": {

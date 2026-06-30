@@ -12,21 +12,32 @@
           "name": "op",
           "type": "string",
           "description": "Which operation to run. 'whoami' calls the OCI Identity service to prove the signer works end-to-end. 'list_volumes' calls the public AIDP volumes endpoint (the one that returned 401 under resource principal).",
-          "enum": ["whoami", "list_volumes"],
+          "enum": [
+            "whoami",
+            "list_volumes"
+          ],
           "default": "whoami",
-          "examples": ["whoami", "list_volumes"]
+          "examples": [
+            "whoami",
+            "list_volumes"
+          ]
         },
         {
           "name": "credential_name",
           "type": "string",
           "description": "Display name of the SECRET_TOKEN credential in AIDP's Credential Store. Must have four secret keys: tenancy, user, fingerprint, private_key (PEM body, not a path). Leave blank to fall back to conf.credential_name.",
-          "examples": ["my_oci_api_key", "aidp_demo_key"]
+          "examples": [
+            "my_oci_api_key",
+            "aidp_demo_key"
+          ]
         },
         {
           "name": "data_lake_ocid",
           "type": "string",
           "description": "Data Lake OCID. Only used for op='list_volumes'. Falls back to conf.data_lake_ocid.",
-          "examples": ["ocid1.aidataplatform.oc1.iad.aaaaaaaaxxxxxxx"]
+          "examples": [
+            "ocid1.aidataplatform.oc1.iad.aaaaaaaaxxxxxxx"
+          ]
         },
         {
           "name": "catalog_key",
@@ -42,7 +53,7 @@
       "conf": {
         "region": "us-ashburn-1",
         "credential_name": "",
-        "data_lake_ocid": "",
+        "data_lake_ocid": "ocid1.aidataplatform.oc1.iad.amaaaaaawah6xyqaic64ra5oaflf6hx6lnbuybhxxukkejoa2huz7iyq4tzq",
         "catalog_key": "",
         "schema_key": "",
         "api_version": "20260430",
@@ -51,28 +62,60 @@
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL",
-        "note": "The agent runtime uses resource principal to call aidputils.secrets internally. The credential the tool then uses for downstream OCI calls is resolved per-invocation from the Credential Store — no permanent PEM in this zip."
+        "note": "The agent runtime uses resource principal to call aidputils.secrets internally. The credential the tool then uses for downstream OCI calls is resolved per-invocation from the Credential Store \u2014 no permanent PEM in this zip."
       },
       "_uiHints": {
         "conf": {
-          "region":          {"kind": "dropdown", "source": "regions"},
-          "credential_name": {"kind": "input", "inputStyle": "singleline",
-                              "placeholder": "Display name of the SECRET_TOKEN credential in AIDP",
-                              "help": "Create the credential in AIDP → Settings → Credentials. Type: SECRET_TOKEN. Keys: tenancy / user / fingerprint / private_key."},
-          "data_lake_ocid":  {"kind": "dropdown", "source": "dataLakes"},
-          "catalog_key":     {"kind": "dropdown", "source": "catalogs"},
-          "schema_key":      {"kind": "dropdown", "source": "schemas",
-                              "dependsOn": "catalog_key"},
-          "api_version":     {"kind": "readonly"},
-          "service_path":    {"kind": "readonly"}
+          "region": {
+            "kind": "dropdown",
+            "source": "regions"
+          },
+          "credential_name": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "placeholder": "Display name of the SECRET_TOKEN credential in AIDP",
+            "help": "Create the credential in AIDP \u2192 Settings \u2192 Credentials. Type: SECRET_TOKEN. Keys: tenancy / user / fingerprint / private_key."
+          },
+          "data_lake_ocid": {
+            "kind": "dropdown",
+            "source": "dataLakes"
+          },
+          "catalog_key": {
+            "kind": "dropdown",
+            "source": "catalogs"
+          },
+          "schema_key": {
+            "kind": "dropdown",
+            "source": "schemas",
+            "dependsOn": "catalog_key"
+          },
+          "api_version": {
+            "kind": "readonly"
+          },
+          "service_path": {
+            "kind": "readonly"
+          }
         },
         "schema": {
-          "op":              {"kind": "enum"},
-          "credential_name": {"inputStyle": "singleline"},
-          "data_lake_ocid":  {"kind": "dropdown", "source": "dataLakes"},
-          "catalog_key":     {"kind": "dropdown", "source": "catalogs"},
-          "schema_key":      {"kind": "dropdown", "source": "schemas",
-                              "dependsOn": "catalog_key"}
+          "op": {
+            "kind": "enum"
+          },
+          "credential_name": {
+            "inputStyle": "singleline"
+          },
+          "data_lake_ocid": {
+            "kind": "dropdown",
+            "source": "dataLakes"
+          },
+          "catalog_key": {
+            "kind": "dropdown",
+            "source": "catalogs"
+          },
+          "schema_key": {
+            "kind": "dropdown",
+            "source": "schemas",
+            "dependsOn": "catalog_key"
+          }
         }
       }
     }

@@ -62,7 +62,8 @@
         "workspace_id": "74effa91-f4c9-4e1a-be49-29af03e791e5",
         "api_version": "20260430",
         "service_path": "aiDataPlatforms",
-        "auth_mode": "resource_principal"
+        "auth_mode": "resource_principal",
+        "credential_name": ""
       },
       "_uiHints": {
         "conf": {
@@ -99,6 +100,11 @@
           },
           "auth_mode": {
             "inputStyle": "singleline"
+          },
+          "credential_name": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "help": "Display name of a SECRET_TOKEN credential in AIDPs Credential Store. Leave empty to fall back to resource_principal (which 401s against public AIDP data-plane endpoints per the Jun-17 thread)."
           }
         },
         "schema": {
@@ -172,7 +178,8 @@
         "max_notebook_bytes": 5242880,
         "ws_retries": 3,
         "default_notebook_path": "",
-        "api_version": "20260430"
+        "api_version": "20260430",
+        "credential_name": ""
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL"
@@ -232,6 +239,11 @@
           },
           "api_version": {
             "inputStyle": "singleline"
+          },
+          "credential_name": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "help": "Display name of a SECRET_TOKEN credential in AIDPs Credential Store. Leave empty to fall back to resource_principal (which 401s against public AIDP data-plane endpoints per the Jun-17 thread)."
           }
         },
         "schema": {

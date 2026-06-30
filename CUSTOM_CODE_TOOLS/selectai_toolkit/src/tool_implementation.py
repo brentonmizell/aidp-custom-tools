@@ -259,20 +259,54 @@ def _open_connection(catalog_key, conf, runtime_params, context_vars):
             debug_warn("catalog returned no wallet content; attempting walletless DSN")
         return oracledb.connect(**kwargs)
 
-    # ---- 2 & 3) explicit runtime + conf fallback ---- #
-    user = rp.get("username") or get_cfg(conf, "username", "")
-    pw = rp.get("password") or get_cfg(conf, "password", "")
-    dsn = rp.get("conn_string") or get_cfg(conf, "conn_string", "")
+    # ---- 1b) AIDP Credential Store binding (preferred over plaintext conf) ---- #
+    # aidp_credential_name (distinct from the in-ADB credential_name used for
+    # DBMS_CLOUD_AI to call OCI GenAI) points at a SECRET_TOKEN credential in
+    # AIDP's Credential Store with keys: username, password, connection_string,
+    # wallet_b64 (base64 wallet zip). Runtime params still win over both stores.
+    aidp_cred_name = (rp.get("aidp_credential_name")
+                      or get_cfg(conf, "aidp_credential_name", ""))
+    cs_user = cs_pw = cs_dsn = cs_wallet_b64 = ""
+    if aidp_cred_name:
+        try:
+            from .utils.credential_resolver import resolve_bundle
+            bundle, cs_err = resolve_bundle(aidp_cred_name)
+            if cs_err:
+                raise ValueError(
+                    f"aidp_credential_name='{aidp_cred_name}' failed: {cs_err}")
+            if bundle:
+                cs_user = bundle.get("username") or ""
+                cs_pw = bundle.get("password") or ""
+                cs_dsn = bundle.get("connection_string") or ""
+                cs_wallet_b64 = bundle.get("wallet_b64") or ""
+                debug("loaded DB creds from Credential Store",
+                      aidp_credential_name=aidp_cred_name,
+                      have_wallet=bool(cs_wallet_b64))
+        except ImportError:
+            pass
+
+    # ---- 2 & 3) explicit runtime + conf fallback (Credential Store overrides) ---- #
+    user = rp.get("username") or cs_user or get_cfg(conf, "username", "")
+    pw = rp.get("password") or cs_pw or get_cfg(conf, "password", "")
+    dsn = rp.get("conn_string") or cs_dsn or get_cfg(conf, "conn_string", "")
     wallet_path = rp.get("wallet_path") or get_cfg(conf, "wallet_path", "")
     if not (user and pw and dsn):
         raise ValueError(
-            "supply catalog_key, or conn_string + username + password "
-            "(+ optional wallet_path) in runtime params or conf")
+            "supply catalog_key, aidp_credential_name, or "
+            "conn_string + username + password (+ optional wallet_path) in "
+            "runtime params or conf")
     kwargs = dict(user=user, password=pw, dsn=dsn)
-    if wallet_path:
+    if cs_wallet_b64 and not wallet_path:
+        # Materialize wallet from base64-encoded zip in the credential bundle.
+        wallet_dir = _materialize_wallet(cs_wallet_b64, "")
+        os.environ["TNS_ADMIN"] = wallet_dir
+        kwargs.update(config_dir=wallet_dir, wallet_location=wallet_dir)
+        debug("materialized wallet from Credential Store bundle",
+              wallet_dir=wallet_dir)
+    elif wallet_path:
         kwargs.update(config_dir=wallet_path, wallet_location=wallet_path)
     debug("opening connection via explicit DSN", dsn=dsn,
-          has_wallet=bool(wallet_path))
+          has_wallet=bool(cs_wallet_b64 or wallet_path))
     return oracledb.connect(**kwargs)
 
 

@@ -59,15 +59,38 @@ def call_llm(conf, system_prompt, user_content, **overrides):
 def build_oci_genai_client(conf):
     """Build a raw OCI GenAI inference client for the embeddings path.
 
-    Uses the same auth + endpoint + compartment resolution as build_llm so
-    both paths agree on region/auth. Returns (client, resolved_conf).
+    Auth resolution (in order):
+      1. conf.credential_name set      -> aidputils.secrets bundle ->
+                                          oci.signer.Signer(private_key_content=...)
+      2. auth_type=resource_principal  -> resource principal (default)
+      3. auth_type=instance_principal  -> instance principal
+      4. else                          -> oci.config.from_file (profile-based)
+
+    Returns (client, resolved_conf).
     """
     import oci
 
     resolved = resolve_oci_conf(conf)
-    auth_type = (resolved.get("auth_type") or "resource_principal").lower()
     endpoint = resolved["endpoint"]
 
+    # 1. Credential Store path.
+    try:
+        from .credential_resolver import resolve_oci_signer
+        from .config_utils import get_cfg
+        cred_name = get_cfg(conf, "credential_name", "")
+        cs_signer, _meta, cred_err = resolve_oci_signer(cred_name)
+        if cred_err:
+            raise ValueError(f"credential_name='{cred_name}' failed: {cred_err}")
+        if cs_signer is not None:
+            client = oci.generative_ai_inference.GenerativeAiInferenceClient(
+                config={}, signer=cs_signer, service_endpoint=endpoint
+            )
+            return client, resolved
+    except ImportError:
+        pass  # helper not bundled — fall through to legacy paths
+
+    # 2-4. Legacy paths.
+    auth_type = (resolved.get("auth_type") or "resource_principal").lower()
     if auth_type == "resource_principal":
         signer = oci.auth.signers.get_resource_principals_signer()
         client = oci.generative_ai_inference.GenerativeAiInferenceClient(
