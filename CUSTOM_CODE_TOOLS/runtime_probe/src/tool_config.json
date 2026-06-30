@@ -1,0 +1,29 @@
+{
+  "displayName": "Runtime Probe",
+  "description": "Reports what modules/packages/env vars are available in this AIDP runtime. Use it to diagnose 'aidputils.secrets not available' and similar wiring issues before opening a ticket.",
+  "tools": [
+    {
+      "toolClassName": "RuntimeProbe",
+      "displayName": "Runtime Probe",
+      "description": "Introspects the live AIDP runtime. No inputs required. Returns a structured dict with: python version, available modules (aidputils, aidputils.secrets, datahub_dp_python_client, oci.*, oracledb, requests), set/unset env vars (OCI_RESOURCE_PRINCIPAL_VERSION, OCI_HUB_DP_ENDPOINT, DATALAKE_ID, ...), and live probes (can we build a resource-principal signer? can we reach aidputils.secrets.get?).",
+      "version": "1.0.0",
+      "schema": [
+        {
+          "name": "probe_credential_name",
+          "type": "string",
+          "description": "Optional. A credential name to attempt resolving via aidputils.secrets.get() — used to distinguish 'module missing' from 'credential missing'. Defaults to a deliberately nonexistent name.",
+          "default": "__runtime_probe_does_not_exist__"
+        }
+      ],
+      "conf": {},
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
+      "_uiHints": {
+        "schema": {
+          "probe_credential_name": {"kind": "input", "inputStyle": "singleline"}
+        }
+      }
+    }
+  ]
+}

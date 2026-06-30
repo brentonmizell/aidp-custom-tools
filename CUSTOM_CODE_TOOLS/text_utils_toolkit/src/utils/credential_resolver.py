@@ -66,8 +66,19 @@ def resolve_bundle(credential_name: Optional[str]) -> Tuple[Optional[Dict[str, A
     try:
         import aidputils.secrets as secrets
     except ImportError as ex:
-        return None, (f"aidputils.secrets not available: {ex}. "
-                      f"Update the agent runtime or remove conf.credential_name.")
+        return None, (
+            f"aidputils.secrets not available in this runtime: {ex}. "
+            "This means the agent runtime's aidp-utils package predates the "
+            "credential-store submodule (added per JR/Sambit Jun-17 guidance). "
+            "Options: (1) ask the AIDP platform team to upgrade the runtime's "
+            "aidp-utils to a version that includes the `secrets` submodule, "
+            "(2) deploy the RuntimeProbe tool (CUSTOM_CODE_TOOLS/runtime_probe/) "
+            "to diagnose what your runtime does have, (3) temporarily clear "
+            "conf.credential_name and fall back to the legacy auth path "
+            "(resource_principal — but that 401s against public AIDP "
+            "data-plane endpoints, which is exactly the problem this path "
+            "was supposed to solve)."
+        )
 
     try:
         bundle = secrets.get(str(credential_name).strip())
