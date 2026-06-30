@@ -21,11 +21,15 @@ Does your tool make any network call?
     ├── It calls a public AIDP / OCI REST API
     │   (catalogs, schemas, volumes, KBs, compute,
     │    document understanding, object storage, GenAI)
-    │   ──────────────────────────────────────────  Use the AIDP Credential Store
-    │                                                with a SECRET_TOKEN credential
-    │                                                holding tenancy / user /
-    │                                                fingerprint / private_key.
-    │                                                Reference: credential_store_auth_sample/
+    │   ──────────────────────────────────────────  Two interchangeable paths
+    │                                                (conf.credential_name auto-routes):
+    │                                                 • Display name → AIDP Credential
+    │                                                   Store (needs new aidputils.secrets).
+    │                                                 • OCID `ocid1.vaultsecret.…` →
+    │                                                   OCI Vault (works on every runtime
+    │                                                   with resource principal).
+    │                                                See section A0 for the Vault setup
+    │                                                + A for the Credential Store setup.
     │
     ├── It connects to an Oracle Database
     │   (selectai_toolkit, anything via oracledb)
@@ -73,6 +77,64 @@ calls (the ones the runtime is already wired for).
 
 You do this **once per environment**, in the AIDP console, not in the tool.
 The tool never sees the raw values, only the credential's display name.
+
+### A0. OCI Vault secret (recommended when aidputils.secrets isn't in your runtime)
+
+The Credential Store path below relies on `aidputils.secrets.get(name)`, which
+is only available in **newer** AIDP agent runtimes. If
+`CUSTOM_CODE_TOOLS/runtime_probe/` reports `aidputils.secrets: NOT available`,
+use this path instead — it works against any runtime with the modern OCI SDK
++ resource principal (every AIDP runtime tested as of writing).
+
+How it works: store the same JSON bundle in **OCI Vault** instead of AIDP's
+Credential Store. The tool detects an OCID-shaped `credential_name`
+(starts with `ocid1.vaultsecret.`), pulls the secret bundle via
+`oci.secrets.SecretsClient.get_secret_bundle()` using the agent runtime's
+resource principal, base64-decodes + JSON-parses the content, and uses it
+exactly like a Credential Store bundle.
+
+**One-time setup:**
+
+1. **OCI Console → Vault → Create Vault** (if you don't have one). Pick a
+   compartment the agent runtime can read from. Standard tier is fine.
+2. **In the Vault → Master Encryption Keys → Create Key** (AES-256, software
+   protection mode is fine for non-FIPS).
+3. **Vault → Secrets → Create Secret.**
+   - Name: pick something stable, e.g. `aidp_oci_key`.
+   - Encryption Key: the key from step 2.
+   - **Secret Type Template:** Plain-text.
+   - **Secret Contents:** paste the JSON object below, with your real values:
+     ```json
+     {
+       "tenancy":     "ocid1.tenancy.oc1..aaaaaaaa...",
+       "user":        "ocid1.user.oc1..aaaaaaaa...",
+       "fingerprint": "aa:bb:cc:dd:ee:ff:11:22:33:44:55:66:77:88:99:00",
+       "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQ...\n-----END PRIVATE KEY-----\n"
+     }
+     ```
+     (Use `\n` for line breaks inside the JSON string; or paste the literal
+     multi-line PEM and ensure your JSON encoder escapes it correctly.)
+4. **Save and copy the Secret OCID** — looks like
+   `ocid1.vaultsecret.oc1.iad.amaaaaaa...`.
+5. **Grant the agent runtime's dynamic group `read secret-bundles`** on the
+   compartment containing this secret. Sample IAM policy:
+   ```
+   allow dynamic-group <your-agent-dg> to read secret-bundles in compartment <compartment-name>
+   ```
+6. **Use it:** set `conf.credential_name` to the Vault secret OCID. The
+   tools auto-route on the `ocid1.vaultsecret.` prefix — no other changes.
+
+**Bundle key naming:** the JSON keys are the same as for the AIDP Credential
+Store path. For OCI API auth use `tenancy` / `user` / `fingerprint` /
+`private_key`. For SMTP: `host` / `port` / `username` / `password` /
+`from_address`. For DB: `username` / `password` / `connection_string` /
+`wallet_b64`. The tool's `_execute_tool` reads the bundle as a dict; the key
+names need to match what that specific tool expects.
+
+**Same `credential_name` field; auto-routing on prefix.** If you later
+upgrade to a runtime with `aidputils.secrets`, you can switch back to a
+display name without touching the tool code — just change the value in
+`conf.credential_name`. Display names go to AIDP, OCIDs go to Vault.
 
 ### A. OCI API-key credential (most common — for AIDP/OCI REST calls)
 

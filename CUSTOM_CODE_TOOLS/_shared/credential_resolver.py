@@ -53,35 +53,52 @@ def mask(value: Optional[str], keep: int = 4) -> str:
 
 
 def resolve_bundle(credential_name: Optional[str]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-    """Look up a SECRET_TOKEN credential by display name.
+    """Look up a credential bundle. Auto-routes based on the name shape:
+
+      - `ocid1.vaultsecret.…`           -> OCI Vault path (resource principal +
+                                            SecretsClient.get_secret_bundle).
+                                            Secret content must be a JSON object.
+      - anything else (display name)    -> AIDP Credential Store path
+                                            (aidputils.secrets.get).
+
+    The OCID-routing exists because many AIDP runtimes today predate the
+    `aidputils.secrets` submodule (Jun-17 thread). OCI Vault works against
+    any runtime that has the modern OCI SDK + resource principal, which is
+    every AIDP runtime tested as of writing.
 
     Returns:
-        (bundle, None)   on success — bundle is the dict of secret-key pairs.
-        (None, None)     when credential_name is empty/None — caller should
-                         fall through to its existing auth path (no error).
+        (bundle, None)   on success.
+        (None, None)     when credential_name is empty — caller falls through.
         (None, error)    when the lookup raised or returned the wrong shape.
     """
     if not credential_name or not str(credential_name).strip():
         return None, None
+    name = str(credential_name).strip()
+
+    # Route 1: OCI Vault secret OCID.
+    if name.startswith("ocid1.vaultsecret."):
+        return _resolve_bundle_via_oci_vault(name)
+
+    # Route 2: AIDP Credential Store display name.
+    return _resolve_bundle_via_aidputils(name)
+
+
+def _resolve_bundle_via_aidputils(credential_name: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     try:
         import aidputils.secrets as secrets
     except ImportError as ex:
         return None, (
             f"aidputils.secrets not available in this runtime: {ex}. "
-            "This means the agent runtime's aidp-utils package predates the "
-            "credential-store submodule (added per JR/Sambit Jun-17 guidance). "
-            "Options: (1) ask the AIDP platform team to upgrade the runtime's "
-            "aidp-utils to a version that includes the `secrets` submodule, "
-            "(2) deploy the RuntimeProbe tool (CUSTOM_CODE_TOOLS/runtime_probe/) "
-            "to diagnose what your runtime does have, (3) temporarily clear "
-            "conf.credential_name and fall back to the legacy auth path "
-            "(resource_principal — but that 401s against public AIDP "
-            "data-plane endpoints, which is exactly the problem this path "
-            "was supposed to solve)."
+            "The agent runtime's aidp-utils predates the credential-store "
+            "submodule. Either (a) ask the platform team to upgrade aidp-utils, "
+            "or (b) switch credential_name to an OCI Vault secret OCID "
+            "(starts with `ocid1.vaultsecret.`) — that path works under "
+            "resource principal on every runtime tested. See "
+            "CUSTOM_CODE_TOOLS/CREDENTIALS.md for the OCI Vault setup steps."
         )
 
     try:
-        bundle = secrets.get(str(credential_name).strip())
+        bundle = secrets.get(credential_name)
     except Exception as ex:
         return None, f"Credential `{credential_name}` could not be read: {ex}"
 
@@ -92,6 +109,51 @@ def resolve_bundle(credential_name: Optional[str]) -> Tuple[Optional[Dict[str, A
                       f"{type(bundle).__name__}, not a dict. The credential "
                       f"must be SECRET_TOKEN type (SERVICE_ACCOUNT / "
                       f"VAULT_REFERENCE shapes are not accepted).")
+    return bundle, None
+
+
+def _resolve_bundle_via_oci_vault(secret_id: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Fetch a JSON-encoded credential bundle from OCI Vault by secret OCID.
+    Uses the agent runtime's resource principal to authenticate the Vault
+    call — no API key needed for the lookup itself."""
+    try:
+        import base64
+        import json
+        import oci
+        from oci.secrets import SecretsClient
+    except ImportError as ex:
+        return None, f"OCI Vault path requires oci.secrets: {ex}"
+
+    try:
+        signer = oci.auth.signers.get_resource_principals_signer()
+    except Exception as ex:
+        return None, (f"OCI Vault path needs a working resource-principal "
+                      f"signer in this runtime: {ex}")
+
+    try:
+        client = SecretsClient({}, signer=signer)
+        resp = client.get_secret_bundle(secret_id=secret_id)
+        content_b64 = resp.data.secret_bundle_content.content
+    except Exception as ex:
+        return None, (f"OCI Vault secret `{secret_id[:30]}…` could not be read: "
+                      f"{ex}. Check that the agent runtime's dynamic group has "
+                      f"`read secret-bundles` on the compartment containing "
+                      f"this secret.")
+
+    try:
+        content_str = base64.b64decode(content_b64).decode("utf-8")
+    except Exception as ex:
+        return None, f"OCI Vault secret content is not valid base64/utf-8: {ex}"
+
+    try:
+        bundle = json.loads(content_str)
+    except json.JSONDecodeError as ex:
+        return None, (f"OCI Vault secret content must be a JSON object with "
+                      f"keys like {list(OCI_REQUIRED_KEYS)}. Got: {ex}")
+
+    if not isinstance(bundle, dict):
+        return None, (f"OCI Vault secret content is a "
+                      f"{type(bundle).__name__}, not a JSON object/dict.")
     return bundle, None
 
 
