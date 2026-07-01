@@ -41,24 +41,36 @@ Vault OCID). Same bundle for both tools.
 
 ## Database setup
 
-Run these against the ADB in order. Both PL/SQL objects and the ORDS module
-live in the same schema.
+**Full ADB runbook with copy-paste SQL, screenshots-in-prose, and a
+smoke-test cURL section is [`db/README.md`](db/README.md).** Follow it top
+to bottom on a fresh Autonomous Database. ~15 minutes.
 
-1. **[`db/01_schema.sql`](db/01_schema.sql)** — creates `hitl_approvals` + index.
-2. **[`db/02_resolve_procedure.sql`](db/02_resolve_procedure.sql)** — the atomic
+Five SQL files, applied in order:
+
+1. [`db/01_schema.sql`](db/01_schema.sql) — creates `hitl_approvals` + index.
+2. [`db/02_resolve_procedure.sql`](db/02_resolve_procedure.sql) — the atomic
    authorize + compare-and-set procedure. `SQL%ROWCOUNT` on the conditional
    `UPDATE` is the actual gate; the preceding `SELECT` is only for the
    `NO_DATA_FOUND` and `unauthorized` messages.
-3. **[`db/03_ords_module.sql`](db/03_ords_module.sql)** — publishes
+3. [`db/03_ords_module.sql`](db/03_ords_module.sql) — publishes
    `POST /hitl/approvals` (insert) and `POST /hitl/approvals/{id}/resolve`
    (calls the procedure, returns JSON via `apex_json`).
-4. **[`db/04_sweep_job.sql`](db/04_sweep_job.sql)** — `DBMS_SCHEDULER` job
-   that flips `status='pending' AND expires_at < SYSTIMESTAMP` rows to
+4. [`db/04_sweep_job.sql`](db/04_sweep_job.sql) — `DBMS_SCHEDULER` job that
+   flips `status='pending' AND expires_at < SYSTIMESTAMP` rows to
    `status='expired'`, every 15 minutes.
+5. [`db/05_ords_auth.sql`](db/05_ords_auth.sql) — ORDS authentication. Pick
+   ONE of two blocks:
+   - **Block A (quick smoke test):** nothing to run. Basic auth uses the
+     schema owner's credentials. Personal sandbox only.
+   - **Block B (production):** creates a dedicated `HITL_TOOL` DB user with
+     just `CREATE SESSION`, an ORDS role `HITL Client`, and an ORDS
+     privilege that requires the role on the two URL patterns. Includes
+     an `ORDS_ADMIN.grant_role` call plus two fallbacks for older ORDS
+     versions.
 
-**Auth in front of ORDS.** Attach an ORDS role/privilege that requires
-BASIC auth. The tools send `ords_username:ords_password` from the
-credential bundle on every call.
+The HITL tool authenticates via HTTP BASIC with `ords_username` +
+`ords_password` from the credential bundle. Path A → user = `HITL_SVC`.
+Path B → user = `HITL_TOOL`.
 
 ## Tool setup
 
