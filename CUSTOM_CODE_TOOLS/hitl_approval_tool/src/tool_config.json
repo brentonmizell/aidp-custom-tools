@@ -1,0 +1,123 @@
+{
+  "displayName": "HITL Approval",
+  "description": "Out-of-band human-approval gate for AgentFlow. OpenApprovalTool escalates high-impact actions over SMS; ResolveApprovalTool executes the captured payload when the approver's decision turn arrives. State lives in an Autonomous DB table via ORDS; nothing blocks, no compute is pinned.",
+  "tools": [
+    {
+      "toolClassName": "OpenApprovalTool",
+      "displayName": "HITL — Open Approval",
+      "description": "Escalate an action to a human approver over SMS. Writes a pending row via ORDS, texts the approver, returns an approval_id. The agent's next reply to the requester should reference this ID.",
+      "version": "1.0.0",
+      "schema": [
+        {
+          "name": "action_summary",
+          "type": "string",
+          "description": "Plain-language description of what will happen if approved. Include the amount, destination, and reason. Shown verbatim to the approver over SMS."
+        },
+        {
+          "name": "action_payload",
+          "type": "object",
+          "description": "The concrete action to execute on approval. Opaque to this tool. On approve, either POSTed to conf.execute_webhook_url or returned as queued_action for the caller flow to dispatch."
+        },
+        {
+          "name": "requester_ref",
+          "type": "string",
+          "description": "Session key / phone number to text the outcome back to. Verified from the inbound relay, not user-typed."
+        },
+        {
+          "name": "approver_allow",
+          "type": "array",
+          "description": "Allowed approver phone numbers. List of E.164 strings (e.g. ['+15551234567', '+15559876543']). Also accepted as comma-separated string or JSON-encoded list.",
+          "examples": [["+15551234567"], "+15551234567,+15559876543"]
+        },
+        {
+          "name": "conversation_ref",
+          "type": "string",
+          "description": "Optional audit reference (thread ID, chat URL). Stored in the row; never gated on."
+        }
+      ],
+      "conf": {
+        "credential_name": "",
+        "ords_base_url": "",
+        "http_timeout": 20,
+        "ttl_hours": 48,
+        "execute_webhook_url": ""
+      },
+      "auth": {"authType": "OCI_RESOURCE_PRINCIPAL"},
+      "_uiHints": {
+        "conf": {
+          "credential_name": {
+            "kind": "input", "inputStyle": "singleline",
+            "help": "AIDP Credential Store display name OR OCI Vault secret OCID. Bundle keys: ords_username, ords_password, twilio_account_sid, twilio_auth_token, twilio_from_number, and optionally ords_base_url."
+          },
+          "ords_base_url": {
+            "kind": "input", "inputStyle": "singleline",
+            "help": "ORDS module base URL, e.g. https://<host>/ords/aidp/hitl. Overridden by credential bundle's ords_base_url if present."
+          },
+          "http_timeout": {"kind": "input"},
+          "ttl_hours": {
+            "kind": "input",
+            "help": "Time after which the row is swept to 'expired'. Default 48h. The sweep is a DBMS_SCHEDULER job, not this tool."
+          },
+          "execute_webhook_url": {
+            "kind": "input", "inputStyle": "singleline",
+            "help": "Optional. Where to POST the action_payload on approve. If empty, the payload is returned as queued_action for the caller flow to dispatch."
+          }
+        },
+        "schema": {
+          "action_summary": {"inputStyle": "multiline"},
+          "action_payload": {"kind": "input", "inputStyle": "multiline"},
+          "approver_allow": {"kind": "input", "inputStyle": "singleline"}
+        }
+      }
+    },
+    {
+      "toolClassName": "ResolveApprovalTool",
+      "displayName": "HITL — Resolve Approval",
+      "description": "Called by the HITL agent when the approver's decision turn arrives. ORDS runs an atomic authorize + compare-and-set; on ok+approve the captured action_payload is executed. The requester is SMSed the outcome.",
+      "version": "1.0.0",
+      "schema": [
+        {
+          "name": "approval_id",
+          "type": "string",
+          "description": "The 6-character approval ID the approver typed. Case-insensitive; the tool uppercases before lookup."
+        },
+        {
+          "name": "decision",
+          "type": "string",
+          "description": "'approve' or 'reject'. Any string starting with 'a' becomes approved; 'r' becomes rejected."
+        },
+        {
+          "name": "sender_ref",
+          "type": "string",
+          "description": "Approver's VERIFIED phone number from the inbound relay. Do not accept a user-typed value here — this is the identity check the whole gate depends on."
+        }
+      ],
+      "conf": {
+        "credential_name": "",
+        "ords_base_url": "",
+        "http_timeout": 20,
+        "execute_webhook_url": ""
+      },
+      "auth": {"authType": "OCI_RESOURCE_PRINCIPAL"},
+      "_uiHints": {
+        "conf": {
+          "credential_name": {
+            "kind": "input", "inputStyle": "singleline",
+            "help": "Same bundle as OpenApprovalTool."
+          },
+          "ords_base_url": {"kind": "input", "inputStyle": "singleline"},
+          "http_timeout": {"kind": "input"},
+          "execute_webhook_url": {
+            "kind": "input", "inputStyle": "singleline",
+            "help": "See OpenApprovalTool — same field."
+          }
+        },
+        "schema": {
+          "approval_id": {"inputStyle": "singleline"},
+          "decision": {"kind": "enum", "values": ["approve", "reject"]},
+          "sender_ref": {"inputStyle": "singleline"}
+        }
+      }
+    }
+  ]
+}
