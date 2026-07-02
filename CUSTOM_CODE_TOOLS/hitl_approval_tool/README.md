@@ -1,164 +1,314 @@
-# hitl_approval_tool — human-in-the-loop approval gate for AgentFlow
+# HITL Toolkit — human-in-the-loop for AgentFlow
 
-Two AIDP custom tools that gate high-impact agent actions on out-of-band
-human approval. **Nothing blocks, no compute is pinned.** State lives in
-an ADB table; the approver replies on SMS; the captured action executes
-the moment approval arrives.
+A **channel-agnostic** human-in-the-loop system for AIDP agent flows:
 
-## What each tool is for
+- **Approval gates** — escalate a high-impact action to a separate human
+  approver *without blocking the agent or holding compute*. The decision
+  arrives as a normal later turn; the captured action executes exactly once.
+- **Incidents** — durable business state with short human-typable IDs
+  (`K7M2Q4`) so anyone can resume a conversation days later, from any channel.
+- **User lookup** — who is behind this verified phone/email/slack ref, what
+  can they do, and what were they last working on (session windows)?
 
-| Tool | Who calls it | What it does |
-|---|---|---|
-| `OpenApprovalTool` | The policy/decision agent, when a proposed action exceeds a threshold (e.g. dispatch cost > $3500). | Writes a pending row via ORDS, texts the approver with the summary + short ID, returns `{approval_id, status:"submitted"}`. Agent tells the requester "pending, ref K7M2Q4". Turn ends. |
-| `ResolveApprovalTool` | The HITL agent, when the inbound relay routes the approver's decision turn. | ORDS runs the atomic authorize + compare-and-set procedure. Four outcomes: `unknown` / `unauthorized` / `already_decided` / `ok`. On `ok+approve`, executes the captured payload (webhook or queued). SMSes the requester the outcome. |
+SMS via Twilio is **one adapter, not a requirement**. Every notification the
+toolkit produces can instead be *returned to the calling flow* for delivery
+over whatever channel it owns — a chat reply, a Slack tool, an email tool
+(`notify_mode=defer`). The state machine is identical either way.
 
-## Why not interrupt/resume?
+## Why this shape (not interrupt/resume)
 
-Productized `/chat` never issues `Command(resume=...)`, and a sandboxed
-custom tool can't hold a process open for hours. So the tool records the
-pending action and returns immediately; the approver's reply is a normal
-later turn, not a resume. Nothing blocks, no compute is pinned, and it runs
-in the low-code canvas as built.
+The productized `/chat` wraps every turn as a fresh message and never issues
+`Command(resume=...)`, so a flow cannot resume a paused graph, and a
+sandboxed custom tool cannot hold a process open for hours. So: the tool
+records the pending action and **returns immediately**; the approver's reply
+is a **normal later turn**, not a resume. The only thing keeping an approval
+alive between turns is a row in Autonomous Database.
 
-## Credentials
+## The flow
 
-**Use the Credential Store (or OCI Vault) — never plaintext.** See
-[`../CREDENTIALS.md`](../CREDENTIALS.md) for the full pattern.
+```mermaid
+sequenceDiagram
+    autonumber
+    actor R as Requester<br/>(any channel)
+    participant CH as Channel + Relay<br/>(Twilio/Slack/etc → Supervisor URL)
+    participant SUP as Supervisor Agent<br/>(single exposed endpoint)
+    participant T as HITL Toolkit<br/>(custom tools, sandboxed)
+    participant DB as Autonomous DB<br/>(ORDS over HTTPS)
+    actor A as Approver<br/>(their own device)
 
-Create a SECRET_TOKEN credential (or OCI Vault JSON secret) with:
+    R->>CH: "reroute S-8837 to Cincinnati"
+    CH->>SUP: turn + [meta64: verified sender ref]
+    SUP->>T: LookupUserTool(user_ref)
+    T->>DB: POST /users/lookup
+    DB-->>T: role=requester, no current incident
+    SUP->>T: OpenIncidentTool(...)
+    T->>DB: POST /incidents
+    DB-->>T: incident K7M2Q4 created
+    Note over SUP: specialist agents work the incident…<br/>cost delta $4,200 > $3,500 policy threshold
+    SUP->>T: OpenApprovalTool(summary, payload,<br/>requester, allowlist, incident)
+    T->>DB: POST /approvals (row: status=pending, TTL)
+    T-->>A: "Approval XR4T2B: … Reply approve XR4T2B or reject XR4T2B"
+    T-->>SUP: {approval_id, status: submitted}
+    SUP-->>R: "Sent for approval (XR4T2B). You'll hear back either way."
+    Note over SUP,DB: TURN ENDS. Nothing blocks.<br/>Only the DB row remembers.
 
-| Key | Value |
+    A->>CH: "approve XR4T2B"   (minutes or hours later)
+    CH->>SUP: turn + [meta64: verified approver ref]
+    SUP->>T: LookupUserTool → role=approver,<br/>awaiting_my_decision=[XR4T2B]
+    SUP->>T: ResolveApprovalTool(XR4T2B, approve,<br/>sender bound from meta64)
+    T->>DB: POST /approvals/XR4T2B/resolve
+    Note over DB: atomic authorize + compare-and-set<br/>exactly one resolution can win
+    DB-->>T: result=ok + captured payload + requester
+    T->>T: execute payload (webhook or queued)
+    T-->>R: "Approved. S-8837 rerouted. New ETA Wed 3pm."
+    T-->>SUP: {status: approved, execution: …}
+```
+
+Approval lifecycle:
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending: OpenApprovalTool
+    pending --> approved: ResolveApprovalTool<br/>(sender on allowlist, wins the CAS)
+    pending --> rejected: ResolveApprovalTool<br/>(sender on allowlist, wins the CAS)
+    pending --> expired: TTL sweep<br/>(every 15 min, past expires_at)
+    approved --> [*]: payload executed once,<br/>requester notified
+    rejected --> [*]: requester notified
+    expired --> [*]: incident un-parked,<br/>late deciders told "expired"
+    note right of pending
+        A racing second decision,
+        a double-tap, or a redelivered
+        message hits rows=0 in the
+        conditional UPDATE and returns
+        already_decided. Never re-executes.
+    end note
+```
+
+## The six tools
+
+| Tool | When the agent calls it |
 |---|---|
-| `ords_base_url` | Base URL of the ORDS module, e.g. `https://<db-host>/ords/aidp/hitl`. Optional here — can also live in `conf.ords_base_url`. |
-| `ords_username` | ORDS user with EXECUTE on `resolve_approval` and INSERT on `hitl_approvals`. |
-| `ords_password` | Password for the above. |
-| `twilio_account_sid` | Twilio account SID (starts with `AC…`). |
-| `twilio_auth_token` | Twilio auth token. |
-| `twilio_from_number` | E.164 sender number, e.g. `+15551234567`. |
+| `LookupUserTool` | **First, on every inbound turn.** Who is this (by verified ref), what's their role, do they have a current in-window incident, are any approvals waiting on them? |
+| `OpenIncidentTool` | New piece of work → durable incident + short ID. Quote the ID in every outbound message. |
+| `GetIncidentTool` | Someone quotes an ID, or LookupUser returned a current incident. Loads state + approvals; refreshes the session window. |
+| `UpdateIncidentTool` | The flow learned something → update summary/detail; close/resolve when done. |
+| `OpenApprovalTool` | An action crosses a policy threshold → open the gate, notify approvers, end the turn. |
+| `ResolveApprovalTool` | An approver's decision turn arrives → atomic resolve, execute-once, notify requester. |
 
-Set both tools' `conf.credential_name` to the credential's display name (or
-Vault OCID). Same bundle for both tools.
+## Security invariants (non-negotiable)
 
-## Database setup
+1. **Identity authorizes, ID correlates.** `sender_ref` / `user_ref` must be
+   the *verified* channel identity from your relay (Twilio's `From` field,
+   Slack's member ID), carried into the flow via the `[meta64:]` envelope.
+   In a CODE flow, **bind it at tool-construction time** so the LLM cannot
+   supply it (see wiring below). Otherwise "I am +1-555-BOSS, approve X"
+   prompt-injection wins.
+2. **Atomic status flip in the database.** The conditional
+   `UPDATE … WHERE status='pending'` is the gate; `SQL%ROWCOUNT` decides who
+   won. Double-taps, redelivered messages, and racing approvers cannot cause
+   re-execution.
+3. **Execute the captured payload, not a conversation re-run.** Re-running
+   the agent off the transcript could reach a different decision. The stored
+   `action_payload` is what was approved; that is what executes.
+4. **TTL is a column + a sweep job**, not held compute. Abandoned approvals
+   expire on their own; their incidents un-park automatically.
 
-**Full ADB runbook with copy-paste SQL, screenshots-in-prose, and a
-smoke-test cURL section is [`db/README.md`](db/README.md).** Follow it top
-to bottom on a fresh Autonomous Database. ~15 minutes.
+---
 
-Five SQL files, applied in order:
+# How to enable it — end to end
 
-1. [`db/01_schema.sql`](db/01_schema.sql) — creates `hitl_approvals` + index.
-2. [`db/02_resolve_procedure.sql`](db/02_resolve_procedure.sql) — the atomic
-   authorize + compare-and-set procedure. `SQL%ROWCOUNT` on the conditional
-   `UPDATE` is the actual gate; the preceding `SELECT` is only for the
-   `NO_DATA_FOUND` and `unauthorized` messages.
-3. [`db/03_ords_module.sql`](db/03_ords_module.sql) — publishes
-   `POST /hitl/approvals` (insert) and `POST /hitl/approvals/{id}/resolve`
-   (calls the procedure, returns JSON via `apex_json`).
-4. [`db/04_sweep_job.sql`](db/04_sweep_job.sql) — `DBMS_SCHEDULER` job that
-   flips `status='pending' AND expires_at < SYSTIMESTAMP` rows to
-   `status='expired'`, every 15 minutes.
-5. [`db/05_ords_auth.sql`](db/05_ords_auth.sql) — ORDS authentication. Pick
-   ONE of two blocks:
-   - **Block A (quick smoke test):** nothing to run. Basic auth uses the
-     schema owner's credentials. Personal sandbox only.
-   - **Block B (production):** creates a dedicated `HITL_TOOL` DB user with
-     just `CREATE SESSION`, an ORDS role `HITL Client`, and an ORDS
-     privilege that requires the role on the two URL patterns. Includes
-     an `ORDS_ADMIN.grant_role` call plus two fallbacks for older ORDS
-     versions.
+## Step 1 — Database (one file, one run)
 
-The HITL tool authenticates via HTTP BASIC with `ords_username` +
-`ords_password` from the credential bundle. Path A → user = `HITL_SVC`.
-Path B → user = `HITL_TOOL`.
+Open **OCI Console → your Autonomous DB → Database Actions → SQL**, log in
+as **ADMIN**, then:
 
-## Tool setup
+1. Open [`db/install.sql`](db/install.sql).
+2. Find/replace the two `CHANGE_ME` passwords (schema owner + tool user).
+3. Paste the whole file into the worksheet, **Run Script (F5)**.
+4. The verification query at the bottom should list **7 rows**: 3 tables,
+   1 procedure, 1 job, 2 users.
 
-1. Build + upload the zip:
-   ```
-   cd CUSTOM_CODE_TOOLS/hitl_approval_tool
-   zip -r hitl_approval_tool.zip src/ -x "*__pycache__*" "*.pyc"
-   ```
-2. AIDP → Tools → Upload zip. Both classes are registered from the
-   manifest.
-3. Set both tools' `conf.credential_name` (or `conf.ords_base_url` +
-   credential_name if you didn't put the URL in the bundle).
-4. Attach `OpenApprovalTool` to the policy/decision agent.
-5. Attach `ResolveApprovalTool` to the HITL agent.
-6. Configure the inbound-SMS relay so approver-number turns route straight
-   to the HITL agent (recommended — deterministic). Alternative: the
-   supervisor LLM parses "approve/reject `<ID>`" and routes to HITL.
+The installer is re-runnable — every block guards itself. It creates the
+schema (`HITL_SVC`), the three tables, the atomic resolve procedure, seven
+ORDS endpoints under `/hitl/`, the 15-minute TTL sweep, and a locked-down
+login user (`HITL_TOOL`, `CREATE SESSION` only) gated by an ORDS privilege
+on `/hitl/*`. Details + troubleshooting: [`db/README.md`](db/README.md).
 
-## Payload execution (approve path)
+Your ORDS base URL is
+`https://<adb-host>/ords/hitl_svc/hitl/` — find `<adb-host>` under
+OCI Console → your ADB → Tool Configuration.
 
-The tool never `eval()`s or `exec()`s the payload. On `ok+approve`:
+## Step 2 — Seed the user allowlist
 
-- If `conf.execute_webhook_url` (or `action_payload.execute_webhook_url`)
-  is set, the tool `POST`s the payload to it with `application/json`.
-  Basic-auth uses the ORDS creds by default. The webhook can be another
-  AIDP tool exposed as REST, an Oracle Function, or any endpoint that
-  accepts JSON.
-- Otherwise the tool returns `{mode: "queued", action_payload: {...}}`
-  and the caller flow (a downstream node) dispatches. Useful when the
-  action is another AIDP tool call rather than a generic HTTP webhook.
+Who can request, who can approve. One `curl` per person (or use the Test
+panel later):
+
+```bash
+curl -u HITL_TOOL:'<password>' -X POST \
+  "https://<adb-host>/ords/hitl_svc/hitl/users" \
+  -H "Content-Type: application/json" \
+  -d '{"user_ref":"+15551230001","display_name":"Dana Dispatcher","user_role":"requester"}'
+
+curl -u HITL_TOOL:'<password>' -X POST \
+  "https://<adb-host>/ords/hitl_svc/hitl/users" \
+  -H "Content-Type: application/json" \
+  -d '{"user_ref":"+15559990002","display_name":"Karen Manager","user_role":"approver"}'
+```
+
+`user_role` is `requester`, `approver`, or `both`. `user_ref` is whatever
+your channel verifies — E.164 phone for SMS, email address, Slack member ID.
+
+## Step 3 — Credential bundle
+
+Create ONE credential (AIDP Credential Store `SECRET_TOKEN`, or an OCI Vault
+secret whose content is a JSON object) with these keys:
+
+| Key | Value | Required |
+|---|---|---|
+| `ords_base_url` | `https://<adb-host>/ords/hitl_svc/hitl/` | yes (or put in conf) |
+| `ords_username` | `HITL_TOOL` | yes |
+| `ords_password` | what you set in install.sql | yes |
+| `twilio_account_sid` | `AC…` | only for SMS mode |
+| `twilio_auth_token` | Twilio token | only for SMS mode |
+| `twilio_from_number` | `+1555…` | only for SMS mode |
+
+Point every tool's `conf.credential_name` at it (display name, or
+`ocid1.vaultsecret.…` for the Vault path). See
+[`../CREDENTIALS.md`](../CREDENTIALS.md) for both setups.
+
+## Step 4 — Upload the tool zip
+
+AIDP → **Tools → New Tool → Code** → upload
+[`hitl_approval_tool.zip`](hitl_approval_tool.zip). Six tools register. In
+each tool's config, set `credential_name` (and `ords_base_url` if it's not
+in the bundle).
+
+Pick your notification mode on `OpenApprovalTool` / `ResolveApprovalTool`:
+
+- `notify_mode=auto` (default) — SMS if Twilio creds present, else defer.
+- `notify_mode=defer` — **generic HITL**: the tool returns
+  `notifications: [{to, body, channel: "deferred"}]` and the calling flow
+  delivers them over its own channel (chat reply, Slack tool, email tool).
+
+## Step 5 — Smoke test from the Test panel (no channel needed)
+
+1. `OpenIncidentTool` → `requester_ref="+15551230001"`,
+   `summary="test incident"` → note the `incident_id`.
+2. `LookupUserTool` → `user_ref="+15551230001"` → should return the user +
+   `current_incident` you just created.
+3. `OpenApprovalTool` → fill `action_summary`, `action_payload={"op":"noop"}`,
+   `requester_ref="+15551230001"`, `approver_allow=["+15559990002"]`, the
+   `incident_id` → note the `approval_id`. With `notify_mode=defer` you'll
+   see the notification bodies in the result instead of real SMSes.
+4. `ResolveApprovalTool` → the `approval_id`, `decision="approve"`,
+   `sender_ref="+15559990002"` → expect `status: approved`.
+5. Run step 4 **again** → expect `status: already_decided`. That's the
+   atomic gate proving itself.
+6. `GetIncidentTool` → the `incident_id` → incident is back to `open` with
+   the decided approval in its list.
+
+## Step 6 — Wire the supervisor (CODE flow)
+
+Only the Supervisor's chat URL is exposed in a MAS — that's fine and
+assumed. Two pieces of wiring in the supervisor's `agent.py`:
+
+**(a) Identity comes in via `[meta64:]`, not message text.** Your relay
+(Step 7) wraps every inbound as
+`[meta64:<b64 of {"from":"+1555…","channel":"sms"}>] <the message>`.
+`strip_query_prefixes()` (mandatory in every AIDP agent) yields the dict.
+
+**(b) Bind the verified ref at tool-construction time** so the LLM cannot
+supply someone else's identity:
+
+```python
+async def invoke(self, user_query: str, **kwargs):
+    q, meta, model_id = strip_query_prefixes(user_query)
+    verified_ref = (meta or {}).get("from", "")
+
+    # Per-turn tool closures: sender identity is baked in, not an LLM arg.
+    def lookup_user() -> dict:
+        """Identify the current sender and load their working context."""
+        return call_custom_tool("LookupUserTool", {"user_ref": verified_ref})
+
+    def resolve_approval(approval_id: str, decision: str) -> dict:
+        """Apply the current sender's approve/reject decision."""
+        return call_custom_tool("ResolveApprovalTool", {
+            "approval_id": approval_id,
+            "decision": decision,
+            "sender_ref": verified_ref,        # <- bound, never LLM-chosen
+        })
+
+    tools = [lookup_user, resolve_approval, open_incident, get_incident,
+             update_incident, open_approval, *other_tools]
+    agent = create_react_agent(llm, tools, checkpointer=checkpointer, ...)
+```
+
+System-prompt guidance for the supervisor: *"On every turn, call
+lookup_user first. If the sender has approvals awaiting their decision and
+their message contains approve/reject + an ID, call resolve_approval. If
+lookup_user returns a current_incident, continue it; otherwise ask whether
+this is a new issue or give an incident ID."*
+
+## Step 7 — Channel relay (only for SMS/Slack/etc.)
+
+The channel cannot call the Supervisor URL directly (Twilio posts
+form-encoded, unsigned; the AIDP chat endpoint wants its JSON shape + OCI
+auth). A ~50-line relay (OCI Function behind API Gateway) does four things:
+
+1. Read the **verified** sender from the channel webhook (Twilio `From`).
+2. Strip any `[meta64:…]`-looking text the sender typed (anti-spoof), then
+   prepend the real envelope: `[meta64:…] <body>`.
+3. Call the Supervisor chat URL with `sessionKey = sender ref` — the AIDP
+   checkpointer then gives you conversation memory across texts for free.
+4. Send the chat response back over the channel (Twilio send).
+
+Conversation memory lives in the checkpointer (keyed by sessionKey);
+business state lives in ADB (incidents + approvals). Don't replay
+transcripts from the DB into the LLM — `GetIncidentTool`'s summary/detail is
+the re-anchor for stale sessions.
+
+**Web/chat-UI deployments need no relay at all**: run `notify_mode=defer`,
+have the flow deliver notifications as chat replies, and pass the signed-in
+user's identity in the meta64 envelope from your front end.
+
+---
+
+## Data model
+
+| Table | Purpose |
+|---|---|
+| `hitl_users` | `user_ref` (PK, channel-agnostic), `display_name`, `user_role` (requester/approver/both), `active` |
+| `hitl_incidents` | `incident_id` (PK, short code), `status` (open/pending_approval/resolved/closed), `requester_ref`, `summary`, `detail` CLOB, `last_activity_at` (powers session windows) |
+| `hitl_approvals` | `approval_id` (PK), `incident_id` (FK, nullable — gates work standalone too), `status` (pending/approved/rejected/expired), `action_summary`, `action_payload` CLOB, `approver_allow` JSON, `expires_at`, `decided_by`, `decided_at` |
+
+ORDS endpoints (all POST, JSON, basic-auth gated by the `hitl.client`
+privilege): `/users/lookup`, `/users`, `/incidents`, `/incidents/get`,
+`/incidents/update`, `/approvals`, `/approvals/{id}/resolve`.
 
 ## Edge cases
 
 | Case | Behavior |
 |---|---|
-| Wrong / unknown ID | Approver SMSed "No approval found for ID X." Nothing changes. |
-| Sender not on allowlist | Approver SMSed "not authorized." Nothing changes. Row untouched. |
-| Already decided / redelivered SMS | `SQL%ROWCOUNT=0` → returned as `already_decided`. No re-execution. Approver SMSed. |
-| Two approvers tap near-simultaneously | Atomic UPDATE lets exactly one win. The other gets `already_decided`. |
-| Expired (past TTL) | Swept to `expired` by the DBMS_SCHEDULER job. Requester notification is left to the caller flow (or an optional expiry queue — see `db/04_sweep_job.sql` comments). |
-| ORDS insert fails after ID generation | Tool returns `{ok:false, error_type:"ORDSError", approval_id:…}` — no phantom SMS because SMS is sent AFTER the insert succeeds. |
-| SMS to approver fails (all numbers) | Tool returns `{ok:false, error_type:"SMSError", approval_id:…}` — but the DB row is already `pending`. Manual follow-up needed; the row will time out via the sweep. |
-| Execution fails after approve | Row stays `approved`. Requester SMSed the failure text. `execution.mode=dispatch_failed` in the result envelope. |
-| Malformed `action_payload` in DB | Rare (only if the OPEN insert corrupted it). Tool returns `{ok:false, error_type:"ORDSError"}`; row stays `approved` so a human can re-dispatch. |
-
-## Security invariants (do not weaken)
-
-- **Identity authorizes, ID correlates.** `sender_ref` must be the verified
-  inbound-relay number, NOT user-typed. Anyone who sees the ID can guess
-  it; only the verified allowlist member can decide.
-- **Atomic status flip.** The `UPDATE ... WHERE status='pending'` clause
-  is the only correctness check that matters. Do not add "check status
-  before update" logic — it's a race.
-- **Execute the captured payload, not the conversation.** Re-running the
-  agent off the transcript can reach a different decision.
-- **TTL is a column + a scheduled job.** Never a live compute wait.
-
-## Verification harness
-
-`verify_wiring.py` (this directory) exercises both tools with mocked ORDS
-and mocked Twilio. Covers:
-
-- open: happy path (row inserted, SMS sent, returns `submitted`)
-- open: SMS failure (row still written, error surfaced with approval_id)
-- resolve: `unknown` / `unauthorized` / `already_decided` / `ok+approve` /
-  `ok+reject`
-- resolve: approve path with `execute_webhook_url` set — webhook POST fires
-  and its response is captured in `execution.response`
-- resolve: approve path with no webhook — payload returned as queued
-
-Run: `python verify_wiring.py`.
+| Wrong / unknown approval ID | Decider notified "no approval found"; nothing changes |
+| Sender not on allowlist | "not authorized"; nothing changes |
+| Double-tap / redelivered message | `rows=0` → `already_decided`; **no re-execution** |
+| Two approvers race | Row lock serializes; exactly one wins; loser told "already decided" |
+| Expired (past TTL) | Sweep flips to `expired`, un-parks the incident; late decider told "expired" |
+| Execution fails after approve | Row stays `approved` (the human decision); requester told execution failed, manual follow-up |
+| Requester is also an approver | Allowed only if you put them on `approver_allow` for their own request — **don't**, unless your policy explicitly permits self-approval |
+| Returning user, stale session | `LookupUserTool` finds no in-window incident → agent asks "new issue, or do you have an incident ID?" → `GetIncidentTool` re-anchors |
 
 ## Files
 
 ```
 hitl_approval_tool/
-├── README.md                        ← this file
-├── verify_wiring.py                 ← standalone dev-box smoke test
+├── README.md                 ← this file
 ├── db/
-│   ├── 01_schema.sql
-│   ├── 02_resolve_procedure.sql
-│   ├── 03_ords_module.sql
-│   └── 04_sweep_job.sql
-└── src/
-    ├── requirements.txt
-    ├── tool_config.json
-    ├── tool_implementation.py       ← OpenApprovalTool + ResolveApprovalTool
-    └── utils/
-        ├── config_utils.py          ← get_cfg / ok / fail
-        └── credential_resolver.py   ← synced from _shared/
+│   ├── install.sql           ← ONE file: schema + tables + proc + ORDS + sweep + auth
+│   └── README.md             ← ADB runbook + troubleshooting
+├── src/
+│   ├── tool_implementation.py  (6 tools)
+│   ├── tool_config.json
+│   └── utils/                  (config_utils, credential_resolver, …)
+└── hitl_approval_tool.zip    ← upload this to AIDP
 ```

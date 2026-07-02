@@ -1,121 +1,188 @@
 {
-  "displayName": "HITL Approval",
-  "description": "Out-of-band human-approval gate for AgentFlow. OpenApprovalTool escalates high-impact actions over SMS; ResolveApprovalTool executes the captured payload when the approver's decision turn arrives. State lives in an Autonomous DB table via ORDS; nothing blocks, no compute is pinned.",
+  "displayName": "HITL Toolkit",
+  "description": "Channel-agnostic human-in-the-loop for AgentFlow: user lookup, durable incidents with session windows, and out-of-band approval gates. State lives in Autonomous DB via ORDS; nothing blocks, no compute is pinned. SMS/Twilio is one adapter — set notify_mode=defer to deliver notifications over any channel the flow owns.",
   "tools": [
+    {
+      "toolClassName": "LookupUserTool",
+      "displayName": "HITL — Lookup User",
+      "description": "Identify the person behind a verified channel ref (phone/email/slack id) and load their working context: role, current in-window incident, approvals awaiting their decision. Call FIRST on every inbound turn.",
+      "version": "2.0.0",
+      "schema": [
+        {
+          "name": "user_ref",
+          "type": "string",
+          "description": "VERIFIED channel identity from the relay (E.164 phone, email, slack member id). In a CODE flow, bind from the [meta64:] envelope at tool-construction time — never LLM-supplied."
+        }
+      ],
+      "conf": {
+        "credential_name": "",
+        "ords_base_url": "",
+        "http_timeout": 20,
+        "session_window_minutes": 30
+      },
+      "auth": {"authType": "OCI_RESOURCE_PRINCIPAL"},
+      "_uiHints": {
+        "conf": {
+          "credential_name": {
+            "kind": "input", "inputStyle": "singleline",
+            "help": "AIDP Credential Store display name OR OCI Vault secret OCID. Bundle keys: ords_username, ords_password (+ optionally ords_base_url, twilio_account_sid, twilio_auth_token, twilio_from_number)."
+          },
+          "ords_base_url": {
+            "kind": "input", "inputStyle": "singleline",
+            "help": "e.g. https://<adb-host>/ords/hitl_svc/hitl. Overridden by the bundle's ords_base_url if present."
+          },
+          "session_window_minutes": {
+            "kind": "input",
+            "help": "How recently an incident must have activity to count as the 'current session' for a returning user. Default 30."
+          }
+        }
+      }
+    },
+    {
+      "toolClassName": "OpenIncidentTool",
+      "displayName": "HITL — Open Incident",
+      "description": "Create a durable incident and return a short human-typable ID (e.g. K7M2Q4). Quote the ID in every outbound message so people can resume days later from any channel.",
+      "version": "2.0.0",
+      "schema": [
+        {"name": "requester_ref", "type": "string",
+         "description": "Verified channel identity of the person raising the incident."},
+        {"name": "summary", "type": "string",
+         "description": "One-line description of the incident."},
+        {"name": "detail", "type": "string",
+         "description": "Optional structured context (JSON string is fine). Agents update this as they learn more."}
+      ],
+      "conf": {
+        "credential_name": "",
+        "ords_base_url": "",
+        "http_timeout": 20
+      },
+      "auth": {"authType": "OCI_RESOURCE_PRINCIPAL"},
+      "_uiHints": {
+        "conf": {
+          "credential_name": {"kind": "input", "inputStyle": "singleline"},
+          "ords_base_url": {"kind": "input", "inputStyle": "singleline"}
+        }
+      }
+    },
+    {
+      "toolClassName": "GetIncidentTool",
+      "displayName": "HITL — Get Incident",
+      "description": "Load an incident + all its approvals by ID. Use when someone quotes an incident ID or LookupUserTool returned a current_incident. Reading refreshes the session window.",
+      "version": "2.0.0",
+      "schema": [
+        {"name": "incident_id", "type": "string",
+         "description": "The incident's short ID, e.g. K7M2Q4. Case-insensitive."}
+      ],
+      "conf": {
+        "credential_name": "",
+        "ords_base_url": "",
+        "http_timeout": 20
+      },
+      "auth": {"authType": "OCI_RESOURCE_PRINCIPAL"},
+      "_uiHints": {
+        "conf": {
+          "credential_name": {"kind": "input", "inputStyle": "singleline"},
+          "ords_base_url": {"kind": "input", "inputStyle": "singleline"}
+        }
+      }
+    },
+    {
+      "toolClassName": "UpdateIncidentTool",
+      "displayName": "HITL — Update Incident",
+      "description": "Update an incident's summary/detail/status as the flow learns more. Status transitions to pending_approval happen automatically via OpenApprovalTool — don't set that here.",
+      "version": "2.0.0",
+      "schema": [
+        {"name": "incident_id", "type": "string", "description": "The incident's short ID."},
+        {"name": "summary", "type": "string", "description": "Optional replacement one-liner."},
+        {"name": "detail", "type": "string", "description": "Optional replacement context blob."},
+        {"name": "status", "type": "string", "enum": ["open", "resolved", "closed"],
+         "description": "Optional status change: open | resolved | closed."}
+      ],
+      "conf": {
+        "credential_name": "",
+        "ords_base_url": "",
+        "http_timeout": 20
+      },
+      "auth": {"authType": "OCI_RESOURCE_PRINCIPAL"},
+      "_uiHints": {
+        "conf": {
+          "credential_name": {"kind": "input", "inputStyle": "singleline"},
+          "ords_base_url": {"kind": "input", "inputStyle": "singleline"}
+        },
+        "schema": {
+          "status": {"kind": "enum"}
+        }
+      }
+    },
     {
       "toolClassName": "OpenApprovalTool",
       "displayName": "HITL — Open Approval",
-      "description": "Escalate an action to a human approver over SMS. Writes a pending row via ORDS, texts the approver, returns an approval_id. The agent's next reply to the requester should reference this ID.",
-      "version": "1.0.0",
+      "description": "Escalate an action to a human approver: writes the pending row, notifies every approver (SMS or deferred per notify_mode), returns an approval_id immediately. Nothing blocks. Link an incident_id to auto-park/unpark the incident.",
+      "version": "2.0.0",
       "schema": [
-        {
-          "name": "action_summary",
-          "type": "string",
-          "description": "Plain-language description of what will happen if approved. Include the amount, destination, and reason. Shown verbatim to the approver over SMS."
-        },
-        {
-          "name": "action_payload",
-          "type": "object",
-          "description": "The concrete action to execute on approval. Opaque to this tool. On approve, either POSTed to conf.execute_webhook_url or returned as queued_action for the caller flow to dispatch."
-        },
-        {
-          "name": "requester_ref",
-          "type": "string",
-          "description": "Session key / phone number to text the outcome back to. Verified from the inbound relay, not user-typed."
-        },
-        {
-          "name": "approver_allow",
-          "type": "array",
-          "description": "Allowed approver phone numbers. List of E.164 strings (e.g. ['+15551234567', '+15559876543']). Also accepted as comma-separated string or JSON-encoded list.",
-          "examples": [["+15551234567"], "+15551234567,+15559876543"]
-        },
-        {
-          "name": "conversation_ref",
-          "type": "string",
-          "description": "Optional audit reference (thread ID, chat URL). Stored in the row; never gated on."
-        }
+        {"name": "action_summary", "type": "string",
+         "description": "Plain-language description of what happens if approved. Include amount, destination, reason. Shown verbatim to the approver."},
+        {"name": "action_payload", "type": "object",
+         "description": "The concrete action to execute on approval. Opaque to this tool. On approve, POSTed to conf.execute_webhook_url or returned as queued_action."},
+        {"name": "requester_ref", "type": "string",
+         "description": "Verified channel ref to notify the outcome to."},
+        {"name": "approver_allow", "type": "array",
+         "description": "Channel refs allowed to decide. List, JSON string, or comma-separated.",
+         "examples": [["+15551234567"], "+15551234567,+15559876543"]},
+        {"name": "incident_id", "type": "string",
+         "description": "Optional: link this gate to an incident. The incident is parked as pending_approval and auto-reopened on decision or TTL."},
+        {"name": "conversation_ref", "type": "string",
+         "description": "Optional audit reference. Never gated on."}
       ],
       "conf": {
         "credential_name": "",
         "ords_base_url": "",
         "http_timeout": 20,
         "ttl_hours": 48,
+        "notify_mode": "auto",
         "execute_webhook_url": ""
       },
       "auth": {"authType": "OCI_RESOURCE_PRINCIPAL"},
       "_uiHints": {
         "conf": {
-          "credential_name": {
-            "kind": "input", "inputStyle": "singleline",
-            "help": "AIDP Credential Store display name OR OCI Vault secret OCID. Bundle keys: ords_username, ords_password, twilio_account_sid, twilio_auth_token, twilio_from_number, and optionally ords_base_url."
-          },
-          "ords_base_url": {
-            "kind": "input", "inputStyle": "singleline",
-            "help": "ORDS module base URL, e.g. https://<host>/ords/aidp/hitl. Overridden by credential bundle's ords_base_url if present."
-          },
-          "http_timeout": {"kind": "input"},
-          "ttl_hours": {
-            "kind": "input",
-            "help": "Time after which the row is swept to 'expired'. Default 48h. The sweep is a DBMS_SCHEDULER job, not this tool."
-          },
-          "execute_webhook_url": {
-            "kind": "input", "inputStyle": "singleline",
-            "help": "Optional. Where to POST the action_payload on approve. If empty, the payload is returned as queued_action for the caller flow to dispatch."
-          }
-        },
-        "schema": {
-          "action_summary": {"inputStyle": "multiline"},
-          "action_payload": {"kind": "input", "inputStyle": "multiline"},
-          "approver_allow": {"kind": "input", "inputStyle": "singleline"}
+          "credential_name": {"kind": "input", "inputStyle": "singleline"},
+          "ords_base_url": {"kind": "input", "inputStyle": "singleline"},
+          "ttl_hours": {"kind": "input",
+            "help": "Hours before an undecided approval is swept to 'expired'. Default 48."},
+          "notify_mode": {"kind": "enum", "values": ["auto", "twilio", "defer"],
+            "help": "auto = SMS if Twilio creds in bundle, else defer. defer = always return notifications for the calling flow to deliver (any channel)."},
+          "execute_webhook_url": {"kind": "input", "inputStyle": "singleline",
+            "help": "Optional. On approve, the captured payload is POSTed here. Leave empty to have the calling flow dispatch the queued action."}
         }
       }
     },
     {
       "toolClassName": "ResolveApprovalTool",
       "displayName": "HITL — Resolve Approval",
-      "description": "Called by the HITL agent when the approver's decision turn arrives. ORDS runs an atomic authorize + compare-and-set; on ok+approve the captured action_payload is executed. The requester is SMSed the outcome.",
-      "version": "1.0.0",
+      "description": "Apply an approver's decision. Authorization + atomic compare-and-set run server-side; exactly one resolution can win. On approve, executes the captured payload and notifies the requester. Result codes: ok / unknown / unauthorized / already_decided / expired.",
+      "version": "2.0.0",
       "schema": [
-        {
-          "name": "approval_id",
-          "type": "string",
-          "description": "The 6-character approval ID the approver typed. Case-insensitive; the tool uppercases before lookup."
-        },
-        {
-          "name": "decision",
-          "type": "string",
-          "description": "'approve' or 'reject'. Any string starting with 'a' becomes approved; 'r' becomes rejected."
-        },
-        {
-          "name": "sender_ref",
-          "type": "string",
-          "description": "Approver's VERIFIED phone number from the inbound relay. Do not accept a user-typed value here — this is the identity check the whole gate depends on."
-        }
+        {"name": "approval_id", "type": "string",
+         "description": "The approval ID the approver quoted. Case-insensitive."},
+        {"name": "decision", "type": "string",
+         "description": "approve or reject (prefix-parsed: any a* / r* string works)."},
+        {"name": "sender_ref", "type": "string",
+         "description": "The approver's VERIFIED channel ref from the relay. Bind at tool-construction time from [meta64:] — never accept an LLM-supplied value."}
       ],
       "conf": {
         "credential_name": "",
         "ords_base_url": "",
         "http_timeout": 20,
+        "notify_mode": "auto",
         "execute_webhook_url": ""
       },
       "auth": {"authType": "OCI_RESOURCE_PRINCIPAL"},
       "_uiHints": {
         "conf": {
-          "credential_name": {
-            "kind": "input", "inputStyle": "singleline",
-            "help": "Same bundle as OpenApprovalTool."
-          },
+          "credential_name": {"kind": "input", "inputStyle": "singleline"},
           "ords_base_url": {"kind": "input", "inputStyle": "singleline"},
-          "http_timeout": {"kind": "input"},
-          "execute_webhook_url": {
-            "kind": "input", "inputStyle": "singleline",
-            "help": "See OpenApprovalTool — same field."
-          }
-        },
-        "schema": {
-          "approval_id": {"inputStyle": "singleline"},
-          "decision": {"kind": "enum", "values": ["approve", "reject"]},
-          "sender_ref": {"inputStyle": "singleline"}
+          "notify_mode": {"kind": "enum", "values": ["auto", "twilio", "defer"]},
+          "execute_webhook_url": {"kind": "input", "inputStyle": "singleline"}
         }
       }
     }
