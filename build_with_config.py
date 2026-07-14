@@ -94,6 +94,7 @@ ALWAYS_FORCE_KEYS: set = set()
 # shareable sample.
 AUTO_FILL_EXCLUDE: Dict[str, set] = {
     "credential_store_auth_sample": {"data_lake_ocid"},
+    "test_credentials": {"data_lake_ocid"},
 }
 
 # Never touch these (user-specific or sensitive).

@@ -20,7 +20,7 @@
       ],
       "conf": {
         "credential_name": "",
-        "data_lake_ocid": "ocid1.aidataplatform.oc1.iad.amaaaaaawah6xyqaic64ra5oaflf6hx6lnbuybhxxukkejoa2huz7iyq4tzq",
+        "data_lake_ocid": "",
         "region": "us-ashburn-1",
         "api_version": "20260430",
         "service_path": "aiDataPlatforms",
