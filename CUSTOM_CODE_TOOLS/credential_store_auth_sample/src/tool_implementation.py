@@ -171,10 +171,13 @@ class CredentialStoreAuthSample(CustomToolBase):
             if op in ("get_kb", "get_volume"):
                 return DebugLog.embed(cls._do_get_by_key(
                     op, signer, meta, conf, runtime_params, region, timeout))
+            if op == "map":
+                return DebugLog.embed(cls._do_map(
+                    signer, meta, conf, runtime_params, region, timeout))
             return DebugLog.embed(fail(
                 f"Unknown op `{op}`. Valid: whoami | list_catalogs | "
                 f"list_schemas | list_tables | list_volumes | list_kbs | "
-                f"list_files | get_kb | get_volume.", "ValidationError"))
+                f"list_files | get_kb | get_volume | map.", "ValidationError"))
         except requests.HTTPError as e:
             status = e.response.status_code if e.response is not None else "?"
             body = e.response.text[:500] if e.response is not None else ""
@@ -453,5 +456,100 @@ class CredentialStoreAuthSample(CustomToolBase):
                 "catalogKey": obj.get("catalogKey"),
                 "schemaKey": obj.get("schemaKey"),
             },
+            "redacted_credential": meta,
+        })
+
+    @classmethod
+    def _do_map(cls, signer, meta, conf, runtime_params, region, timeout):
+        """Walk the whole Master catalog and fill in everything in one call:
+        catalogs -> schemas -> (tables, volumes, knowledge bases). Returns a
+        nested tree with every real key, so no manual list-and-copy chain.
+
+        Scope: pass catalog_key (a catalog NAME) to map just that catalog;
+        omit it to map all catalogs in the data lake. Each GET is isolated —
+        a failure on one branch records an error there and keeps going.
+        """
+        from urllib.parse import quote
+
+        lake = (runtime_params.get("data_lake_ocid")
+                or get_cfg(conf, "data_lake_ocid", "")).strip()
+        only_catalog = (runtime_params.get("catalog_key")
+                        or get_cfg(conf, "catalog_key", "")).strip()
+        api_version = str(get_cfg(conf, "api_version", "20260430")).strip()
+        service_path = str(get_cfg(conf, "service_path", "aiDataPlatforms")).strip()
+        base = (f"https://aidp.{region.strip()}.oci.oraclecloud.com/"
+                f"{api_version}/{service_path}/{lake}")
+
+        def get_items(path):
+            url = base + path
+            try:
+                r = requests.get(url, auth=signer, timeout=timeout,
+                                 headers={"Accept": "application/json"})
+                r.raise_for_status()
+                body = r.json()
+                return body.get("items", body if isinstance(body, list) else []), None
+            except requests.HTTPError as e:
+                st = e.response.status_code if e.response is not None else "?"
+                return [], f"HTTP {st}"
+            except Exception as e:
+                return [], f"{type(e).__name__}"
+
+        catalogs, cat_err = get_items("/catalogs")
+        if cat_err:
+            return fail(f"list catalogs failed: {cat_err}", "HTTPError",
+                        redacted_credential=meta)
+
+        counts = {"catalogs": 0, "schemas": 0, "tables": 0,
+                  "volumes": 0, "knowledge_bases": 0}
+        tree = []
+        for c in catalogs:
+            c_name = c.get("key") or c.get("displayName")
+            if only_catalog and c_name != only_catalog \
+                    and c.get("displayName") != only_catalog:
+                continue
+            counts["catalogs"] += 1
+            c_q = quote(c_name, safe="")
+            schemas, s_err = get_items(f"/schemas?catalogKey={c_q}")
+            c_node = {"catalog_key": c_name,
+                      "displayName": c.get("displayName"),
+                      "type": c.get("catalogType") or c.get("type"),
+                      "schemas": [], "error": s_err}
+            for s in schemas:
+                counts["schemas"] += 1
+                # Filter params want the plain schema NAME (displayName),
+                # while the schema's own resource key is dotted catalog.schema.
+                s_name = (s.get("displayName")
+                          or (s.get("key", "").split(".")[-1]))
+                s_q = quote(s_name, safe="")
+                tbls, t_err = get_items(
+                    f"/tables?catalogKey={c_q}&schemaKey={s_q}")
+                vols, v_err = get_items(
+                    f"/volumes?catalogKey={c_q}&schemaKey={s_q}")
+                kbs, k_err = get_items(
+                    f"/knowledgeBases?catalogKey={c_q}&schemaKey={s_q}")
+                counts["tables"] += len(tbls)
+                counts["volumes"] += len(vols)
+                counts["knowledge_bases"] += len(kbs)
+                c_node["schemas"].append({
+                    "schema_key": s.get("key"),      # dotted catalog.schema
+                    "schema_name": s_name,            # plain name for filters
+                    "tables": [{"key": t.get("key"),
+                                "displayName": t.get("displayName")} for t in tbls],
+                    "volumes": [{"key": v.get("key"),
+                                 "displayName": v.get("displayName")} for v in vols],
+                    "knowledge_bases": [{"key": k.get("key"),
+                                         "displayName": k.get("displayName")}
+                                        for k in kbs],
+                    "errors": {k: e for k, e in
+                               (("tables", t_err), ("volumes", v_err), ("kbs", k_err))
+                               if e},
+                })
+            tree.append(c_node)
+
+        return ok({
+            "operation": "map",
+            "scope": only_catalog or "(all catalogs)",
+            "summary": counts,
+            "catalogs": tree,
             "redacted_credential": meta,
         })

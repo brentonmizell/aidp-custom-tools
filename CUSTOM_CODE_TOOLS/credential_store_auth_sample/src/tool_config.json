@@ -11,8 +11,9 @@
         {
           "name": "op",
           "type": "string",
-          "description": "Which operation to run. 'whoami' proves the signer authenticates (404=authenticated-but-no-read-users-perm, 401=bad credential). 'list_catalogs' -> 'list_schemas' -> 'list_volumes'/'list_kbs' is a discovery chain against the public AIDP data plane (real API uses flat resources + query params, e.g. /volumes?catalogKey=..&schemaKey=..): each op returns keys you paste into the next. Start with list_catalogs to get real catalog keys (not display names).",
+          "description": "Which operation to run. 'map' is the one-shot: walks the whole Master catalog (catalogs -> schemas -> tables/volumes/KBs) and returns every key in a nested tree — pass catalog_key to scope to one catalog, or omit to map everything. 'whoami' proves the signer authenticates. The list_* / get_* ops are the manual chain if you want a single level: list_catalogs -> list_schemas -> list_tables/list_volumes/list_kbs, plus get_kb / get_volume / list_files by key.",
           "enum": [
+            "map",
             "whoami",
             "list_catalogs",
             "list_schemas",
@@ -23,13 +24,12 @@
             "get_kb",
             "get_volume"
           ],
-          "default": "whoami",
+          "default": "map",
           "examples": [
+            "map",
             "whoami",
             "list_catalogs",
-            "list_files",
-            "get_kb",
-            "get_volume"
+            "get_kb"
           ]
         },
         {
