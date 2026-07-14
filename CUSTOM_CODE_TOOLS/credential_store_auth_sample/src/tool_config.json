@@ -19,7 +19,8 @@
             "list_tables",
             "list_volumes",
             "list_kbs",
-            "list_files"
+            "list_files",
+            "get_kb"
           ],
           "default": "whoami",
           "examples": [
@@ -27,8 +28,14 @@
             "list_catalogs",
             "list_schemas",
             "list_volumes",
-            "list_files"
+            "list_files",
+            "get_kb"
           ]
+        },
+        {
+          "name": "kb_key",
+          "type": "string",
+          "description": "For op=get_kb: the knowledge base's hex key (e.g. 33076ca9d9fd49388562aefa48715caa), from op=list_kbs. Falls back to conf.kb_key."
         },
         {
           "name": "volume_key",

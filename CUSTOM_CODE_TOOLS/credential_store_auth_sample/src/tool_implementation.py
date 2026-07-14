@@ -168,10 +168,13 @@ class CredentialStoreAuthSample(CustomToolBase):
             if op == "list_files":
                 return DebugLog.embed(cls._do_list_files(
                     signer, meta, conf, runtime_params, region, timeout))
+            if op == "get_kb":
+                return DebugLog.embed(cls._do_get_kb(
+                    signer, meta, conf, runtime_params, region, timeout))
             return DebugLog.embed(fail(
                 f"Unknown op `{op}`. Valid: whoami | list_catalogs | "
                 f"list_schemas | list_tables | list_volumes | list_kbs | "
-                f"list_files.", "ValidationError"))
+                f"list_files | get_kb.", "ValidationError"))
         except requests.HTTPError as e:
             status = e.response.status_code if e.response is not None else "?"
             body = e.response.text[:500] if e.response is not None else ""
@@ -387,5 +390,52 @@ class CredentialStoreAuthSample(CustomToolBase):
                  "type": (it.get("type") or it.get("objectType") or "file")}
                 for it in items
             ],
+            "redacted_credential": meta,
+        })
+
+    @classmethod
+    def _do_get_kb(cls, signer, meta, conf, runtime_params, region, timeout):
+        """Fetch one knowledge base directly by its hex key — how a RAG tool
+        references a KB.  GET /knowledgeBases/{kbKey}."""
+        from urllib.parse import quote
+
+        kb_key = (runtime_params.get("kb_key")
+                  or get_cfg(conf, "kb_key", "")).strip()
+        if not kb_key:
+            return fail("kb_key is required for get_kb (the KB's hex key, e.g. "
+                        "from op=list_kbs).", "ValidationError")
+        lake = (runtime_params.get("data_lake_ocid")
+                or get_cfg(conf, "data_lake_ocid", "")).strip()
+        api_version = str(get_cfg(conf, "api_version", "20260430")).strip()
+        service_path = str(get_cfg(conf, "service_path", "aiDataPlatforms")).strip()
+        url = (f"https://aidp.{region.strip()}.oci.oraclecloud.com/"
+               f"{api_version}/{service_path}/{lake}/knowledgeBases/"
+               f"{quote(kb_key, safe='')}")
+        debug(f"GET {url}")
+
+        try:
+            r = requests.get(url, auth=signer, timeout=timeout,
+                             headers={"Accept": "application/json"})
+            r.raise_for_status()
+        except requests.HTTPError as e:
+            status = e.response.status_code if e.response is not None else "?"
+            body = e.response.text[:300] if e.response is not None else ""
+            hint = (" — confirm kb_key is the exact hex `key` from "
+                    "op=list_kbs.") if status == 404 else ""
+            return fail(f"HTTP {status} from {url}: {body}{hint}", "HTTPError",
+                        redacted_credential=meta)
+
+        kb = r.json()
+        return ok({
+            "operation": "get_kb",
+            "url": url,
+            "kb": {
+                "key": kb.get("key"),
+                "displayName": kb.get("displayName"),
+                "description": kb.get("description"),
+                "lifecycleState": kb.get("lifecycleState"),
+                "catalogKey": kb.get("catalogKey"),
+                "schemaKey": kb.get("schemaKey"),
+            },
             "redacted_credential": meta,
         })
