@@ -78,9 +78,17 @@ class ObjectStorageTool(CustomToolBase):
         name = runtime_params.get("name", "")
         content = runtime_params.get("content", "")
 
+        # Standard credential model: region inferred from the credential bundle
+        # (data_lake_ocid region code) / env, so no separate region key needed.
+        try:
+            from .utils.credential_resolver import enrich_conf_from_bundle, resolve_region
+            conf = enrich_conf_from_bundle(conf)
+            region = get_cfg(conf, "region", "") or resolve_region()
+        except ImportError:
+            region = get_cfg(conf, "region", "")
+
         bucket = get_cfg(conf, "bucket", "")
         namespace = get_cfg(conf, "namespace", "")
-        region = get_cfg(conf, "region", "")
         prefix = get_cfg(conf, "prefix", "")
         max_keys = get_cfg(conf, "max_keys", 200)
         max_bytes = get_cfg(conf, "max_bytes", 1048576)  # 1 MiB default cap

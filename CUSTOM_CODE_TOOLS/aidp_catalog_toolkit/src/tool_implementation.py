@@ -158,6 +158,15 @@ def _client(conf, context_vars):
     centralized. Falls back to a local mirror that is byte-for-byte equivalent
     to the version that lives in aidp_io.py today.
     """
+    # Standard credential model: pull data_lake_ocid + region from the
+    # credential bundle (5 keys: tenancy/user/fingerprint/private_key/
+    # data_lake_ocid; region inferred from the OCID) when conf omits them.
+    try:
+        from .utils.credential_resolver import enrich_conf_from_bundle
+        conf = enrich_conf_from_bundle(conf)
+    except ImportError:
+        pass
+
     if _io_client is not None:
         return _io_client(conf, context_vars)
 

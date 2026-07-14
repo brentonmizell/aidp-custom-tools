@@ -474,8 +474,22 @@ class RunNotebookTool(CustomToolBase):
             make_execute_request, make_kernel_info_request, decode_binary_message,
         )
 
-        aidp_endpoint = get_cfg(conf, "aidp_endpoint", "").rstrip("/")
-        lake_ocid = get_cfg(conf, "lake_ocid", "")
+        # Standard credential model: pull data_lake_ocid + region from the
+        # credential bundle (5 keys) so a single credential drives it. lake_ocid
+        # is this tool's legacy key name; accept data_lake_ocid from the bundle.
+        region = ""
+        try:
+            from .utils.credential_resolver import enrich_conf_from_bundle, resolve_region
+            conf = enrich_conf_from_bundle(conf)
+            region = resolve_region(conf_region=get_cfg(conf, "region", ""))
+        except ImportError:
+            pass
+
+        lake_ocid = (get_cfg(conf, "lake_ocid", "")
+                     or get_cfg(conf, "data_lake_ocid", ""))
+        # Derive the AIDP endpoint from the region when not set explicitly.
+        aidp_endpoint = (get_cfg(conf, "aidp_endpoint", "").rstrip("/")
+                         or (f"https://aidp.{region}.oci.oraclecloud.com" if region else ""))
         ws_host = get_cfg(conf, "ws_host", "")
         workspace_key = get_cfg(conf, "workspace_key", "default")
         cluster_key = get_cfg(conf, "cluster_key", "default_cluster")

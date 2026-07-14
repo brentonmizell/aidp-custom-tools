@@ -7,6 +7,38 @@ twelve different READMEs.
 
 ---
 
+## The standard AIDP credential (5 keys)
+
+Every tool that calls the AIDP / OCI data plane resolves auth **and** the
+connection from one `SECRET_TOKEN` credential. Create it once, point each
+tool's `conf.credential_name` at it, and set nothing else:
+
+| Key | Value |
+|---|---|
+| `tenancy` | tenancy OCID |
+| `user` | user OCID (a dedicated service user) |
+| `fingerprint` | the API key fingerprint (47 chars, `aa:bb:…`) |
+| `private_key` | the PEM body (`-----BEGIN PRIVATE KEY-----…`) |
+| `data_lake_ocid` | your Data Lake OCID |
+
+**Region is not a key — it's inferred** from the `data_lake_ocid` region code
+(`ocid1.aidataplatform.oc1.`**`iad`**`.…` → `us-ashburn-1`), falling back to
+the runtime's `OCI_RESOURCE_PRINCIPAL_REGION` env var, then conf, then
+`us-ashburn-1`. So the credential is exactly 5 keys (the SECRET_TOKEN limit).
+
+The tools call `enrich_conf_from_bundle(conf)` (in the shared
+`credential_resolver`), which fills `data_lake_ocid` + `region` from the
+bundle wherever conf doesn't already set them — so `credential_name` is the
+only thing an operator configures. `credential_name` can also be an OCI Vault
+secret OCID (`ocid1.vaultsecret.…`) whose content is the same 5-key JSON.
+
+Tools that connect to something *other* than the AIDP data plane still use
+purpose-specific bundle keys (SMTP: `host`/`port`/`username`/`password`/
+`from_address`; DB: `username`/`password`/`connection_string`/`wallet_b64`;
+webhook: `webhook_url`). See the per-channel recipes below.
+
+---
+
 ## TL;DR — decision tree
 
 ```

@@ -81,6 +81,59 @@ def resolve_region(explicit: str = "", ocid: str = "", conf_region: str = "") ->
             or "us-ashburn-1")
 
 
+def bundle_connection(credential_name: str) -> Tuple[Dict[str, str], Optional[str]]:
+    """Non-secret connection fields carried on a standard 5-key credential:
+    data_lake_ocid (+ datalake_ocid / lake_ocid aliases) and region (inferred
+    from the OCID). Returns ({}, None) when no credential is set so callers can
+    fall through. ({}, error) on a lookup failure."""
+    bundle, err = resolve_bundle(credential_name)
+    if err:
+        return {}, err
+    if not bundle:
+        return {}, None
+    lake = str(bundle.get("data_lake_ocid") or bundle.get("datalake_ocid")
+               or bundle.get("lake_ocid") or "").strip()
+    out: Dict[str, str] = {}
+    if lake:
+        out["data_lake_ocid"] = lake
+    region = region_from_ocid(lake) or region_from_ocid(str(bundle.get("tenancy") or ""))
+    if region:
+        out["region"] = region
+    return out, None
+
+
+def enrich_conf_from_bundle(conf: Any) -> Any:
+    """Standard credential model: every cred-using tool gets data_lake_ocid +
+    region from the credential bundle (5 keys: tenancy/user/fingerprint/
+    private_key/data_lake_ocid; region inferred). Call at the top of a tool's
+    _execute_tool: `conf = enrich_conf_from_bundle(conf)`.
+
+    Fills data_lake_ocid + region into conf ONLY where conf doesn't already set
+    them (explicit conf/runtime still wins). Handles the nested {"conf": {...}}
+    shape and the flat shape. Returns conf unchanged if no credential is set.
+    """
+    if not isinstance(conf, dict):
+        return conf
+    inner = conf.get("conf") if isinstance(conf.get("conf"), dict) else conf
+    if not isinstance(inner, dict):
+        return conf
+    cred = str(inner.get("credential_name") or "").strip()
+    if not cred:
+        return conf
+    fields, err = bundle_connection(cred)
+    if err or not fields:
+        return conf
+    new_inner = dict(inner)
+    for k, v in fields.items():
+        if not str(new_inner.get(k) or "").strip():
+            new_inner[k] = v
+    if conf.get("conf") is inner:
+        out = dict(conf)
+        out["conf"] = new_inner
+        return out
+    return new_inner
+
+
 def mask(value: Optional[str], keep: int = 4) -> str:
     """Truncate a secret for debug output. Never log full tokens / keys."""
     if not value:

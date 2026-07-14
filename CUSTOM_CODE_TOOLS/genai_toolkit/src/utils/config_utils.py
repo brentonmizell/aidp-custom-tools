@@ -63,8 +63,15 @@ def derive_model_provider(model_id, default="generic"):
 
 
 def resolve_oci_conf(conf):
+    # Standard credential model: region inferred from the credential bundle
+    # (data_lake_ocid region code) / env when conf omits it.
+    try:
+        from .credential_resolver import enrich_conf_from_bundle, resolve_region
+        conf = enrich_conf_from_bundle(conf)
+        region = get_cfg(conf, "region", "") or resolve_region()
+    except ImportError:
+        region = get_cfg(conf, "region", "")
     model_id = get_cfg(conf, "model_id", "cohere.command-a-03-2025")
-    region = get_cfg(conf, "region", "")
     explicit_endpoint = get_cfg(conf, "endpoint", "")
     if region:
         endpoint = derive_endpoint(region, explicit_endpoint or None)
