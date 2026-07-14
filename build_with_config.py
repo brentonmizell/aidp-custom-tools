@@ -87,6 +87,15 @@ LIVE_SERVICE_PATH = "aiDataPlatforms"
 # the tool itself. When AIDP migrates, bump LIVE_API_VERSION here.
 ALWAYS_FORCE_KEYS: set = set()
 
+# Per-package opt-outs: never auto-fill these conf keys for these tools, so
+# the committed tool_config.json / zip stay free of environment-specific
+# identifiers. credential_store_auth_sample takes data_lake_ocid from the
+# credential bundle, so we don't want the local deploy OCID baked into a
+# shareable sample.
+AUTO_FILL_EXCLUDE: Dict[str, set] = {
+    "credential_store_auth_sample": {"data_lake_ocid"},
+}
+
 # Never touch these (user-specific or sensitive).
 SKIP_KEYS = {
     "catalog", "schema", "volume", "volume_key",
@@ -206,13 +215,20 @@ def update_one(
     if not isinstance(tools, list):
         return 0
     pkg = path.parent.parent.name
+    excluded = AUTO_FILL_EXCLUDE.get(pkg, set())
     total = 0
     for tool in tools:
         conf = tool.get("conf")
         if not isinstance(conf, dict):
             continue
         patched, changes = patch_conf(conf, aidp, oci, force=force)
+        if excluded:
+            # Keep the original (empty) value for excluded keys.
+            for k in list(excluded):
+                patched[k] = conf.get(k, "")
+            changes = [(k, o, n) for (k, o, n) in changes if k not in excluded]
         if not changes:
+            tool["conf"] = patched
             continue
         total += len(changes)
         for k, old, new in changes:
