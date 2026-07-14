@@ -161,12 +161,12 @@ class CredentialStoreAuthSample(CustomToolBase):
         try:
             if op == "whoami":
                 return DebugLog.embed(cls._do_whoami(signer, meta, region, timeout))
-            if op == "list_volumes":
-                return DebugLog.embed(cls._do_list_volumes(
-                    signer, meta, conf, runtime_params, region, timeout))
+            if op in ("list_catalogs", "list_schemas", "list_volumes"):
+                return DebugLog.embed(cls._do_list(
+                    op, signer, meta, conf, runtime_params, region, timeout))
             return DebugLog.embed(fail(
-                f"Unknown op `{op}`. Valid: whoami | list_volumes.",
-                "ValidationError"))
+                f"Unknown op `{op}`. Valid: whoami | list_catalogs | "
+                f"list_schemas | list_volumes.", "ValidationError"))
         except requests.HTTPError as e:
             status = e.response.status_code if e.response is not None else "?"
             body = e.response.text[:500] if e.response is not None else ""
@@ -225,35 +225,78 @@ class CredentialStoreAuthSample(CustomToolBase):
         })
 
     @classmethod
-    def _do_list_volumes(cls, signer, meta, conf, runtime_params, region, timeout):
+    def _do_list(cls, op, signer, meta, conf, runtime_params, region, timeout):
+        """Discovery + test chain against the AIDP data plane:
+            list_catalogs  needs: lake
+            list_schemas   needs: lake + catalog_key
+            list_volumes   needs: lake + catalog_key + schema_key
+        Run them in that order to discover the keys the next op needs — no
+        guessing catalog/schema keys.
+
+        .strip() every path component: a leading/trailing space pasted into
+        the Test panel becomes %20 in the URL and yields a spurious 404.
+        """
         lake = (runtime_params.get("data_lake_ocid")
-                or get_cfg(conf, "data_lake_ocid", ""))
+                or get_cfg(conf, "data_lake_ocid", "")).strip()
         catalog = (runtime_params.get("catalog_key")
-                   or get_cfg(conf, "catalog_key", ""))
+                   or get_cfg(conf, "catalog_key", "")).strip()
         schema = (runtime_params.get("schema_key")
-                  or get_cfg(conf, "schema_key", ""))
-        for name, val in (("data_lake_ocid", lake), ("catalog_key", catalog),
-                          ("schema_key", schema)):
+                  or get_cfg(conf, "schema_key", "")).strip()
+
+        required = {"list_catalogs": [("data_lake_ocid", lake)],
+                    "list_schemas":  [("data_lake_ocid", lake),
+                                      ("catalog_key", catalog)],
+                    "list_volumes":  [("data_lake_ocid", lake),
+                                      ("catalog_key", catalog),
+                                      ("schema_key", schema)]}[op]
+        for name, val in required:
             if not val:
-                return fail(f"{name} is required for list_volumes.",
-                            "ValidationError")
-        api_version = get_cfg(conf, "api_version", "20260430")
-        service_path = get_cfg(conf, "service_path", "aiDataPlatforms")
-        url = (f"https://aidp.{region}.oci.oraclecloud.com/{api_version}/"
-               f"{service_path}/{lake}/catalogs/{catalog}/schemas/{schema}/volumes")
+                return fail(f"{name} is required for {op}.", "ValidationError")
+
+        api_version = str(get_cfg(conf, "api_version", "20260430")).strip()
+        service_path = str(get_cfg(conf, "service_path", "aiDataPlatforms")).strip()
+        base = (f"https://aidp.{region.strip()}.oci.oraclecloud.com/"
+                f"{api_version}/{service_path}/{lake}")
+        path = {"list_catalogs": "/catalogs",
+                "list_schemas":  f"/catalogs/{catalog}/schemas",
+                "list_volumes":  f"/catalogs/{catalog}/schemas/{schema}/volumes"}[op]
+        url = base + path
         debug(f"GET {url}")
-        r = requests.get(url, auth=signer, timeout=timeout)
-        r.raise_for_status()
+
+        try:
+            r = requests.get(url, auth=signer, timeout=timeout)
+            r.raise_for_status()
+        except requests.HTTPError as e:
+            status = e.response.status_code if e.response is not None else "?"
+            body = e.response.text[:300] if e.response is not None else ""
+            hint = ""
+            if status == 404:
+                hint = (" — 404 here means the path points at something that "
+                        "isn't there. Check for stray spaces (now auto-stripped) "
+                        "and confirm each key is a real KEY, not a display name. "
+                        "Discover keys with op=list_catalogs then op=list_schemas.")
+            return fail(f"HTTP {status} from {url}: {body}{hint}", "HTTPError",
+                        redacted_credential=meta)
+
         body = r.json()
         items = body.get("items", body if isinstance(body, list) else [])
         return ok({
-            "operation": "list_volumes",
+            "operation": op,
             "url": url,
             "count": len(items),
-            "volumes": [
-                {"key": v.get("key"), "displayName": v.get("displayName"),
-                 "lifecycleState": v.get("lifecycleState")}
-                for v in items
+            "items": [
+                {"key": it.get("key"),
+                 "displayName": it.get("displayName"),
+                 "type": it.get("catalogType") or it.get("type"),
+                 "lifecycleState": it.get("lifecycleState")}
+                for it in items
             ],
+            "next": {
+                "list_catalogs": "copy a catalog `key` into catalog_key, then "
+                                 "run op=list_schemas",
+                "list_schemas":  "copy a schema `key` into schema_key, then "
+                                 "run op=list_volumes",
+                "list_volumes":  "done — these are your volumes",
+            }[op],
             "redacted_credential": meta,
         })

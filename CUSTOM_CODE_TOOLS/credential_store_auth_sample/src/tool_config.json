@@ -11,14 +11,18 @@
         {
           "name": "op",
           "type": "string",
-          "description": "Which operation to run. 'whoami' calls the OCI Identity service to prove the signer works end-to-end. 'list_volumes' calls the public AIDP volumes endpoint (the one that returned 401 under resource principal).",
+          "description": "Which operation to run. 'whoami' proves the signer authenticates (404=authenticated-but-no-read-users-perm, 401=bad credential). 'list_catalogs' -> 'list_schemas' -> 'list_volumes' is a discovery chain against the public AIDP data plane: each returns keys you paste into the next. Start with list_catalogs to get real catalog keys (not display names).",
           "enum": [
             "whoami",
+            "list_catalogs",
+            "list_schemas",
             "list_volumes"
           ],
           "default": "whoami",
           "examples": [
             "whoami",
+            "list_catalogs",
+            "list_schemas",
             "list_volumes"
           ]
         },
