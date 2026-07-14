@@ -296,11 +296,16 @@ class CredentialStoreAuthSample(CustomToolBase):
             status = e.response.status_code if e.response is not None else "?"
             body = e.response.text[:300] if e.response is not None else ""
             hint = ""
-            if status == 404:
-                hint = (" — 404 means the resource wasn't found. Confirm each "
-                        "value is the exact `key` from the prior op's output "
-                        "(run op=list_catalogs, then op=list_schemas) — not a "
-                        "display name, and with no stray spaces.")
+            if status in (404, 500):
+                hint = (" — schemas/tables/volumes/knowledgeBases live in the "
+                        "Master catalog (the Hive Metastore, key ends in _HMS "
+                        "and contains all standard+external catalogs), NOT in a "
+                        "standard sub-catalog. Set catalog_key to the MASTER "
+                        "catalog key (from the console: Master catalog -> "
+                        "Details -> Key, e.g. DH_<lakeOcidUpper>_HMS) and keep "
+                        "schema_key fully-qualified (catalog.schema). A 500 "
+                        "'checking the sourceType of Catalog' means you passed a "
+                        "standard sub-catalog key here.")
             return fail(f"HTTP {status} from {url}: {body}{hint}", "HTTPError",
                         redacted_credential=meta)
 
@@ -327,11 +332,13 @@ class CredentialStoreAuthSample(CustomToolBase):
                                  "run op=list_files to browse its contents",
                 "list_kbs":      "done — these are your knowledge bases",
             }[op],
-            "note": ("count=0 means the call succeeded but nothing matched this "
-                     "catalog_key + schema_key pair. Re-run op=list_catalogs and "
-                     "op=list_schemas and use the EXACT `key` values they return "
-                     "— a hand-typed or mismatched key returns an empty list, "
-                     "not an error." if not items else ""),
+            "note": ("count=0 means the call succeeded but nothing matched. "
+                     "Most common cause: catalog_key is a STANDARD sub-catalog "
+                     "key. Schemas/tables/volumes/KBs are registered in the "
+                     "Master catalog (Hive Metastore, key ends _HMS). Set "
+                     "catalog_key to the MASTER catalog key and keep schema_key "
+                     "fully-qualified (catalog.schema), then retry."
+                     if not items else ""),
             "redacted_credential": meta,
         })
 

@@ -68,12 +68,12 @@
         {
           "name": "catalog_key",
           "type": "string",
-          "description": "Catalog key (NOT display name). Only used for op='list_volumes'. Falls back to conf.catalog_key."
+          "description": "For list_schemas/list_tables/list_volumes/list_kbs: use the MASTER catalog key (the Hive Metastore that contains all catalogs — key ends in _HMS, from console: Master catalog -> Details -> Key), NOT a standard sub-catalog key. Schemas/tables/volumes/KBs are registered in the HMS; passing a standard sub-catalog key returns empty or 500. Falls back to conf.catalog_key."
         },
         {
           "name": "schema_key",
           "type": "string",
-          "description": "Schema key (NOT display name). Only used for op='list_volumes'. Falls back to conf.schema_key."
+          "description": "Fully-qualified schema key catalog.schema (e.g. construction_catalog.construction_schema), from the schema's Details -> Key in the console. Falls back to conf.schema_key."
         }
       ],
       "conf": {
