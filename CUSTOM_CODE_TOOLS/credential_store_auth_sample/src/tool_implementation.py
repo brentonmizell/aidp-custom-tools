@@ -51,6 +51,32 @@ except ImportError:
 
 REQUIRED_SECRET_KEYS = ("tenancy", "user", "fingerprint", "private_key")
 
+# OCI region-code (in the OCID) -> full region name. Covers the commercial
+# realm; unknown codes fall back to env vars / conf.
+_OCI_REGION_CODES = {
+    "iad": "us-ashburn-1", "phx": "us-phoenix-1", "sjc": "us-sanjose-1",
+    "yyz": "ca-toronto-1", "yul": "ca-montreal-1",
+    "lhr": "uk-london-1", "cwl": "uk-cardiff-1",
+    "fra": "eu-frankfurt-1", "zrh": "eu-zurich-1", "ams": "eu-amsterdam-1",
+    "cdg": "eu-paris-1", "mrs": "eu-marseille-1", "mad": "eu-madrid-1",
+    "arn": "eu-stockholm-1", "lin": "eu-milan-1",
+    "nrt": "ap-tokyo-1", "kix": "ap-osaka-1", "icn": "ap-seoul-1",
+    "syd": "ap-sydney-1", "mel": "ap-melbourne-1", "bom": "ap-mumbai-1",
+    "hyd": "ap-hyderabad-1", "sin": "ap-singapore-1",
+    "gru": "sa-saopaulo-1", "scl": "sa-santiago-1", "vcp": "sa-vinhedo-1",
+    "jed": "me-jeddah-1", "dxb": "me-dubai-1", "auh": "me-abudhabi-1",
+    "jnb": "af-johannesburg-1",
+}
+
+
+def _region_from_ocid(ocid: str) -> Optional[str]:
+    """Derive the region from the OCID's region-code segment:
+    ocid1.aidataplatform.oc1.<regioncode>.<unique> -> full region name."""
+    parts = str(ocid or "").split(".")
+    if len(parts) >= 4:
+        return _OCI_REGION_CODES.get(parts[3].strip().lower())
+    return None
+
 
 def _render_map_text(tree: list, counts: dict) -> str:
     """Human-readable indented tree of the map result — easier to scan than
@@ -193,12 +219,9 @@ class CredentialStoreAuthSample(CustomToolBase):
             return DebugLog.embed(fail(meta, "CredentialStoreError"))
         debug(f"Signer constructed. Redacted credential meta: {meta}")
 
-        # Resolve region + data_lake_ocid: runtime param -> credential bundle
-        # -> conf. Putting them on the credential means the Test panel needs
-        # only op + credential_name. Inject the resolved lake into
-        # runtime_params so every op method picks it up unchanged.
-        region = (runtime_params.get("region") or bundle_cfg.get("region")
-                  or get_cfg(conf, "region", "us-ashburn-1"))
+        # Resolve data_lake_ocid: runtime param -> credential bundle -> conf.
+        # Putting it on the credential means the Test panel needs only op +
+        # credential_name.
         lake = (runtime_params.get("data_lake_ocid")
                 or bundle_cfg.get("data_lake_ocid")
                 or get_cfg(conf, "data_lake_ocid", ""))
@@ -207,6 +230,20 @@ class CredentialStoreAuthSample(CustomToolBase):
                 "data_lake_ocid not found. Add a `data_lake_ocid` key to the "
                 "credential bundle (recommended), or set conf.data_lake_ocid.",
                 "ValidationError"))
+
+        # Region needs no separate credential key — derive it from the OCID's
+        # region-code segment (iad -> us-ashburn-1), then fall back to the
+        # runtime's OCI_RESOURCE_PRINCIPAL_REGION / OCI_REGION env vars, then
+        # conf. Explicit runtime/bundle region still wins if provided.
+        import os
+        region = (runtime_params.get("region")
+                  or bundle_cfg.get("region")
+                  or _region_from_ocid(lake)
+                  or os.environ.get("OCI_RESOURCE_PRINCIPAL_REGION")
+                  or os.environ.get("OCI_REGION")
+                  or get_cfg(conf, "region", "us-ashburn-1"))
+        debug(f"resolved region={region} lake={lake[:32]}…")
+
         runtime_params = dict(runtime_params)
         runtime_params["data_lake_ocid"] = lake
 

@@ -34,7 +34,7 @@
         {
           "name": "credential_name",
           "type": "string",
-          "description": "Display name of the SECRET_TOKEN credential (or an OCI Vault secret OCID). Bundle keys: tenancy, user, fingerprint, private_key (required) + data_lake_ocid, region (optional \u2014 supplies the connection so nothing else is needed here). Falls back to conf.credential_name.",
+          "description": "Display name of the SECRET_TOKEN credential (or an OCI Vault secret OCID). Bundle keys (5 total): tenancy, user, fingerprint, private_key, data_lake_ocid. Region is auto-derived from the data_lake_ocid region code (iad -> us-ashburn-1), so no 6th key is needed. Falls back to conf.credential_name.",
           "examples": [
             "aidp_oci_key",
             "my_oci_api_key"
