@@ -203,16 +203,22 @@ class CredentialStoreAuthSample(CustomToolBase):
     def _execute_tool(cls, conf: Dict[str, Any], runtime_params: Dict[str, Any],
                       **context_vars) -> Dict[str, Any]:
         op = (runtime_params.get("op") or "map").lower()
-        credential_name = (runtime_params.get("credential_name")
-                           or get_cfg(conf, "credential_name", ""))
+        # credential_name is DEPLOYMENT CONFIG, not an LLM-chosen argument.
+        # Read conf FIRST so an agent can't override it with a guessed value
+        # (LLMs invoked as tools tend to hallucinate 'default' here). Only fall
+        # back to a runtime value if conf is empty (e.g. Test-panel probing).
+        credential_name = (get_cfg(conf, "credential_name", "")
+                           or runtime_params.get("credential_name", ""))
         timeout = get_cfg(conf, "timeout", 30)
 
         debug(f"CredentialStoreAuthSample op={op} credential_name={credential_name!r}")
 
         if not credential_name:
             return DebugLog.embed(fail(
-                "credential_name is required — pass it as a runtime param or "
-                "set conf.credential_name.", "ValidationError"))
+                "credential_name is not set. Set conf.credential_name to your "
+                "AIDP Credential Store display name (or OCI Vault secret OCID) "
+                "when configuring the tool — it is deployment config, not an "
+                "agent argument.", "ValidationError"))
 
         signer, meta, bundle_cfg = _build_signer(credential_name)
         if signer is None:

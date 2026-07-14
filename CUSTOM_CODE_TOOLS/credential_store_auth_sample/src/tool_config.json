@@ -5,13 +5,13 @@
     {
       "toolClassName": "CredentialStoreAuthSample",
       "displayName": "Credential Store Auth Sample",
-      "description": "Resolves an OCI signer from the Credential Store and calls the public AIDP data-plane API. Test panel needs only: op + credential_name. The credential bundle supplies the keys (tenancy/user/fingerprint/private_key) AND the connection (data_lake_ocid, region). Default op=map walks the whole Master catalog and returns every catalog/schema/table/volume/KB key.",
-      "version": "2.0.0",
+      "description": "Resolves an OCI signer from the Credential Store and calls the public AIDP data-plane API. The credential is DEPLOYMENT CONFIG: set conf.credential_name once (the tool ignores any credential_name an agent tries to pass). The bundle supplies the OCI keys (tenancy/user/fingerprint/private_key) AND the connection (data_lake_ocid; region auto-derived). The only runtime input is op — default op=map walks the whole Master catalog and returns every catalog/schema/table/volume/KB key.",
+      "version": "2.1.0",
       "schema": [
         {
           "name": "op",
           "type": "string",
-          "description": "map = one-shot: walk the whole Master catalog (catalogs -> schemas -> tables/volumes/KBs) and return every key + a readable text tree. whoami = prove the signer authenticates. The list_*/get_* ops do a single level (they read catalog_key/schema_key/volume_key/kb_key/path from conf).",
+          "description": "map = one-shot: walk the whole Master catalog (catalogs -> schemas -> tables/volumes/KBs) and return every key + a readable text tree. whoami = prove the signer authenticates. The list_*/get_* ops do a single level (they read catalog_key/schema_key/volume_key/kb_key/path from conf). You do NOT need to supply a credential — it is configured on the tool.",
           "enum": [
             "map",
             "whoami",
@@ -29,15 +29,6 @@
             "map",
             "whoami",
             "list_catalogs"
-          ]
-        },
-        {
-          "name": "credential_name",
-          "type": "string",
-          "description": "Display name of the SECRET_TOKEN credential (or an OCI Vault secret OCID). Bundle keys (5 total): tenancy, user, fingerprint, private_key, data_lake_ocid. Region is auto-derived from the data_lake_ocid region code (iad -> us-ashburn-1), so no 6th key is needed. Falls back to conf.credential_name.",
-          "examples": [
-            "aidp_oci_key",
-            "my_oci_api_key"
           ]
         }
       ],
@@ -68,7 +59,7 @@
             "kind": "input",
             "inputStyle": "singleline",
             "placeholder": "Display name of the SECRET_TOKEN credential in AIDP",
-            "help": "AIDP \u2192 Settings \u2192 Credentials. Type: SECRET_TOKEN. Keys: tenancy / user / fingerprint / private_key, plus optional data_lake_ocid + region."
+            "help": "SET THIS ONCE. AIDP \u2192 Settings \u2192 Credentials, type SECRET_TOKEN, 5 keys: tenancy / user / fingerprint / private_key / data_lake_ocid. This is deployment config; the tool ignores any credential_name an agent tries to pass, so the LLM never has to know it."
           },
           "data_lake_ocid": {
             "kind": "dropdown",
@@ -107,9 +98,6 @@
         "schema": {
           "op": {
             "kind": "enum"
-          },
-          "credential_name": {
-            "inputStyle": "singleline"
           }
         }
       }
