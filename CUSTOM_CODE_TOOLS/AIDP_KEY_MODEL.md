@@ -25,15 +25,19 @@ NAME.** Passing the hex GUID as `catalogKey` returns empty / 404, or 500
 |---|---|---|
 | Catalog | **name** — `construction_catalog` | — (top level; `GET /catalogs`) |
 | Schema | dotted — `construction_catalog.construction_schema` | `catalogKey=construction_catalog` |
-| Table | dotted — `construction_catalog.construction_schema.silver_retail_sales_enriched` | `catalogKey=construction_catalog&schemaKey=construction_schema` |
-| Volume | dotted — `construction_catalog.construction_schema.construction_documents` | `catalogKey=construction_catalog&schemaKey=construction_schema` |
-| KB | **hex** — `33076ca9d9fd49388562aefa48715caa` | `catalogKey=construction_catalog&schemaKey=construction_schema` |
+| Table | dotted — `construction_catalog.construction_schema.silver_retail_sales_enriched` | `catalogKey=construction_catalog&schemaKey=construction_catalog.construction_schema` |
+| Volume | dotted — `construction_catalog.construction_schema.construction_documents` | `catalogKey=construction_catalog&schemaKey=construction_catalog.construction_schema` |
+| KB | **hex** — `33076ca9d9fd49388562aefa48715caa` | `catalogKey=construction_catalog&schemaKey=construction_catalog.construction_schema` |
+
+The consistent rule: **each filter param takes the PARENT resource's own
+`key`.** `catalogKey` = the catalog's key (which is its name);
+`schemaKey` = the schema's key (the DOTTED `catalog.schema`). Using the
+plain schema name as `schemaKey` returns HTTP 400/404 — confirmed by an
+`op=map` walk where every plain-name sub-call failed. (Responses *echo*
+`schemaKey` as the plain name, but the request must send the dotted key.)
 
 Notes:
-- **Filter params (`catalogKey`, `schemaKey`) use plain NAMES** —
-  `construction_catalog`, `construction_schema`. (Confirmed by the KB list
-  response echoing `"catalogKey":"construction_catalog","schemaKey":"construction_schema"`.)
-- **Resource keys** are what you pass to direct-by-key GETs: schemas/tables/
+- **Resource keys** double as the direct-by-key GET path: schemas/tables/
   volumes use the dotted `catalog.schema[.name]` path; KBs use a hex GUID.
 - A **volume file path** references the volume by its dotted key:
   `GET /volumes/{catalog.schema.volume}/files?path=/`.
@@ -44,10 +48,10 @@ Notes:
 GET /catalogs
 GET /catalogs/{catalogName}
 GET /schemas?catalogKey={catalogName}
-GET /tables?catalogKey={catalogName}&schemaKey={schemaName}
-GET /volumes?catalogKey={catalogName}&schemaKey={schemaName}
+GET /tables?catalogKey={catalogName}&schemaKey={catalogName.schemaName}
+GET /volumes?catalogKey={catalogName}&schemaKey={catalogName.schemaName}
 GET /volumes/{volumeKey}/files?path={path}         # volumeKey = catalog.schema.volume
-GET /knowledgeBases?catalogKey={catalogName}&schemaKey={schemaName}
+GET /knowledgeBases?catalogKey={catalogName}&schemaKey={catalogName.schemaName}
 GET /knowledgeBases/{kbKey}                          # kbKey = hex GUID
 ```
 

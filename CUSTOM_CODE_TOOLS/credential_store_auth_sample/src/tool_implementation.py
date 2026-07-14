@@ -516,11 +516,11 @@ class CredentialStoreAuthSample(CustomToolBase):
                       "schemas": [], "error": s_err}
             for s in schemas:
                 counts["schemas"] += 1
-                # Filter params want the plain schema NAME (displayName),
-                # while the schema's own resource key is dotted catalog.schema.
-                s_name = (s.get("displayName")
-                          or (s.get("key", "").split(".")[-1]))
-                s_q = quote(s_name, safe="")
+                # The schemaKey filter wants the schema's own `key` — the
+                # DOTTED catalog.schema form (not the plain displayName; that
+                # returns HTTP 400/404). Same rule as catalogKey = catalog key.
+                s_key = s.get("key") or s.get("displayName")
+                s_q = quote(s_key, safe="")
                 tbls, t_err = get_items(
                     f"/tables?catalogKey={c_q}&schemaKey={s_q}")
                 vols, v_err = get_items(
@@ -531,8 +531,8 @@ class CredentialStoreAuthSample(CustomToolBase):
                 counts["volumes"] += len(vols)
                 counts["knowledge_bases"] += len(kbs)
                 c_node["schemas"].append({
-                    "schema_key": s.get("key"),      # dotted catalog.schema
-                    "schema_name": s_name,            # plain name for filters
+                    "schema_key": s.get("key"),      # dotted catalog.schema (used as schemaKey)
+                    "schema_name": s.get("displayName"),
                     "tables": [{"key": t.get("key"),
                                 "displayName": t.get("displayName")} for t in tbls],
                     "volumes": [{"key": v.get("key"),

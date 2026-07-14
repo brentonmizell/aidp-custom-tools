@@ -73,7 +73,7 @@
         {
           "name": "schema_key",
           "type": "string",
-          "description": "The schema NAME (e.g. construction_schema) for the catalogKey+schemaKey filter — plain name, as echoed in list responses. (The schema's own resource `key` is the dotted catalog.schema form; the filter param uses the plain name.) Falls back to conf.schema_key."
+          "description": "The schema's DOTTED key catalog.schema (e.g. construction_catalog.construction_schema) = the schema's `key` field from list_schemas. The plain name returns HTTP 400/404. (Responses echo schemaKey as the plain name, but the QUERY needs the dotted key.) Falls back to conf.schema_key."
         }
       ],
       "conf": {
