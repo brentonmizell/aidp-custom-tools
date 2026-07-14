@@ -68,12 +68,12 @@
         {
           "name": "catalog_key",
           "type": "string",
-          "description": "The catalog NAME (e.g. construction_catalog) — the same name that prefixes the dotted schema/volume keys. NOT the hex 'Key' shown on the catalog's Details page. Confirmed from the AIDP console's own network calls: GET /schemas?catalogKey=construction_catalog. Falls back to conf.catalog_key."
+          "description": "The catalog NAME (e.g. construction_catalog) = the catalog's `key` field in GET /catalogs. NOT the hex value on the console Details page — that is the `catalogGuid`, not the key. Falls back to conf.catalog_key."
         },
         {
           "name": "schema_key",
           "type": "string",
-          "description": "Fully-qualified schema key catalog.schema (e.g. construction_catalog.construction_schema), from the schema's Details -> Key in the console. Falls back to conf.schema_key."
+          "description": "The schema NAME (e.g. construction_schema) for the catalogKey+schemaKey filter — plain name, as echoed in list responses. (The schema's own resource `key` is the dotted catalog.schema form; the filter param uses the plain name.) Falls back to conf.schema_key."
         }
       ],
       "conf": {
