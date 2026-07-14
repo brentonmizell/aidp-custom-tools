@@ -11,12 +11,13 @@
         {
           "name": "op",
           "type": "string",
-          "description": "Which operation to run. 'whoami' proves the signer authenticates (404=authenticated-but-no-read-users-perm, 401=bad credential). 'list_catalogs' -> 'list_schemas' -> 'list_volumes' is a discovery chain against the public AIDP data plane: each returns keys you paste into the next. Start with list_catalogs to get real catalog keys (not display names).",
+          "description": "Which operation to run. 'whoami' proves the signer authenticates (404=authenticated-but-no-read-users-perm, 401=bad credential). 'list_catalogs' -> 'list_schemas' -> 'list_volumes'/'list_kbs' is a discovery chain against the public AIDP data plane (real API uses flat resources + query params, e.g. /volumes?catalogKey=..&schemaKey=..): each op returns keys you paste into the next. Start with list_catalogs to get real catalog keys (not display names).",
           "enum": [
             "whoami",
             "list_catalogs",
             "list_schemas",
-            "list_volumes"
+            "list_volumes",
+            "list_kbs"
           ],
           "default": "whoami",
           "examples": [

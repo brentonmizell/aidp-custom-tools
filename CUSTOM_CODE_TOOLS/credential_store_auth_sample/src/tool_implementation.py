@@ -161,12 +161,12 @@ class CredentialStoreAuthSample(CustomToolBase):
         try:
             if op == "whoami":
                 return DebugLog.embed(cls._do_whoami(signer, meta, region, timeout))
-            if op in ("list_catalogs", "list_schemas", "list_volumes"):
+            if op in ("list_catalogs", "list_schemas", "list_volumes", "list_kbs"):
                 return DebugLog.embed(cls._do_list(
                     op, signer, meta, conf, runtime_params, region, timeout))
             return DebugLog.embed(fail(
                 f"Unknown op `{op}`. Valid: whoami | list_catalogs | "
-                f"list_schemas | list_volumes.", "ValidationError"))
+                f"list_schemas | list_volumes | list_kbs.", "ValidationError"))
         except requests.HTTPError as e:
             status = e.response.status_code if e.response is not None else "?"
             body = e.response.text[:500] if e.response is not None else ""
@@ -226,16 +226,24 @@ class CredentialStoreAuthSample(CustomToolBase):
 
     @classmethod
     def _do_list(cls, op, signer, meta, conf, runtime_params, region, timeout):
-        """Discovery + test chain against the AIDP data plane:
-            list_catalogs  needs: lake
-            list_schemas   needs: lake + catalog_key
-            list_volumes   needs: lake + catalog_key + schema_key
-        Run them in that order to discover the keys the next op needs — no
-        guessing catalog/schema keys.
+        """Discovery + test chain against the AIDP data plane. The real AIDP
+        API uses FLAT resources with query params (not nested path segments):
 
-        .strip() every path component: a leading/trailing space pasted into
-        the Test panel becomes %20 in the URL and yields a spurious 404.
+            list_catalogs  GET /catalogs                              (lake)
+            list_schemas   GET /schemas?catalogKey=..                 (+catalog_key)
+            list_volumes   GET /volumes?catalogKey=..&schemaKey=..    (+schema_key)
+            list_kbs       GET /knowledgeBases?catalogKey=..&schemaKey=..
+
+        Run them in order to discover the keys the next op needs. Keys are
+        opaque strings whose format varies by resource type — a catalog key
+        may be a hex id, a schema key is often catalog.schema, a KB key is a
+        hex id. Never guess; copy the `key` field from the prior op's output.
+
+        .strip() every value: a leading/trailing space pasted into the Test
+        panel becomes %20 in the query and yields a spurious 404.
         """
+        from urllib.parse import quote
+
         lake = (runtime_params.get("data_lake_ocid")
                 or get_cfg(conf, "data_lake_ocid", "")).strip()
         catalog = (runtime_params.get("catalog_key")
@@ -248,6 +256,9 @@ class CredentialStoreAuthSample(CustomToolBase):
                                       ("catalog_key", catalog)],
                     "list_volumes":  [("data_lake_ocid", lake),
                                       ("catalog_key", catalog),
+                                      ("schema_key", schema)],
+                    "list_kbs":      [("data_lake_ocid", lake),
+                                      ("catalog_key", catalog),
                                       ("schema_key", schema)]}[op]
         for name, val in required:
             if not val:
@@ -257,24 +268,30 @@ class CredentialStoreAuthSample(CustomToolBase):
         service_path = str(get_cfg(conf, "service_path", "aiDataPlatforms")).strip()
         base = (f"https://aidp.{region.strip()}.oci.oraclecloud.com/"
                 f"{api_version}/{service_path}/{lake}")
-        path = {"list_catalogs": "/catalogs",
-                "list_schemas":  f"/catalogs/{catalog}/schemas",
-                "list_volumes":  f"/catalogs/{catalog}/schemas/{schema}/volumes"}[op]
+        cat_q = quote(catalog, safe="")
+        sch_q = quote(schema, safe="")
+        path = {
+            "list_catalogs": "/catalogs",
+            "list_schemas":  f"/schemas?catalogKey={cat_q}",
+            "list_volumes":  f"/volumes?catalogKey={cat_q}&schemaKey={sch_q}",
+            "list_kbs":      f"/knowledgeBases?catalogKey={cat_q}&schemaKey={sch_q}",
+        }[op]
         url = base + path
         debug(f"GET {url}")
 
         try:
-            r = requests.get(url, auth=signer, timeout=timeout)
+            r = requests.get(url, auth=signer, timeout=timeout,
+                             headers={"Accept": "application/json"})
             r.raise_for_status()
         except requests.HTTPError as e:
             status = e.response.status_code if e.response is not None else "?"
             body = e.response.text[:300] if e.response is not None else ""
             hint = ""
             if status == 404:
-                hint = (" — 404 here means the path points at something that "
-                        "isn't there. Check for stray spaces (now auto-stripped) "
-                        "and confirm each key is a real KEY, not a display name. "
-                        "Discover keys with op=list_catalogs then op=list_schemas.")
+                hint = (" — 404 means the resource wasn't found. Confirm each "
+                        "value is the exact `key` from the prior op's output "
+                        "(run op=list_catalogs, then op=list_schemas) — not a "
+                        "display name, and with no stray spaces.")
             return fail(f"HTTP {status} from {url}: {body}{hint}", "HTTPError",
                         redacted_credential=meta)
 
@@ -295,8 +312,9 @@ class CredentialStoreAuthSample(CustomToolBase):
                 "list_catalogs": "copy a catalog `key` into catalog_key, then "
                                  "run op=list_schemas",
                 "list_schemas":  "copy a schema `key` into schema_key, then "
-                                 "run op=list_volumes",
+                                 "run op=list_volumes (or op=list_kbs)",
                 "list_volumes":  "done — these are your volumes",
+                "list_kbs":      "done — these are your knowledge bases",
             }[op],
             "redacted_credential": meta,
         })
