@@ -297,15 +297,13 @@ class CredentialStoreAuthSample(CustomToolBase):
             body = e.response.text[:300] if e.response is not None else ""
             hint = ""
             if status in (404, 500):
-                hint = (" — schemas/tables/volumes/knowledgeBases live in the "
-                        "Master catalog (the Hive Metastore, key ends in _HMS "
-                        "and contains all standard+external catalogs), NOT in a "
-                        "standard sub-catalog. Set catalog_key to the MASTER "
-                        "catalog key (from the console: Master catalog -> "
-                        "Details -> Key, e.g. DH_<lakeOcidUpper>_HMS) and keep "
-                        "schema_key fully-qualified (catalog.schema). A 500 "
-                        "'checking the sourceType of Catalog' means you passed a "
-                        "standard sub-catalog key here.")
+                hint = (" — catalog_key must be the catalog NAME (e.g. "
+                        "construction_catalog), the same name that prefixes the "
+                        "dotted schema/volume keys — NOT the hex 'Key' shown on "
+                        "the catalog's Details page. (Confirmed from the AIDP "
+                        "console's own calls: GET /schemas?catalogKey="
+                        "construction_catalog.) A 500 'checking the sourceType "
+                        "of Catalog' means you passed the hex key here.")
             return fail(f"HTTP {status} from {url}: {body}{hint}", "HTTPError",
                         redacted_credential=meta)
 
@@ -333,11 +331,10 @@ class CredentialStoreAuthSample(CustomToolBase):
                 "list_kbs":      "done — these are your knowledge bases",
             }[op],
             "note": ("count=0 means the call succeeded but nothing matched. "
-                     "Most common cause: catalog_key is a STANDARD sub-catalog "
-                     "key. Schemas/tables/volumes/KBs are registered in the "
-                     "Master catalog (Hive Metastore, key ends _HMS). Set "
-                     "catalog_key to the MASTER catalog key and keep schema_key "
-                     "fully-qualified (catalog.schema), then retry."
+                     "Most common cause: catalog_key is the hex 'Key' from the "
+                     "console. The catalogKey parameter wants the catalog NAME "
+                     "(e.g. construction_catalog) — the same name that prefixes "
+                     "the dotted schema/volume keys. Retry with the name."
                      if not items else ""),
             "redacted_credential": meta,
         })

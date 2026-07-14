@@ -68,7 +68,7 @@
         {
           "name": "catalog_key",
           "type": "string",
-          "description": "For list_schemas/list_tables/list_volumes/list_kbs: use the MASTER catalog key (the Hive Metastore that contains all catalogs — key ends in _HMS, from console: Master catalog -> Details -> Key), NOT a standard sub-catalog key. Schemas/tables/volumes/KBs are registered in the HMS; passing a standard sub-catalog key returns empty or 500. Falls back to conf.catalog_key."
+          "description": "The catalog NAME (e.g. construction_catalog) — the same name that prefixes the dotted schema/volume keys. NOT the hex 'Key' shown on the catalog's Details page. Confirmed from the AIDP console's own network calls: GET /schemas?catalogKey=construction_catalog. Falls back to conf.catalog_key."
         },
         {
           "name": "schema_key",
