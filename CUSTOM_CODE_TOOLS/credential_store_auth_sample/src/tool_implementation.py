@@ -161,12 +161,14 @@ class CredentialStoreAuthSample(CustomToolBase):
         try:
             if op == "whoami":
                 return DebugLog.embed(cls._do_whoami(signer, meta, region, timeout))
-            if op in ("list_catalogs", "list_schemas", "list_volumes", "list_kbs"):
+            if op in ("list_catalogs", "list_schemas", "list_tables",
+                      "list_volumes", "list_kbs"):
                 return DebugLog.embed(cls._do_list(
                     op, signer, meta, conf, runtime_params, region, timeout))
             return DebugLog.embed(fail(
                 f"Unknown op `{op}`. Valid: whoami | list_catalogs | "
-                f"list_schemas | list_volumes | list_kbs.", "ValidationError"))
+                f"list_schemas | list_tables | list_volumes | list_kbs.",
+                "ValidationError"))
         except requests.HTTPError as e:
             status = e.response.status_code if e.response is not None else "?"
             body = e.response.text[:500] if e.response is not None else ""
@@ -231,6 +233,7 @@ class CredentialStoreAuthSample(CustomToolBase):
 
             list_catalogs  GET /catalogs                              (lake)
             list_schemas   GET /schemas?catalogKey=..                 (+catalog_key)
+            list_tables    GET /tables?catalogKey=..&schemaKey=..     (+schema_key)
             list_volumes   GET /volumes?catalogKey=..&schemaKey=..    (+schema_key)
             list_kbs       GET /knowledgeBases?catalogKey=..&schemaKey=..
 
@@ -251,15 +254,14 @@ class CredentialStoreAuthSample(CustomToolBase):
         schema = (runtime_params.get("schema_key")
                   or get_cfg(conf, "schema_key", "")).strip()
 
+        _needs_all = [("data_lake_ocid", lake), ("catalog_key", catalog),
+                      ("schema_key", schema)]
         required = {"list_catalogs": [("data_lake_ocid", lake)],
                     "list_schemas":  [("data_lake_ocid", lake),
                                       ("catalog_key", catalog)],
-                    "list_volumes":  [("data_lake_ocid", lake),
-                                      ("catalog_key", catalog),
-                                      ("schema_key", schema)],
-                    "list_kbs":      [("data_lake_ocid", lake),
-                                      ("catalog_key", catalog),
-                                      ("schema_key", schema)]}[op]
+                    "list_tables":   _needs_all,
+                    "list_volumes":  _needs_all,
+                    "list_kbs":      _needs_all}[op]
         for name, val in required:
             if not val:
                 return fail(f"{name} is required for {op}.", "ValidationError")
@@ -273,6 +275,7 @@ class CredentialStoreAuthSample(CustomToolBase):
         path = {
             "list_catalogs": "/catalogs",
             "list_schemas":  f"/schemas?catalogKey={cat_q}",
+            "list_tables":   f"/tables?catalogKey={cat_q}&schemaKey={sch_q}",
             "list_volumes":  f"/volumes?catalogKey={cat_q}&schemaKey={sch_q}",
             "list_kbs":      f"/knowledgeBases?catalogKey={cat_q}&schemaKey={sch_q}",
         }[op]
@@ -311,10 +314,16 @@ class CredentialStoreAuthSample(CustomToolBase):
             "next": {
                 "list_catalogs": "copy a catalog `key` into catalog_key, then "
                                  "run op=list_schemas",
-                "list_schemas":  "copy a schema `key` into schema_key, then "
-                                 "run op=list_volumes (or op=list_kbs)",
+                "list_schemas":  "copy a schema `key` into schema_key, then run "
+                                 "op=list_tables / list_volumes / list_kbs",
+                "list_tables":   "done — these are your tables",
                 "list_volumes":  "done — these are your volumes",
                 "list_kbs":      "done — these are your knowledge bases",
             }[op],
+            "note": ("count=0 means the call succeeded but nothing matched this "
+                     "catalog_key + schema_key pair. Re-run op=list_catalogs and "
+                     "op=list_schemas and use the EXACT `key` values they return "
+                     "— a hand-typed or mismatched key returns an empty list, "
+                     "not an error." if not items else ""),
             "redacted_credential": meta,
         })

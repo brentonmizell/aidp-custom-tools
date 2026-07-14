@@ -16,6 +16,7 @@
             "whoami",
             "list_catalogs",
             "list_schemas",
+            "list_tables",
             "list_volumes",
             "list_kbs"
           ],
