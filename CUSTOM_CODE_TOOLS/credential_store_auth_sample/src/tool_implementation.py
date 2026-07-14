@@ -87,10 +87,13 @@ def _build_signer(credential_name: str) -> tuple:
                       f"{missing}. Required: {list(REQUIRED_SECRET_KEYS)}.")
 
     import oci
+    # private_key_file_location is a required positional arg in some OCI SDK
+    # builds (e.g. 2.175.x preview) even when signing from private_key_content.
     signer = oci.signer.Signer(
         tenancy=bundle["tenancy"],
         user=bundle["user"],
         fingerprint=bundle["fingerprint"],
+        private_key_file_location=None,
         private_key_content=bundle["private_key"],
     )
     redacted = {

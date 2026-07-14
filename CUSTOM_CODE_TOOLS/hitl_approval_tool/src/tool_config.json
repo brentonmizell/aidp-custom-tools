@@ -149,8 +149,8 @@
           "ords_base_url": {"kind": "input", "inputStyle": "singleline"},
           "ttl_hours": {"kind": "input",
             "help": "Hours before an undecided approval is swept to 'expired'. Default 48."},
-          "notify_mode": {"kind": "enum", "values": ["auto", "twilio", "defer"],
-            "help": "auto = SMS if Twilio creds in bundle, else defer. defer = always return notifications for the calling flow to deliver (any channel)."},
+          "notify_mode": {"kind": "enum", "values": ["auto", "twilio", "mcp", "defer"],
+            "help": "auto = SMS via Twilio REST if creds in bundle, else defer. mcp = return notifications for the agent to deliver via its attached SMS/comms MCP tool (recommended for low-code MAS). defer = same as mcp, for non-MCP delivery (chat reply, email tool)."},
           "execute_webhook_url": {"kind": "input", "inputStyle": "singleline",
             "help": "Optional. On approve, the captured payload is POSTed here. Leave empty to have the calling flow dispatch the queued action."}
         }
@@ -181,7 +181,7 @@
         "conf": {
           "credential_name": {"kind": "input", "inputStyle": "singleline"},
           "ords_base_url": {"kind": "input", "inputStyle": "singleline"},
-          "notify_mode": {"kind": "enum", "values": ["auto", "twilio", "defer"]},
+          "notify_mode": {"kind": "enum", "values": ["auto", "twilio", "mcp", "defer"]},
           "execute_webhook_url": {"kind": "input", "inputStyle": "singleline"}
         }
       }

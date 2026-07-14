@@ -1,12 +1,17 @@
 """HITL Toolkit — human-in-the-loop gate + incident tracking for AgentFlow.
 
-Channel-agnostic. SMS/Twilio is ONE adapter; every notification can instead
-be returned to the calling agent for delivery over whatever channel the flow
-already has (Slack tool, email tool, chat reply). Set conf.notify_mode:
+Channel-agnostic. SMS/Twilio-REST is ONE adapter; every notification can
+instead be returned to the calling agent for delivery over whatever channel
+the flow already has — in a low-code MAS that is typically an SMS/comms
+**MCP tool** attached to the Approvals Agent. Set conf.notify_mode:
 
-    auto    (default) send via Twilio if creds are in the bundle, else defer
-    twilio  require Twilio; fail if creds missing
-    defer   never send directly; always return notifications to the caller
+    auto    (default) send via Twilio REST if creds are in the bundle, else defer
+    twilio  require Twilio REST; fail if creds missing
+    mcp     never send directly; return notifications for the agent to
+            deliver via its attached MCP communication tool  (recommended
+            for low-code canvases that already have a Twilio/SMS MCP tool)
+    defer   same behavior as mcp; generic name for non-MCP delivery paths
+            (chat replies, email tools, web front ends)
 
 Six tools:
 
@@ -186,17 +191,21 @@ def _notify(creds: Dict[str, Any], conf: Dict[str, Any], to_ref: str,
     """Deliver (or defer) one notification. Never raises.
 
     Returns {"to", "body", "channel": "sms"|"deferred"|"failed", ...}.
-    "deferred" means the CALLING AGENT is responsible for delivery — put the
-    body in a chat reply, a Slack tool call, an email tool call, whatever
-    channel the flow owns. This is what makes the toolkit channel-agnostic.
+    "deferred" means the CALLING AGENT is responsible for delivery — in a
+    low-code MAS, send each entry via the SMS/comms MCP tool attached to
+    the agent (notify_mode=mcp); otherwise a chat reply, Slack tool, email
+    tool, whatever channel the flow owns. This is what makes the toolkit
+    channel-agnostic.
     """
     mode = (get_cfg(conf, "notify_mode", "auto") or "auto").lower()
     entry: Dict[str, Any] = {"to": to_ref, "body": body}
     if not to_ref:
         entry["channel"] = "skipped"
         return entry
-    if mode == "defer" or (mode == "auto" and not _twilio_available(creds)):
+    if mode in ("defer", "mcp") or (mode == "auto" and not _twilio_available(creds)):
         entry["channel"] = "deferred"
+        if mode == "mcp":
+            entry["deliver_via"] = "mcp_tool"
         return entry
     if not _twilio_available(creds):   # mode == twilio but creds missing
         entry["channel"] = "failed"
@@ -562,7 +571,8 @@ class OpenApprovalTool(CustomToolBase):
                 "failed": failed,
                 "notifications": notifications,
                 "note": ("Deferred notifications MUST be delivered by the "
-                         "calling flow over its own channel."
+                         "calling flow — send each notifications[] entry via "
+                         "your SMS/comms MCP tool (or channel of choice) now."
                          if deferred else ""),
             }))
         except Exception as e:

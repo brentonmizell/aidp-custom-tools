@@ -171,11 +171,16 @@ def build_oci_signer_from_bundle(bundle: Dict[str, Any]) -> Tuple[Any, Dict[str,
             f"{list(OCI_REQUIRED_KEYS)}."
         )
     import oci
+    # private_key_file_location is a required positional arg in some OCI SDK
+    # builds (e.g. 2.175.x preview) even when signing from private_key_content.
+    # Pass it explicitly as None so the call works across SDK versions.
     signer = oci.signer.Signer(
         tenancy=bundle["tenancy"],
         user=bundle["user"],
         fingerprint=bundle["fingerprint"],
+        private_key_file_location=None,
         private_key_content=bundle["private_key"],
+        pass_phrase=bundle.get("pass_phrase") or None,
     )
     redacted = {
         "tenancy":     mask(bundle["tenancy"], 6),
