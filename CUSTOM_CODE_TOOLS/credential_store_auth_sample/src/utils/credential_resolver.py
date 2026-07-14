@@ -170,25 +170,66 @@ def build_oci_signer_from_bundle(bundle: Dict[str, Any]) -> Tuple[Any, Dict[str,
             f"Expected SECRET_TOKEN credential with keys "
             f"{list(OCI_REQUIRED_KEYS)}."
         )
+
+    # Normalize the four fields. Secret stores / paste forms on Windows add
+    # \r\n and stray whitespace; a stray char in the fingerprint or OCIDs
+    # corrupts the signed keyId header and yields an opaque 401.
+    tenancy = str(bundle["tenancy"]).strip()
+    user = str(bundle["user"]).strip()
+    fingerprint = normalize_fingerprint(bundle["fingerprint"])
+    private_key = normalize_pem(bundle["private_key"])
+    pass_phrase = (str(bundle["pass_phrase"]).strip()
+                   if bundle.get("pass_phrase") else None)
+
+    # Fail early with an actionable message rather than a raw OCI 401.
+    fp_ok = _fingerprint_looks_valid(fingerprint)
+    if not fp_ok:
+        raise ValueError(
+            f"fingerprint doesn't look like a valid OCI API-key fingerprint "
+            f"(got {len(fingerprint)} chars; expected 47 in the form "
+            f"aa:bb:cc:…:zz — 16 colon-separated hex pairs). Copy it exactly "
+            f"from OCI Console → your user → API Keys, or derive it from your "
+            f"private key with: openssl rsa -pubout -outform DER -in key.pem | "
+            f"openssl md5 -c"
+        )
+
     import oci
     # private_key_file_location is a required positional arg in some OCI SDK
     # builds (e.g. 2.175.x preview) even when signing from private_key_content.
-    # Pass it explicitly as None so the call works across SDK versions.
     signer = oci.signer.Signer(
-        tenancy=bundle["tenancy"],
-        user=bundle["user"],
-        fingerprint=bundle["fingerprint"],
+        tenancy=tenancy,
+        user=user,
+        fingerprint=fingerprint,
         private_key_file_location=None,
-        private_key_content=bundle["private_key"],
-        pass_phrase=bundle.get("pass_phrase") or None,
+        private_key_content=private_key,
+        pass_phrase=pass_phrase,
     )
     redacted = {
-        "tenancy":     mask(bundle["tenancy"], 6),
-        "user":        mask(bundle["user"], 6),
-        "fingerprint": mask(bundle["fingerprint"], 2),
-        "private_key": mask(bundle["private_key"], 12),
+        "tenancy":     mask(tenancy, 6),
+        "user":        mask(user, 6),
+        "fingerprint": mask(fingerprint, 2),
+        "fingerprint_len": len(fingerprint),
+        "private_key": mask(private_key, 12),
     }
     return signer, redacted
+
+
+def normalize_fingerprint(value: Any) -> str:
+    """Strip whitespace and any embedded CR/LF from a fingerprint."""
+    return "".join(str(value).split())  # removes all internal whitespace too
+
+
+def normalize_pem(value: Any) -> str:
+    """Normalize a PEM: CRLF/CR -> LF, strip surrounding blank lines, ensure a
+    single trailing newline. Loads identically but avoids keyId/edge issues."""
+    s = str(value).replace("\r\n", "\n").replace("\r", "\n").strip()
+    return s + "\n"
+
+
+def _fingerprint_looks_valid(fp: str) -> bool:
+    """OCI API-key fingerprints are 16 colon-separated hex pairs = 47 chars."""
+    import re
+    return bool(re.fullmatch(r"[0-9a-fA-F]{2}(:[0-9a-fA-F]{2}){15}", fp))
 
 
 def resolve_oci_signer(credential_name: Optional[str]) -> Tuple[Any, Dict[str, str], Optional[str]]:

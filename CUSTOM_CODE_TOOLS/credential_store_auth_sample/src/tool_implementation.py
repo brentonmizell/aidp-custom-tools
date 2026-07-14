@@ -86,21 +86,40 @@ def _build_signer(credential_name: str) -> tuple:
         return None, (f"Credential `{credential_name}` is missing secret keys: "
                       f"{missing}. Required: {list(REQUIRED_SECRET_KEYS)}.")
 
+    import re
+    # Normalize: secret stores / paste forms on Windows add \r\n + stray
+    # whitespace. A stray char in the fingerprint or OCIDs corrupts the signed
+    # keyId header and produces an opaque 401 NotAuthenticated.
+    tenancy = str(bundle["tenancy"]).strip()
+    user = str(bundle["user"]).strip()
+    fingerprint = "".join(str(bundle["fingerprint"]).split())
+    private_key = (str(bundle["private_key"]).replace("\r\n", "\n")
+                   .replace("\r", "\n").strip() + "\n")
+
+    if not re.fullmatch(r"[0-9a-fA-F]{2}(:[0-9a-fA-F]{2}){15}", fingerprint):
+        return None, (
+            f"fingerprint doesn't look like a valid OCI API-key fingerprint "
+            f"(got {len(fingerprint)} chars; expected 47 in the form "
+            f"aa:bb:…:zz). Copy it exactly from OCI Console → your user → "
+            f"API Keys, or derive it: openssl rsa -pubout -outform DER -in "
+            f"key.pem | openssl md5 -c")
+
     import oci
     # private_key_file_location is a required positional arg in some OCI SDK
     # builds (e.g. 2.175.x preview) even when signing from private_key_content.
     signer = oci.signer.Signer(
-        tenancy=bundle["tenancy"],
-        user=bundle["user"],
-        fingerprint=bundle["fingerprint"],
+        tenancy=tenancy,
+        user=user,
+        fingerprint=fingerprint,
         private_key_file_location=None,
-        private_key_content=bundle["private_key"],
+        private_key_content=private_key,
     )
     redacted = {
-        "tenancy":     _mask(bundle["tenancy"], 6),
-        "user":        _mask(bundle["user"], 6),
-        "fingerprint": _mask(bundle["fingerprint"], 2),
-        "private_key": _mask(bundle["private_key"], 12),
+        "tenancy":     _mask(tenancy, 6),
+        "user":        _mask(user, 6),
+        "fingerprint": _mask(fingerprint, 2),
+        "fingerprint_len": len(fingerprint),
+        "private_key": _mask(private_key, 12),
     }
     return signer, redacted
 
@@ -151,6 +170,32 @@ class CredentialStoreAuthSample(CustomToolBase):
         except requests.HTTPError as e:
             status = e.response.status_code if e.response is not None else "?"
             body = e.response.text[:500] if e.response is not None else ""
+            # Distinguish "signature rejected" from "authenticated but not
+            # authorized for THIS resource". 401 = bad credential; 404
+            # NotAuthorizedOrNotFound on whoami = the signer authenticated but
+            # the user lacks `read users` IAM permission — expected for a
+            # locked-down service user. That is NOT a credential failure.
+            if op == "whoami" and status == 404 and "NotAuthorizedOrNotFound" in body:
+                return DebugLog.embed(ok({
+                    "operation": "whoami",
+                    "authenticated": True,
+                    "note": ("Signer AUTHENTICATED successfully (a bad "
+                             "credential returns 401, not 404). This 404 means "
+                             "the user lacks `read users` IAM permission to "
+                             "read its own record — expected for a service "
+                             "user, and not needed for AIDP calls. Run "
+                             "op=list_volumes to test the actual data-plane "
+                             "call."),
+                    "redacted_credential": meta,
+                }))
+            if op == "whoami" and status == 401:
+                return DebugLog.embed(fail(
+                    "Signer was REJECTED (HTTP 401 NotAuthenticated). The "
+                    "credential is wrong: verify the fingerprint matches the "
+                    "private key (openssl rsa -pubout -outform DER -in key.pem "
+                    "| openssl md5 -c) and that this API key is still active "
+                    "for the user in OCI Console.", "HTTPError",
+                    redacted_credential=meta))
             return DebugLog.embed(fail(
                 f"HTTP {status} from {e.request.url}: {body}", "HTTPError",
                 redacted_credential=meta))
