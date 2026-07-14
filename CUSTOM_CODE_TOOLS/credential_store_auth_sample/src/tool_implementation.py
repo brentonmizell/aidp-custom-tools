@@ -52,6 +52,31 @@ except ImportError:
 REQUIRED_SECRET_KEYS = ("tenancy", "user", "fingerprint", "private_key")
 
 
+def _render_map_text(tree: list, counts: dict) -> str:
+    """Human-readable indented tree of the map result — easier to scan than
+    the nested JSON in the Test panel."""
+    lines = [
+        f"{counts['catalogs']} catalogs | {counts['schemas']} schemas | "
+        f"{counts['tables']} tables | {counts['volumes']} volumes | "
+        f"{counts['knowledge_bases']} KBs",
+        "",
+    ]
+    for c in tree:
+        lines.append(f"* {c['catalog_key']} [{c.get('type') or '?'}]")
+        for s in c.get("schemas", []):
+            lines.append(f"  - {s.get('schema_name') or s.get('schema_key')}")
+            for label, key in (("tables", "tables"), ("volumes", "volumes"),
+                               ("KBs", "knowledge_bases")):
+                items = s.get(key, [])
+                if items:
+                    names = ", ".join(i.get("displayName") or i.get("key")
+                                      for i in items)
+                    lines.append(f"      {label} ({len(items)}): {names}")
+            if s.get("errors"):
+                lines.append(f"      ! errors: {s['errors']}")
+    return "\n".join(lines)
+
+
 def _mask(value: Optional[str], keep: int = 4) -> str:
     """Truncate a secret for debug output. Never log full tokens / keys."""
     if not value:
@@ -62,29 +87,34 @@ def _mask(value: Optional[str], keep: int = 4) -> str:
 
 
 def _build_signer(credential_name: str) -> tuple:
-    """Resolve the credential by display name and return (signer, redacted_meta).
-    Returns (None, error_msg) if anything is missing."""
+    """Resolve the credential by display name. Returns a 3-tuple:
+    (signer, redacted_meta, bundle_cfg). On failure: (None, error_msg, {}).
+
+    bundle_cfg carries the NON-secret connection fields the credential may
+    also hold — data_lake_ocid and region — so the tool can be driven by
+    credential_name alone (no data_lake_ocid needed in conf or the Test panel).
+    """
     try:
         import aidputils.secrets as secrets
     except ImportError as ex:
-        return None, f"aidputils.secrets not available: {ex}"
+        return None, f"aidputils.secrets not available: {ex}", {}
 
     try:
         # One bulk fetch + key validation gives a better error than four
         # silent get(name, key) calls if the credential is misconfigured.
         bundle = secrets.get(credential_name)
     except Exception as ex:
-        return None, f"Credential `{credential_name}` could not be read: {ex}"
+        return None, f"Credential `{credential_name}` could not be read: {ex}", {}
 
     if not isinstance(bundle, dict):
         return None, (f"Credential `{credential_name}` did not return a dict "
                       f"(got {type(bundle).__name__}). The credential must be "
-                      f"SECRET_TOKEN type, not SERVICE_ACCOUNT or VAULT_REFERENCE.")
+                      f"SECRET_TOKEN type, not SERVICE_ACCOUNT or VAULT_REFERENCE."), {}
 
     missing = [k for k in REQUIRED_SECRET_KEYS if not bundle.get(k)]
     if missing:
         return None, (f"Credential `{credential_name}` is missing secret keys: "
-                      f"{missing}. Required: {list(REQUIRED_SECRET_KEYS)}.")
+                      f"{missing}. Required: {list(REQUIRED_SECRET_KEYS)}."), {}
 
     import re
     # Normalize: secret stores / paste forms on Windows add \r\n + stray
@@ -102,7 +132,7 @@ def _build_signer(credential_name: str) -> tuple:
             f"(got {len(fingerprint)} chars; expected 47 in the form "
             f"aa:bb:…:zz). Copy it exactly from OCI Console → your user → "
             f"API Keys, or derive it: openssl rsa -pubout -outform DER -in "
-            f"key.pem | openssl md5 -c")
+            f"key.pem | openssl md5 -c"), {}
 
     import oci
     # private_key_file_location is a required positional arg in some OCI SDK
@@ -121,7 +151,13 @@ def _build_signer(credential_name: str) -> tuple:
         "fingerprint_len": len(fingerprint),
         "private_key": _mask(private_key, 12),
     }
-    return signer, redacted
+    bundle_cfg = {
+        "data_lake_ocid": str(bundle.get("data_lake_ocid")
+                              or bundle.get("datalake_ocid")
+                              or bundle.get("lake_ocid") or "").strip(),
+        "region": str(bundle.get("region") or "").strip(),
+    }
+    return signer, redacted, bundle_cfg
 
 
 @CustomToolBase.register
@@ -140,11 +176,10 @@ class CredentialStoreAuthSample(CustomToolBase):
     @classmethod
     def _execute_tool(cls, conf: Dict[str, Any], runtime_params: Dict[str, Any],
                       **context_vars) -> Dict[str, Any]:
-        op = (runtime_params.get("op") or "whoami").lower()
+        op = (runtime_params.get("op") or "map").lower()
         credential_name = (runtime_params.get("credential_name")
                            or get_cfg(conf, "credential_name", ""))
         timeout = get_cfg(conf, "timeout", 30)
-        region = get_cfg(conf, "region", "us-ashburn-1")
 
         debug(f"CredentialStoreAuthSample op={op} credential_name={credential_name!r}")
 
@@ -153,10 +188,27 @@ class CredentialStoreAuthSample(CustomToolBase):
                 "credential_name is required — pass it as a runtime param or "
                 "set conf.credential_name.", "ValidationError"))
 
-        signer, meta = _build_signer(credential_name)
+        signer, meta, bundle_cfg = _build_signer(credential_name)
         if signer is None:
             return DebugLog.embed(fail(meta, "CredentialStoreError"))
         debug(f"Signer constructed. Redacted credential meta: {meta}")
+
+        # Resolve region + data_lake_ocid: runtime param -> credential bundle
+        # -> conf. Putting them on the credential means the Test panel needs
+        # only op + credential_name. Inject the resolved lake into
+        # runtime_params so every op method picks it up unchanged.
+        region = (runtime_params.get("region") or bundle_cfg.get("region")
+                  or get_cfg(conf, "region", "us-ashburn-1"))
+        lake = (runtime_params.get("data_lake_ocid")
+                or bundle_cfg.get("data_lake_ocid")
+                or get_cfg(conf, "data_lake_ocid", ""))
+        if not lake:
+            return DebugLog.embed(fail(
+                "data_lake_ocid not found. Add a `data_lake_ocid` key to the "
+                "credential bundle (recommended), or set conf.data_lake_ocid.",
+                "ValidationError"))
+        runtime_params = dict(runtime_params)
+        runtime_params["data_lake_ocid"] = lake
 
         try:
             if op == "whoami":
@@ -574,6 +626,7 @@ class CredentialStoreAuthSample(CustomToolBase):
             "operation": "map",
             "scope": only_catalog or "(all catalogs)",
             "summary": counts,
+            "text": _render_map_text(tree, counts),
             "catalogs": tree,
             "redacted_credential": meta,
         })

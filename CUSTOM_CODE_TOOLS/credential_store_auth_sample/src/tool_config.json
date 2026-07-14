@@ -5,13 +5,13 @@
     {
       "toolClassName": "CredentialStoreAuthSample",
       "displayName": "Credential Store Auth Sample",
-      "description": "Demonstrates aidputils.secrets.get(...) + oci.signer.Signer(private_key_content=...). Validates the signer with op='whoami', then exercises the failing list_volumes endpoint with op='list_volumes'.",
-      "version": "1.0.0",
+      "description": "Resolves an OCI signer from the Credential Store and calls the public AIDP data-plane API. Test panel needs only: op + credential_name. The credential bundle supplies the keys (tenancy/user/fingerprint/private_key) AND the connection (data_lake_ocid, region). Default op=map walks the whole Master catalog and returns every catalog/schema/table/volume/KB key.",
+      "version": "2.0.0",
       "schema": [
         {
           "name": "op",
           "type": "string",
-          "description": "Which operation to run. 'map' is the one-shot: walks the whole Master catalog (catalogs -> schemas -> tables/volumes/KBs) and returns every key in a nested tree — pass catalog_key to scope to one catalog, or omit to map everything. 'whoami' proves the signer authenticates. The list_* / get_* ops are the manual chain if you want a single level: list_catalogs -> list_schemas -> list_tables/list_volumes/list_kbs, plus get_kb / get_volume / list_files by key.",
+          "description": "map = one-shot: walk the whole Master catalog (catalogs -> schemas -> tables/volumes/KBs) and return every key + a readable text tree. whoami = prove the signer authenticates. The list_*/get_* ops do a single level (they read catalog_key/schema_key/volume_key/kb_key/path from conf).",
           "enum": [
             "map",
             "whoami",
@@ -28,52 +28,17 @@
           "examples": [
             "map",
             "whoami",
-            "list_catalogs",
-            "get_kb"
+            "list_catalogs"
           ]
-        },
-        {
-          "name": "kb_key",
-          "type": "string",
-          "description": "For op=get_kb: the knowledge base's hex key (e.g. 33076ca9d9fd49388562aefa48715caa), from op=list_kbs. Falls back to conf.kb_key."
-        },
-        {
-          "name": "volume_key",
-          "type": "string",
-          "description": "For op=list_files: the full dotted volume key catalog.schema.volume (e.g. construction_catalog.construction_schema.construction_documents), from op=list_volumes. Falls back to conf.volume_key."
-        },
-        {
-          "name": "path",
-          "type": "string",
-          "description": "For op=list_files: folder path inside the volume to list. Defaults to '/' (volume root). Pass a subfolder to descend.",
-          "default": "/"
         },
         {
           "name": "credential_name",
           "type": "string",
-          "description": "Display name of the SECRET_TOKEN credential in AIDP's Credential Store. Must have four secret keys: tenancy, user, fingerprint, private_key (PEM body, not a path). Leave blank to fall back to conf.credential_name.",
+          "description": "Display name of the SECRET_TOKEN credential (or an OCI Vault secret OCID). Bundle keys: tenancy, user, fingerprint, private_key (required) + data_lake_ocid, region (optional \u2014 supplies the connection so nothing else is needed here). Falls back to conf.credential_name.",
           "examples": [
-            "my_oci_api_key",
-            "aidp_demo_key"
+            "aidp_oci_key",
+            "my_oci_api_key"
           ]
-        },
-        {
-          "name": "data_lake_ocid",
-          "type": "string",
-          "description": "Data Lake OCID. Only used for op='list_volumes'. Falls back to conf.data_lake_ocid.",
-          "examples": [
-            "ocid1.aidataplatform.oc1.iad.aaaaaaaaxxxxxxx"
-          ]
-        },
-        {
-          "name": "catalog_key",
-          "type": "string",
-          "description": "The catalog NAME (e.g. construction_catalog) = the catalog's `key` field in GET /catalogs. NOT the hex value on the console Details page — that is the `catalogGuid`, not the key. Falls back to conf.catalog_key."
-        },
-        {
-          "name": "schema_key",
-          "type": "string",
-          "description": "The schema's DOTTED key catalog.schema (e.g. construction_catalog.construction_schema) = the schema's `key` field from list_schemas. The plain name returns HTTP 400/404. (Responses echo schemaKey as the plain name, but the QUERY needs the dotted key.) Falls back to conf.schema_key."
         }
       ],
       "conf": {
@@ -82,13 +47,16 @@
         "data_lake_ocid": "ocid1.aidataplatform.oc1.iad.amaaaaaawah6xyqaic64ra5oaflf6hx6lnbuybhxxukkejoa2huz7iyq4tzq",
         "catalog_key": "",
         "schema_key": "",
+        "volume_key": "",
+        "kb_key": "",
+        "path": "/",
         "api_version": "20260430",
         "service_path": "aiDataPlatforms",
         "timeout": 30
       },
       "auth": {
         "authType": "OCI_RESOURCE_PRINCIPAL",
-        "note": "The agent runtime uses resource principal to call aidputils.secrets internally. The credential the tool then uses for downstream OCI calls is resolved per-invocation from the Credential Store \u2014 no permanent PEM in this zip."
+        "note": "The agent runtime uses resource principal to call aidputils.secrets internally. The OCI signer the tool then uses is resolved per-invocation from the Credential Store \u2014 no permanent PEM in this zip."
       },
       "_uiHints": {
         "conf": {
@@ -100,20 +68,34 @@
             "kind": "input",
             "inputStyle": "singleline",
             "placeholder": "Display name of the SECRET_TOKEN credential in AIDP",
-            "help": "Create the credential in AIDP \u2192 Settings \u2192 Credentials. Type: SECRET_TOKEN. Keys: tenancy / user / fingerprint / private_key."
+            "help": "AIDP \u2192 Settings \u2192 Credentials. Type: SECRET_TOKEN. Keys: tenancy / user / fingerprint / private_key, plus optional data_lake_ocid + region."
           },
           "data_lake_ocid": {
             "kind": "dropdown",
-            "source": "dataLakes"
+            "source": "dataLakes",
+            "help": "Optional \u2014 prefer putting data_lake_ocid on the credential bundle. Used only if the bundle omits it."
           },
           "catalog_key": {
             "kind": "dropdown",
-            "source": "catalogs"
+            "source": "catalogs",
+            "help": "Only for the single-level list_*/get_* ops. op=map ignores this unless you want to scope to one catalog."
           },
           "schema_key": {
             "kind": "dropdown",
             "source": "schemas",
             "dependsOn": "catalog_key"
+          },
+          "volume_key": {
+            "kind": "input",
+            "inputStyle": "singleline"
+          },
+          "kb_key": {
+            "kind": "input",
+            "inputStyle": "singleline"
+          },
+          "path": {
+            "kind": "input",
+            "inputStyle": "singleline"
           },
           "api_version": {
             "kind": "readonly"
@@ -128,19 +110,6 @@
           },
           "credential_name": {
             "inputStyle": "singleline"
-          },
-          "data_lake_ocid": {
-            "kind": "dropdown",
-            "source": "dataLakes"
-          },
-          "catalog_key": {
-            "kind": "dropdown",
-            "source": "catalogs"
-          },
-          "schema_key": {
-            "kind": "dropdown",
-            "source": "schemas",
-            "dependsOn": "catalog_key"
           }
         }
       }
