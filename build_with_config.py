@@ -66,14 +66,17 @@ SHARED_MODULES: List[Tuple[Path, str]] = [
 SHARED_AIDP_IO_SRC = SHARED_MODULES[0][0]
 
 # Conf keys we'll touch (and the source of their value).
+#
+# We DELIBERATELY do NOT auto-fill identity / environment OCIDs
+# (data_lake_ocid, workspace_id, tenancy_ocid, user_ocid, fingerprint):
+# those are secrets/environment-specific and must not be baked into a
+# committed, shareable tool. Tools resolve auth from conf.credential_name ->
+# the AIDP Credential Store bundle, and the operator fills data_lake_ocid at
+# deploy time (or puts it on the credential). Only non-secret shape defaults
+# are auto-filled here.
 AUTO_FILL_KEYS = {
-    "region":         ("aidp",  "region"),
-    "data_lake_ocid": ("aidp",  "dataLakeOcid"),
-    "workspace_id":   ("aidp",  "workspaceId"),
-    "api_version":    ("aidp",  "apiVersion"),
-    "tenancy_ocid":   ("oci",   "tenancy"),
-    "user_ocid":      ("oci",   "user"),
-    "fingerprint":    ("oci",   "fingerprint"),
+    "region":      ("aidp", "region"),
+    "api_version": ("aidp", "apiVersion"),
 }
 
 # AIDP's live REST surface uses /20260430/aiDataPlatforms/{lake}/... — the

@@ -92,8 +92,8 @@
       "conf": {
         "smtp_host": "smtp.email.us-ashburn-1.oci.oraclecloud.com",
         "smtp_port": 587,
-        "smtp_username": "{{smtp_username}}",
-        "smtp_password": "{{smtp_password}}",
+        "smtp_username": "",
+        "smtp_password": "",
         "from_addr": "noreply@yourdomain.com",
         "use_starttls": true,
         "use_ssl": false,
@@ -257,8 +257,8 @@
       "conf": {
         "imap_host": "imap.gmail.com",
         "imap_port": 993,
-        "imap_username": "{{imap_username}}",
-        "imap_password": "{{imap_password}}",
+        "imap_username": "",
+        "imap_password": "",
         "use_ssl": true,
         "timeout": 30,
         "max_messages": 100,

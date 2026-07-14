@@ -41,6 +41,45 @@ from typing import Any, Dict, Optional, Tuple
 # Required keys for an OCI API-key SECRET_TOKEN credential.
 OCI_REQUIRED_KEYS = ("tenancy", "user", "fingerprint", "private_key")
 
+# OCI region-code (embedded in every OCID) -> full region name. Commercial
+# realm; unknown codes fall back to env vars / conf at the call site.
+_OCI_REGION_CODES = {
+    "iad": "us-ashburn-1", "phx": "us-phoenix-1", "sjc": "us-sanjose-1",
+    "yyz": "ca-toronto-1", "yul": "ca-montreal-1",
+    "lhr": "uk-london-1", "cwl": "uk-cardiff-1",
+    "fra": "eu-frankfurt-1", "zrh": "eu-zurich-1", "ams": "eu-amsterdam-1",
+    "cdg": "eu-paris-1", "mrs": "eu-marseille-1", "mad": "eu-madrid-1",
+    "arn": "eu-stockholm-1", "lin": "eu-milan-1",
+    "nrt": "ap-tokyo-1", "kix": "ap-osaka-1", "icn": "ap-seoul-1",
+    "syd": "ap-sydney-1", "mel": "ap-melbourne-1", "bom": "ap-mumbai-1",
+    "hyd": "ap-hyderabad-1", "sin": "ap-singapore-1",
+    "gru": "sa-saopaulo-1", "scl": "sa-santiago-1", "vcp": "sa-vinhedo-1",
+    "jed": "me-jeddah-1", "dxb": "me-dubai-1", "auh": "me-abudhabi-1",
+    "jnb": "af-johannesburg-1",
+}
+
+
+def region_from_ocid(ocid: str) -> Optional[str]:
+    """Derive the region from an OCID's region-code segment:
+    ocid1.<type>.oc1.<regioncode>.<unique> -> full region name (or None)."""
+    parts = str(ocid or "").split(".")
+    if len(parts) >= 4:
+        return _OCI_REGION_CODES.get(parts[3].strip().lower())
+    return None
+
+
+def resolve_region(explicit: str = "", ocid: str = "", conf_region: str = "") -> str:
+    """Resolve a region without needing it as a separate credential key:
+    explicit -> derived-from-OCID -> OCI_RESOURCE_PRINCIPAL_REGION /
+    OCI_REGION env -> conf -> us-ashburn-1."""
+    import os
+    return (str(explicit or "").strip()
+            or region_from_ocid(ocid)
+            or os.environ.get("OCI_RESOURCE_PRINCIPAL_REGION")
+            or os.environ.get("OCI_REGION")
+            or str(conf_region or "").strip()
+            or "us-ashburn-1")
+
 
 def mask(value: Optional[str], keep: int = 4) -> str:
     """Truncate a secret for debug output. Never log full tokens / keys."""

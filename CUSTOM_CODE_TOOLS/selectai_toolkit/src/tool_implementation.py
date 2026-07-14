@@ -206,67 +206,68 @@ def _materialize_wallet(b64_zip, wallet_password=""):
     return wallet_dir
 
 
-def _open_connection(catalog_key, conf, runtime_params, context_vars):
-    """Return an ``oracledb.Connection``.
-
-    Priority order:
-      1. ``catalog_key`` (runtime or conf) + ``aidp_io.get_connection_data``.
-         Expects ``connectionProperties`` containing ``user.name`` / ``username``,
-         ``password``, ``tns``, ``wallet.content`` (base64 zip), and optionally
-         ``wallet.password``.
-      2. Explicit ``conn_string`` + ``username`` + ``password`` runtime params,
-         with optional ``wallet_path`` pointing at an already-unzipped wallet.
-      3. Same fields read from conf as a last resort.
-
-    Raises ``ValueError`` if the inputs are insufficient. oracledb errors
-    propagate unchanged so the caller can format them into a structured
-    error envelope (preserving ORA- codes).
+def _catalog_connection_props(catalog_key, conf, context_vars):
+    """Pull DB connection info from the AIDP catalog binding. Works for both
+    aidp_io.get_connection_data (returns connectionProperties) and a raw
+    GET /catalogs/{name} (EXTERNAL catalogs expose connectionDetails.
+    connectionProperties with tns + user.name + credential_id). The catalog
+    exposes tns + user but NOT the password (that lives in a DBMS_CLOUD
+    credential / the AIDP Credential Store) — so this returns whatever it has
+    and the caller fills the rest from the bundle.
     """
-    import oracledb  # lazy import - the runtime ships it but local tests may not
-
-    rp = runtime_params or {}
-
-    # ---- 1) AIDP catalog binding (preferred) ---- #
-    if catalog_key and _io_get_connection_data is not None:
-        debug("opening connection via aidp_io.get_connection_data",
-              catalog_key=catalog_key)
+    if not catalog_key or _io_get_connection_data is None:
+        return {}
+    try:
         try:
             data = _io_get_connection_data(catalog_key, conf, context_vars)
         except TypeError:
-            # Some aidp_io variants accept (catalog_key) alone.
             data = _io_get_connection_data(catalog_key)
-        cp = (data or {}).get("connectionProperties") or {}
-        user = cp.get("user.name") or cp.get("username") or cp.get("user")
-        pw = cp.get("password")
-        tns = cp.get("tns") or cp.get("dsn") or cp.get("conn_string")
-        wallet_b64 = cp.get("wallet.content") or cp.get("walletContent") or ""
-        wallet_pw = cp.get("wallet.password") or cp.get("walletPassword") or ""
-        missing = [k for k, v in (("user", user), ("password", pw), ("tns", tns)) if not v]
-        if missing:
-            raise ValueError(
-                f"aidp_io.get_connection_data returned incomplete payload (missing {missing}); "
-                f"verify the catalog binding exposes ADB credentials")
-        kwargs = dict(user=user, password=pw, dsn=tns)
-        if wallet_b64:
-            wallet_dir = _materialize_wallet(wallet_b64, wallet_pw)
-            os.environ["TNS_ADMIN"] = wallet_dir
-            kwargs.update(
-                config_dir=wallet_dir,
-                wallet_location=wallet_dir,
-                wallet_password=wallet_pw or None,
-            )
-        else:
-            debug_warn("catalog returned no wallet content; attempting walletless DSN")
-        return oracledb.connect(**kwargs)
+    except Exception as e:
+        debug_warn(f"catalog connection lookup failed: {e}")
+        return {}
+    # Accept both the flat connectionProperties shape and the nested
+    # connectionDetails.connectionProperties shape from GET /catalogs/{name}.
+    cp = (data or {}).get("connectionProperties")
+    if not cp:
+        cp = ((data or {}).get("connectionDetails") or {}).get("connectionProperties") or {}
+    return {
+        "user":       cp.get("user.name") or cp.get("username") or cp.get("user") or "",
+        "password":   cp.get("password") or "",
+        "dsn":        cp.get("tns") or cp.get("dsn") or cp.get("conn_string") or "",
+        "wallet_b64": cp.get("wallet.content") or cp.get("walletContent") or "",
+        "wallet_pw":  cp.get("wallet.password") or cp.get("walletPassword") or "",
+    }
 
-    # ---- 1b) AIDP Credential Store binding (preferred over plaintext conf) ---- #
-    # aidp_credential_name (distinct from the in-ADB credential_name used for
-    # DBMS_CLOUD_AI to call OCI GenAI) points at a SECRET_TOKEN credential in
-    # AIDP's Credential Store with keys: username, password, connection_string,
-    # wallet_b64 (base64 wallet zip). Runtime params still win over both stores.
+
+def _open_connection(catalog_key, conf, runtime_params, context_vars):
+    """Return an ``oracledb.Connection``, assembling each connection field
+    from whichever source has it — no single source has to be complete:
+
+      - dsn (tns)   : catalog binding -> Credential Store -> conf/runtime
+      - username    : catalog binding -> Credential Store -> conf/runtime
+      - password    : Credential Store -> conf/runtime   (catalog omits it)
+      - wallet      : catalog binding -> Credential Store -> conf wallet_path
+
+    So the common setup is: catalog_key gives tns + user (public, from the
+    EXTERNAL catalog's connectionDetails), and aidp_credential_name gives just
+    the password. Runtime params override everything for ad-hoc testing.
+
+    Raises ``ValueError`` if, after merging, dsn/username/password are still
+    incomplete. oracledb errors propagate unchanged (ORA- codes preserved).
+    """
+    import oracledb  # lazy import - the runtime ships it but local tests may not
+    rp = runtime_params or {}
+
+    # Source A: the AIDP catalog binding (tns + user; usually no password).
+    cat = _catalog_connection_props(catalog_key, conf, context_vars)
+
+    # Source B: the AIDP Credential Store bundle (password + optional wallet).
+    # aidp_credential_name is distinct from the in-ADB credential_name used by
+    # DBMS_CLOUD_AI to call OCI GenAI. Bundle keys: username, password,
+    # connection_string, wallet_b64.
     aidp_cred_name = (rp.get("aidp_credential_name")
                       or get_cfg(conf, "aidp_credential_name", ""))
-    cs_user = cs_pw = cs_dsn = cs_wallet_b64 = ""
+    cs = {}
     if aidp_cred_name:
         try:
             from .utils.credential_resolver import resolve_bundle
@@ -275,38 +276,44 @@ def _open_connection(catalog_key, conf, runtime_params, context_vars):
                 raise ValueError(
                     f"aidp_credential_name='{aidp_cred_name}' failed: {cs_err}")
             if bundle:
-                cs_user = bundle.get("username") or ""
-                cs_pw = bundle.get("password") or ""
-                cs_dsn = bundle.get("connection_string") or ""
-                cs_wallet_b64 = bundle.get("wallet_b64") or ""
-                debug("loaded DB creds from Credential Store",
-                      aidp_credential_name=aidp_cred_name,
-                      have_wallet=bool(cs_wallet_b64))
+                cs = {"user": bundle.get("username") or "",
+                      "password": bundle.get("password") or "",
+                      "dsn": bundle.get("connection_string") or "",
+                      "wallet_b64": bundle.get("wallet_b64") or ""}
         except ImportError:
             pass
 
-    # ---- 2 & 3) explicit runtime + conf fallback (Credential Store overrides) ---- #
-    user = rp.get("username") or cs_user or get_cfg(conf, "username", "")
-    pw = rp.get("password") or cs_pw or get_cfg(conf, "password", "")
-    dsn = rp.get("conn_string") or cs_dsn or get_cfg(conf, "conn_string", "")
+    # Merge per field. Runtime > catalog > credential store > conf.
+    user = (rp.get("username") or cat.get("user") or cs.get("user")
+            or get_cfg(conf, "username", ""))
+    pw = (rp.get("password") or cs.get("password") or cat.get("password")
+          or get_cfg(conf, "password", ""))
+    dsn = (rp.get("conn_string") or cat.get("dsn") or cs.get("dsn")
+           or get_cfg(conf, "conn_string", ""))
+    wallet_b64 = cat.get("wallet_b64") or cs.get("wallet_b64") or ""
+    wallet_pw = cat.get("wallet_pw") or ""
     wallet_path = rp.get("wallet_path") or get_cfg(conf, "wallet_path", "")
-    if not (user and pw and dsn):
+
+    missing = [k for k, v in (("dsn/tns", dsn), ("username", user),
+                              ("password", pw)) if not v]
+    if missing:
         raise ValueError(
-            "supply catalog_key, aidp_credential_name, or "
-            "conn_string + username + password (+ optional wallet_path) in "
-            "runtime params or conf")
+            f"could not assemble a DB connection (missing {missing}). Provide "
+            f"catalog_key (gives tns + user from the EXTERNAL catalog) plus "
+            f"aidp_credential_name (gives the password), or conn_string + "
+            f"username + password in conf/runtime.")
+
     kwargs = dict(user=user, password=pw, dsn=dsn)
-    if cs_wallet_b64 and not wallet_path:
-        # Materialize wallet from base64-encoded zip in the credential bundle.
-        wallet_dir = _materialize_wallet(cs_wallet_b64, "")
+    if wallet_b64:
+        wallet_dir = _materialize_wallet(wallet_b64, wallet_pw)
         os.environ["TNS_ADMIN"] = wallet_dir
-        kwargs.update(config_dir=wallet_dir, wallet_location=wallet_dir)
-        debug("materialized wallet from Credential Store bundle",
-              wallet_dir=wallet_dir)
+        kwargs.update(config_dir=wallet_dir, wallet_location=wallet_dir,
+                      wallet_password=wallet_pw or None)
     elif wallet_path:
         kwargs.update(config_dir=wallet_path, wallet_location=wallet_path)
-    debug("opening connection via explicit DSN", dsn=dsn,
-          has_wallet=bool(cs_wallet_b64 or wallet_path))
+    debug("opening connection", dsn=dsn, user=user,
+          source_dsn="catalog" if cat.get("dsn") else ("bundle" if cs.get("dsn") else "conf"),
+          has_wallet=bool(wallet_b64 or wallet_path))
     return oracledb.connect(**kwargs)
 
 
