@@ -165,10 +165,13 @@ class CredentialStoreAuthSample(CustomToolBase):
                       "list_volumes", "list_kbs"):
                 return DebugLog.embed(cls._do_list(
                     op, signer, meta, conf, runtime_params, region, timeout))
+            if op == "list_files":
+                return DebugLog.embed(cls._do_list_files(
+                    signer, meta, conf, runtime_params, region, timeout))
             return DebugLog.embed(fail(
                 f"Unknown op `{op}`. Valid: whoami | list_catalogs | "
-                f"list_schemas | list_tables | list_volumes | list_kbs.",
-                "ValidationError"))
+                f"list_schemas | list_tables | list_volumes | list_kbs | "
+                f"list_files.", "ValidationError"))
         except requests.HTTPError as e:
             status = e.response.status_code if e.response is not None else "?"
             body = e.response.text[:500] if e.response is not None else ""
@@ -317,7 +320,8 @@ class CredentialStoreAuthSample(CustomToolBase):
                 "list_schemas":  "copy a schema `key` into schema_key, then run "
                                  "op=list_tables / list_volumes / list_kbs",
                 "list_tables":   "done — these are your tables",
-                "list_volumes":  "done — these are your volumes",
+                "list_volumes":  "copy a volume `key` into volume_key, then "
+                                 "run op=list_files to browse its contents",
                 "list_kbs":      "done — these are your knowledge bases",
             }[op],
             "note": ("count=0 means the call succeeded but nothing matched this "
@@ -325,5 +329,63 @@ class CredentialStoreAuthSample(CustomToolBase):
                      "op=list_schemas and use the EXACT `key` values they return "
                      "— a hand-typed or mismatched key returns an empty list, "
                      "not an error." if not items else ""),
+            "redacted_credential": meta,
+        })
+
+    @classmethod
+    def _do_list_files(cls, signer, meta, conf, runtime_params, region, timeout):
+        """List files/folders inside a volume — the level below list_volumes.
+
+            GET /volumes/{volumeKey}/files?path=/
+
+        The volume key is the full dotted path catalog.schema.volume, e.g.
+        construction_catalog.construction_schema.construction_documents.
+        `path` defaults to '/' (the volume root); pass a subfolder to descend.
+        """
+        from urllib.parse import quote
+
+        volume_key = (runtime_params.get("volume_key")
+                      or get_cfg(conf, "volume_key", "")).strip()
+        path = (runtime_params.get("path") or "/").strip() or "/"
+        if not volume_key:
+            return fail("volume_key is required for list_files (the full "
+                        "catalog.schema.volume key from op=list_volumes).",
+                        "ValidationError")
+
+        lake = (runtime_params.get("data_lake_ocid")
+                or get_cfg(conf, "data_lake_ocid", "")).strip()
+        api_version = str(get_cfg(conf, "api_version", "20260430")).strip()
+        service_path = str(get_cfg(conf, "service_path", "aiDataPlatforms")).strip()
+        url = (f"https://aidp.{region.strip()}.oci.oraclecloud.com/"
+               f"{api_version}/{service_path}/{lake}/volumes/"
+               f"{quote(volume_key, safe='')}/files?path={quote(path, safe='')}")
+        debug(f"GET {url}")
+
+        try:
+            r = requests.get(url, auth=signer, timeout=timeout,
+                             headers={"Accept": "application/json"})
+            r.raise_for_status()
+        except requests.HTTPError as e:
+            status = e.response.status_code if e.response is not None else "?"
+            body = e.response.text[:300] if e.response is not None else ""
+            hint = (" — confirm volume_key is the exact `key` from "
+                    "op=list_volumes (catalog.schema.volume).") if status == 404 else ""
+            return fail(f"HTTP {status} from {url}: {body}{hint}", "HTTPError",
+                        redacted_credential=meta)
+
+        body = r.json()
+        items = body.get("items", body if isinstance(body, list) else [])
+        return ok({
+            "operation": "list_files",
+            "url": url,
+            "volume_key": volume_key,
+            "path": path,
+            "count": len(items),
+            "items": [
+                {"name": it.get("name") or it.get("displayName"),
+                 "path": it.get("path"),
+                 "type": (it.get("type") or it.get("objectType") or "file")}
+                for it in items
+            ],
             "redacted_credential": meta,
         })

@@ -18,15 +18,28 @@
             "list_schemas",
             "list_tables",
             "list_volumes",
-            "list_kbs"
+            "list_kbs",
+            "list_files"
           ],
           "default": "whoami",
           "examples": [
             "whoami",
             "list_catalogs",
             "list_schemas",
-            "list_volumes"
+            "list_volumes",
+            "list_files"
           ]
+        },
+        {
+          "name": "volume_key",
+          "type": "string",
+          "description": "For op=list_files: the full dotted volume key catalog.schema.volume (e.g. construction_catalog.construction_schema.construction_documents), from op=list_volumes. Falls back to conf.volume_key."
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "description": "For op=list_files: folder path inside the volume to list. Defaults to '/' (volume root). Pass a subfolder to descend.",
+          "default": "/"
         },
         {
           "name": "credential_name",
