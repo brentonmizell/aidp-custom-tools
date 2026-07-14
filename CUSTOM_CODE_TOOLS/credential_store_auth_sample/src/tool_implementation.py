@@ -168,13 +168,13 @@ class CredentialStoreAuthSample(CustomToolBase):
             if op == "list_files":
                 return DebugLog.embed(cls._do_list_files(
                     signer, meta, conf, runtime_params, region, timeout))
-            if op == "get_kb":
-                return DebugLog.embed(cls._do_get_kb(
-                    signer, meta, conf, runtime_params, region, timeout))
+            if op in ("get_kb", "get_volume"):
+                return DebugLog.embed(cls._do_get_by_key(
+                    op, signer, meta, conf, runtime_params, region, timeout))
             return DebugLog.embed(fail(
                 f"Unknown op `{op}`. Valid: whoami | list_catalogs | "
                 f"list_schemas | list_tables | list_volumes | list_kbs | "
-                f"list_files | get_kb.", "ValidationError"))
+                f"list_files | get_kb | get_volume.", "ValidationError"))
         except requests.HTTPError as e:
             status = e.response.status_code if e.response is not None else "?"
             body = e.response.text[:500] if e.response is not None else ""
@@ -394,23 +394,35 @@ class CredentialStoreAuthSample(CustomToolBase):
         })
 
     @classmethod
-    def _do_get_kb(cls, signer, meta, conf, runtime_params, region, timeout):
-        """Fetch one knowledge base directly by its hex key — how a RAG tool
-        references a KB.  GET /knowledgeBases/{kbKey}."""
+    def _do_get_by_key(cls, op, signer, meta, conf, runtime_params, region, timeout):
+        """Fetch one resource DIRECTLY by its own key — no catalogKey/schemaKey
+        filter. This is the pattern that works reliably (same as list_files):
+
+            get_kb      GET /knowledgeBases/{kbKey}     (kb_key,     hex)
+            get_volume  GET /volumes/{volumeKey}        (volume_key, catalog.schema.volume)
+
+        Prefer these over the filtered list_* ops when you already have the
+        resource's key — they don't depend on getting catalogKey right.
+        """
         from urllib.parse import quote
 
-        kb_key = (runtime_params.get("kb_key")
-                  or get_cfg(conf, "kb_key", "")).strip()
-        if not kb_key:
-            return fail("kb_key is required for get_kb (the KB's hex key, e.g. "
-                        "from op=list_kbs).", "ValidationError")
+        if op == "get_kb":
+            key = (runtime_params.get("kb_key") or get_cfg(conf, "kb_key", "")).strip()
+            key_name, resource = "kb_key", "knowledgeBases"
+        else:  # get_volume
+            key = (runtime_params.get("volume_key")
+                   or get_cfg(conf, "volume_key", "")).strip()
+            key_name, resource = "volume_key", "volumes"
+        if not key:
+            return fail(f"{key_name} is required for {op}.", "ValidationError")
+
         lake = (runtime_params.get("data_lake_ocid")
                 or get_cfg(conf, "data_lake_ocid", "")).strip()
         api_version = str(get_cfg(conf, "api_version", "20260430")).strip()
         service_path = str(get_cfg(conf, "service_path", "aiDataPlatforms")).strip()
         url = (f"https://aidp.{region.strip()}.oci.oraclecloud.com/"
-               f"{api_version}/{service_path}/{lake}/knowledgeBases/"
-               f"{quote(kb_key, safe='')}")
+               f"{api_version}/{service_path}/{lake}/{resource}/"
+               f"{quote(key, safe='')}")
         debug(f"GET {url}")
 
         try:
@@ -420,22 +432,22 @@ class CredentialStoreAuthSample(CustomToolBase):
         except requests.HTTPError as e:
             status = e.response.status_code if e.response is not None else "?"
             body = e.response.text[:300] if e.response is not None else ""
-            hint = (" — confirm kb_key is the exact hex `key` from "
-                    "op=list_kbs.") if status == 404 else ""
+            hint = (f" — confirm {key_name} is the exact `key` for this "
+                    f"resource.") if status == 404 else ""
             return fail(f"HTTP {status} from {url}: {body}{hint}", "HTTPError",
                         redacted_credential=meta)
 
-        kb = r.json()
+        obj = r.json()
         return ok({
-            "operation": "get_kb",
+            "operation": op,
             "url": url,
-            "kb": {
-                "key": kb.get("key"),
-                "displayName": kb.get("displayName"),
-                "description": kb.get("description"),
-                "lifecycleState": kb.get("lifecycleState"),
-                "catalogKey": kb.get("catalogKey"),
-                "schemaKey": kb.get("schemaKey"),
+            "resource": {
+                "key": obj.get("key"),
+                "displayName": obj.get("displayName"),
+                "description": obj.get("description"),
+                "lifecycleState": obj.get("lifecycleState"),
+                "catalogKey": obj.get("catalogKey"),
+                "schemaKey": obj.get("schemaKey"),
             },
             "redacted_credential": meta,
         })

@@ -20,16 +20,16 @@
             "list_volumes",
             "list_kbs",
             "list_files",
-            "get_kb"
+            "get_kb",
+            "get_volume"
           ],
           "default": "whoami",
           "examples": [
             "whoami",
             "list_catalogs",
-            "list_schemas",
-            "list_volumes",
             "list_files",
-            "get_kb"
+            "get_kb",
+            "get_volume"
           ]
         },
         {
