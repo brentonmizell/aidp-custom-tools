@@ -776,6 +776,134 @@ class CatalogBrowserTool(CustomToolBase):
             return _err(e)
 
 
+def _kb_base_from(base: str) -> str:
+    """Derive the 20240831/dataLakes base (where /knowledgeBases is served)
+    from the configured base host + lake. /knowledgeBases 404s on
+    20260430/aiDataPlatforms."""
+    parts = base.rstrip("/").split("/")
+    if len(parts) >= 6:
+        host = "/".join(parts[:3])
+        lake = parts[-1]
+        return f"{host}/20240831/dataLakes/{lake}"
+    return base
+
+
+def _map_render_text(tree, counts):
+    lines = [f"{counts['catalogs']} catalogs | {counts['schemas']} schemas | "
+             f"{counts['tables']} tables | {counts['volumes']} volumes | "
+             f"{counts['knowledge_bases']} KBs", ""]
+    for c in tree:
+        lines.append(f"* {c['catalog_key']} [{c.get('type') or '?'}]")
+        for s in c.get("schemas", []):
+            lines.append(f"  - {s.get('schema_name') or s.get('schema_key')}")
+            for label, key in (("tables", "tables"), ("volumes", "volumes"),
+                               ("KBs", "knowledge_bases")):
+                items = s.get(key, [])
+                if items:
+                    names = ", ".join(i.get("name") or i.get("key") for i in items)
+                    lines.append(f"      {label} ({len(items)}): {names}")
+            if s.get("errors"):
+                lines.append(f"      ! errors: {s['errors']}")
+    return "\n".join(lines)
+
+
+@CustomToolBase.register
+class CatalogMapTool(CustomToolBase):
+    """One-shot discovery: walk the whole Master catalog (catalogs -> schemas
+    -> tables/volumes/knowledge bases) and return every real key in a nested
+    tree, plus a readable text summary. Pass catalog_key (a catalog NAME) to
+    scope to one catalog; omit to map the entire data lake.
+
+    Handles the AIDP key/surface quirks: catalogKey = catalog name; schemaKey
+    = the schema's dotted key; /knowledgeBases is fetched from the
+    20240831/dataLakes surface where it is served.
+    """
+
+    @classmethod
+    def _validate_config(cls, conf, runtime_params=None, **context_vars):
+        CatalogFileTool._validate_config(conf, runtime_params, **context_vars)
+
+    @classmethod
+    def _execute_tool(cls, conf, runtime_params, **context_vars):
+        from urllib.parse import quote
+        only_catalog = (runtime_params.get("catalog_key")
+                        or get_cfg(conf, "catalog_key", "")).strip()
+        try:
+            base, signer, requests, timeout = _client(conf, context_vars)
+        except Exception as e:
+            return _err(e)
+        kb_base = _kb_base_from(base)
+
+        def gi(url):
+            try:
+                return _get(requests, signer, url, timeout).get("items", []), None
+            except Exception as e:
+                st = getattr(getattr(e, "response", None), "status_code", None)
+                return [], f"HTTP {st}" if st else type(e).__name__
+
+        def get_kbs(cat_q, s_dotted, s_plain):
+            for b, sk in ((kb_base, s_plain), (kb_base, s_dotted),
+                          (base, s_plain), (base, s_dotted)):
+                items, err = gi(f"{b}/knowledgeBases?catalogKey={cat_q}"
+                                f"&schemaKey={quote(sk, safe='')}&limit=1000")
+                if err is None:
+                    return items, None
+            return [], "HTTP 404"
+
+        try:
+            catalogs, cat_err = gi(f"{base}/catalogs")
+            if cat_err:
+                return _err(ValueError(f"list catalogs failed: {cat_err}"))
+            counts = {"catalogs": 0, "schemas": 0, "tables": 0,
+                      "volumes": 0, "knowledge_bases": 0}
+            tree = []
+            for c in catalogs:
+                c_name = c.get("key") or c.get("displayName")
+                if only_catalog and c_name != only_catalog \
+                        and c.get("displayName") != only_catalog:
+                    continue
+                counts["catalogs"] += 1
+                c_q = quote(c_name, safe="")
+                schemas, s_err = gi(f"{base}/schemas?catalogKey={c_q}")
+                c_node = {"catalog_key": c_name,
+                          "type": c.get("catalogType") or c.get("type"),
+                          "schemas": [], "error": s_err}
+                for s in schemas:
+                    counts["schemas"] += 1
+                    s_key = s.get("key") or s.get("displayName")   # dotted
+                    s_plain = s.get("displayName") or s_key.split(".")[-1]
+                    s_q = quote(s_key, safe="")
+                    tbls, t_err = gi(f"{base}/tables?catalogKey={c_q}&schemaKey={s_q}")
+                    vols, v_err = gi(f"{base}/volumes?catalogKey={c_q}&schemaKey={s_q}")
+                    kbs, k_err = get_kbs(c_q, s_key, s_plain)
+                    counts["tables"] += len(tbls)
+                    counts["volumes"] += len(vols)
+                    counts["knowledge_bases"] += len(kbs)
+                    proj = lambda xs: [{"key": x.get("key"),
+                                        "name": x.get("displayName") or x.get("name")}
+                                       for x in xs]
+                    c_node["schemas"].append({
+                        "schema_key": s.get("key"),
+                        "schema_name": s.get("displayName"),
+                        "tables": proj(tbls),
+                        "volumes": proj(vols),
+                        "knowledge_bases": proj(kbs),
+                        "errors": {k: e for k, e in
+                                   (("tables", t_err), ("volumes", v_err), ("kbs", k_err))
+                                   if e},
+                    })
+                tree.append(c_node)
+
+            payload = {"operation": "map",
+                       "scope": only_catalog or "(all catalogs)",
+                       "summary": counts,
+                       "text": _map_render_text(tree, counts),
+                       "catalogs": tree}
+            return DebugLog.embed(ok(payload, **payload))
+        except Exception as e:
+            return _err(e)
+
+
 # --------------------------------------------------------------------------- #
 # KB ingestion
 # --------------------------------------------------------------------------- #

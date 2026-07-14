@@ -1,0 +1,64 @@
+{
+  "displayName": "Test Credentials",
+  "description": "Validate an AIDP Credential Store secret end to end: resolves it, checks the required OCI keys, builds the signer, and confirms it authenticates against AIDP (GET /catalogs). Reports pass/fail per step. Nothing written; all values masked. Run this before wiring a credential into other tools.",
+  "tools": [
+    {
+      "toolClassName": "TestCredentialsTool",
+      "displayName": "Test Credentials",
+      "description": "Point it at a credential (display name or OCI Vault secret OCID) and it reports which checks pass: resolved, required keys present, fingerprint valid, data_lake_ocid present, signer built, authenticated.",
+      "version": "1.0.0",
+      "schema": [
+        {
+          "name": "credential_name",
+          "type": "string",
+          "description": "The credential to test: a SECRET_TOKEN display name (5 keys: tenancy, user, fingerprint, private_key, data_lake_ocid) or an OCI Vault secret OCID (ocid1.vaultsecret...). Falls back to conf.credential_name.",
+          "examples": [
+            "aidp_oci_key",
+            "ocid1.vaultsecret.oc1.iad.amaaaa..."
+          ]
+        }
+      ],
+      "conf": {
+        "credential_name": "",
+        "data_lake_ocid": "ocid1.aidataplatform.oc1.iad.amaaaaaawah6xyqaic64ra5oaflf6hx6lnbuybhxxukkejoa2huz7iyq4tzq",
+        "region": "us-ashburn-1",
+        "api_version": "20260430",
+        "service_path": "aiDataPlatforms",
+        "timeout": 20
+      },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
+      "_uiHints": {
+        "conf": {
+          "credential_name": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "help": "Optional default if you don't pass credential_name at call time."
+          },
+          "data_lake_ocid": {
+            "kind": "dropdown",
+            "source": "dataLakes",
+            "help": "Optional \u2014 the auth check reads data_lake_ocid from the credential bundle first, then here."
+          },
+          "region": {
+            "kind": "dropdown",
+            "source": "regions",
+            "help": "Optional \u2014 auto-derived from the data_lake_ocid region code."
+          },
+          "api_version": {
+            "kind": "readonly"
+          },
+          "service_path": {
+            "kind": "readonly"
+          }
+        },
+        "schema": {
+          "credential_name": {
+            "inputStyle": "singleline"
+          }
+        }
+      }
+    }
+  ]
+}

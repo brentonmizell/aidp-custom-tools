@@ -615,6 +615,90 @@
       }
     },
     {
+      "toolClassName": "CatalogMapTool",
+      "displayName": "Catalog Map",
+      "description": "One-shot discovery: walk the whole Master catalog (catalogs -> schemas -> tables/volumes/knowledge bases) and return every key in a nested tree + a readable text summary. Pass catalog_key (a catalog NAME) to scope to one catalog, or omit to map the whole data lake. credential_name is read from conf.",
+      "version": "1.0.0",
+      "schema": [
+        {
+          "name": "catalog_key",
+          "type": "string",
+          "description": "Optional. A catalog NAME (e.g. construction_catalog) to scope the walk to one catalog. Omit to map every catalog in the data lake."
+        }
+      ],
+      "conf": {
+        "region": "us-ashburn-1",
+        "data_lake_ocid": "ocid1.aidataplatform.oc1.iad.amaaaaaawah6xyqaic64ra5oaflf6hx6lnbuybhxxukkejoa2huz7iyq4tzq",
+        "api_version": "20260430",
+        "timeout": 30,
+        "auth_mode": "resource_principal",
+        "tenancy_ocid": "ocid1.tenancy.oc1..aaaaaaaapbfjybybo2ry37rdu2brudxyo3vgy6zwysu352cls5hrc57eil7q",
+        "user_ocid": "ocid1.user.oc1..aaaaaaaazptbnv3essyijk7aeuguk5jr4fmdv7vi6atxszbixk7ryzsunlua",
+        "fingerprint": "3c:ea:ef:c9:c8:3f:77:08:40:39:fc:67:76:91:05:27",
+        "private_key_content": "",
+        "pass_phrase": "",
+        "credential_name": "",
+        "catalog_key": ""
+      },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
+      "_uiHints": {
+        "conf": {
+          "region": {
+            "kind": "dropdown",
+            "source": "regions"
+          },
+          "data_lake_ocid": {
+            "kind": "dropdown",
+            "source": "dataLakes"
+          },
+          "auth_mode": {
+            "kind": "enum",
+            "values": [
+              "resource_principal",
+              "user_principal",
+              "instance_principal"
+            ],
+            "inputStyle": "singleline"
+          },
+          "private_key_content": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "pass_phrase": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "api_version": {
+            "inputStyle": "singleline"
+          },
+          "timeout": {
+            "inputStyle": "singleline"
+          },
+          "tenancy_ocid": {
+            "inputStyle": "singleline"
+          },
+          "user_ocid": {
+            "inputStyle": "singleline"
+          },
+          "fingerprint": {
+            "inputStyle": "singleline"
+          },
+          "credential_name": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "help": "Display name of a SECRET_TOKEN credential in AIDPs Credential Store. Leave empty to fall back to resource_principal (which 401s against public AIDP data-plane endpoints per the Jun-17 thread)."
+          }
+        },
+        "schema": {
+          "catalog_key": {
+            "inputStyle": "singleline"
+          }
+        }
+      }
+    },
+    {
       "toolClassName": "KBIngestTool",
       "displayName": "KB Ingestion",
       "description": "Lists ingestion jobs for an AIDP knowledge base, or triggers an ingestion run to (re)index it.\n\nWhen to use: Use when the user asks to refresh/reindex/re-ingest a knowledge base, check ingestion status, or kick off a new RAG ingest after documents change. Supports `list_jobs` (discovery) and `trigger` (start a run). Default to `list_jobs` first when the job key is unknown.\n\nHow to discover inputs: If the user hasn't named a KB, call CatalogBrowserTool(list='knowledgeBases', catalog_key=..., schema_key=...) to enumerate KBs. Then call KBIngestTool(operation='list_jobs', kb_key=...) and ask which job to trigger.\n\nHow to communicate: For listings, show job names + last-run status. For triggers, return the run id and current state.\n\nExample: KBIngestTool(operation='list_jobs', kb_key='construction_catalog.construction_schema.safety_kb') -> KBIngestTool(operation='trigger', kb_key='...', job_key='daily_refresh').",
