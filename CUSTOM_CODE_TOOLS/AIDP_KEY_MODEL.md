@@ -58,15 +58,24 @@ GET /knowledgeBases/{kbKey}                          # kbKey = hex GUID
 Base:
 `https://aidp.<region>.oci.oraclecloud.com/<apiVersion>/<scope>/<dataLakeOcid>/…`
 
-Two working surfaces observed on the same lake:
-- `20260430/aiDataPlatforms` — used by `credential_store_auth_sample` and the
-  wired tools; whoami / list_catalogs / list_files / the filtered lists all
-  work here.
-- `20240831/dataLakes` — used by the AIDP web console.
+Two surfaces on the same lake — and they are NOT interchangeable per
+endpoint:
+- `20260430/aiDataPlatforms` — serves catalogs, schemas, tables, volumes,
+  volume files. whoami / list_catalogs / list_files all work here.
+- `20240831/dataLakes` — used by the AIDP web console. **`/knowledgeBases`
+  is served ONLY here** — it 404s on `20260430/aiDataPlatforms` regardless
+  of schemaKey format. Catalogs/schemas/tables/volumes also work here.
 
-If a call misbehaves on one surface, try the other (`conf.api_version` +
-`conf.service_path`), but the usual cause of a failed listing is a wrong
-`catalogKey` (hex GUID instead of the name), not the surface.
+So `credential_store_auth_sample` and `map` hit the newer surface for
+everything except KBs, and fall back to `20240831/dataLakes` for
+`/knowledgeBases` and `/knowledgeBases/{kbKey}`.
+
+Observed KB quirk: the KB list also accepts the PLAIN schema name as
+`schemaKey` (the response echoes it that way); `map` tries plain first then
+dotted on the dataLakes surface.
+
+If a filtered list still misbehaves, the usual cause is a wrong `catalogKey`
+(hex GUID instead of the name) — not the surface.
 
 ## Why the wired tools already do this right
 

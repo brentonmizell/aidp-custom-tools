@@ -277,10 +277,13 @@ class CredentialStoreAuthSample(CustomToolBase):
 
         api_version = str(get_cfg(conf, "api_version", "20260430")).strip()
         service_path = str(get_cfg(conf, "service_path", "aiDataPlatforms")).strip()
-        base = (f"https://aidp.{region.strip()}.oci.oraclecloud.com/"
-                f"{api_version}/{service_path}/{lake}")
+        host = f"https://aidp.{region.strip()}.oci.oraclecloud.com"
+        base = f"{host}/{api_version}/{service_path}/{lake}"
         cat_q = quote(catalog, safe="")
         sch_q = quote(schema, safe="")
+        # /knowledgeBases is served on 20240831/dataLakes, not the newer surface.
+        if op == "list_kbs":
+            base = f"{host}/20240831/dataLakes/{lake}"
         path = {
             "list_catalogs": "/catalogs",
             "list_schemas":  f"/schemas?catalogKey={cat_q}",
@@ -427,8 +430,11 @@ class CredentialStoreAuthSample(CustomToolBase):
                 or get_cfg(conf, "data_lake_ocid", "")).strip()
         api_version = str(get_cfg(conf, "api_version", "20260430")).strip()
         service_path = str(get_cfg(conf, "service_path", "aiDataPlatforms")).strip()
-        url = (f"https://aidp.{region.strip()}.oci.oraclecloud.com/"
-               f"{api_version}/{service_path}/{lake}/{resource}/"
+        host = f"https://aidp.{region.strip()}.oci.oraclecloud.com"
+        # /knowledgeBases is served on 20240831/dataLakes, not the newer surface.
+        if resource == "knowledgeBases":
+            api_version, service_path = "20240831", "dataLakes"
+        url = (f"{host}/{api_version}/{service_path}/{lake}/{resource}/"
                f"{quote(key, safe='')}")
         debug(f"GET {url}")
 
@@ -477,11 +483,15 @@ class CredentialStoreAuthSample(CustomToolBase):
                         or get_cfg(conf, "catalog_key", "")).strip()
         api_version = str(get_cfg(conf, "api_version", "20260430")).strip()
         service_path = str(get_cfg(conf, "service_path", "aiDataPlatforms")).strip()
-        base = (f"https://aidp.{region.strip()}.oci.oraclecloud.com/"
-                f"{api_version}/{service_path}/{lake}")
+        host = f"https://aidp.{region.strip()}.oci.oraclecloud.com"
+        base = f"{host}/{api_version}/{service_path}/{lake}"
+        # The /knowledgeBases endpoint is not served on 20260430/aiDataPlatforms
+        # (404) but works on the console's 20240831/dataLakes surface. Use that
+        # for KBs only; catalogs/schemas/tables/volumes stay on the configured
+        # surface where they work.
+        kb_base = f"{host}/20240831/dataLakes/{lake}"
 
-        def get_items(path):
-            url = base + path
+        def _get(url):
             try:
                 r = requests.get(url, auth=signer, timeout=timeout,
                                  headers={"Accept": "application/json"})
@@ -493,6 +503,20 @@ class CredentialStoreAuthSample(CustomToolBase):
                 return [], f"HTTP {st}"
             except Exception as e:
                 return [], f"{type(e).__name__}"
+
+        def get_items(path):
+            return _get(base + path)
+
+        def get_kbs(cat_q, schema_dotted, schema_plain):
+            # Try surface × schemaKey combos; return the first that works.
+            for b, sk in ((kb_base, schema_plain), (kb_base, schema_dotted),
+                          (base, schema_plain), (base, schema_dotted)):
+                items, err = _get(
+                    f"{b}/knowledgeBases?catalogKey={cat_q}"
+                    f"&schemaKey={quote(sk, safe='')}")
+                if err is None:
+                    return items, None
+            return [], "HTTP 404 (all surface/schemaKey combos)"
 
         catalogs, cat_err = get_items("/catalogs")
         if cat_err:
@@ -519,14 +543,14 @@ class CredentialStoreAuthSample(CustomToolBase):
                 # The schemaKey filter wants the schema's own `key` — the
                 # DOTTED catalog.schema form (not the plain displayName; that
                 # returns HTTP 400/404). Same rule as catalogKey = catalog key.
-                s_key = s.get("key") or s.get("displayName")
+                s_key = s.get("key") or s.get("displayName")   # dotted
+                s_plain = s.get("displayName") or s_key.split(".")[-1]
                 s_q = quote(s_key, safe="")
                 tbls, t_err = get_items(
                     f"/tables?catalogKey={c_q}&schemaKey={s_q}")
                 vols, v_err = get_items(
                     f"/volumes?catalogKey={c_q}&schemaKey={s_q}")
-                kbs, k_err = get_items(
-                    f"/knowledgeBases?catalogKey={c_q}&schemaKey={s_q}")
+                kbs, k_err = get_kbs(c_q, s_key, s_plain)
                 counts["tables"] += len(tbls)
                 counts["volumes"] += len(vols)
                 counts["knowledge_bases"] += len(kbs)
