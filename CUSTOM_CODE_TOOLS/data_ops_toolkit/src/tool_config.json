@@ -1,28 +1,60 @@
 {
   "displayName": "Data Ops Toolkit",
-  "description": "Filter, compare, and reshape tabular records.",
+  "description": "Filter, compare, and reshape tabular records with a single data-ops tool.",
   "tools": [
     {
-      "toolClassName": "FilterTool",
-      "displayName": "Filter Records",
-      "description": "Filters a list of tabular records, keeping only rows whose named field matches a comparison operator.\n\nWhen to use: Use when the user asks to narrow, subset, where-clause, or keep-only records matching a condition (amount over 1000, status equals 'open', name contains 'acme', regex match). Supports `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `contains`, `startswith`, `regex`, `in`, `is_null`, `not_null`.\n\nHow to discover inputs: If records live in a catalog volume or workspace and the user hasn't named the path, FIRST call CatalogBrowserTool(list='volumes', ...) or CatalogFileTool(operation='list', source_uri=...) to find the file, then pass it as `source_uri`. Prefer the URI form (`master:cat.sch.vol:/file.json` or `workspace:/path/file.csv`) over inline `data`.\n\nHow to communicate: Report the count kept vs. dropped and show a few sample matching rows. Do not dump the entire result set.\n\nExample: user says 'show invoices over $1000 from the Q3 export'. CatalogFileTool(operation='list', source_uri='master:fin.fin.exports:/') -> FilterTool(source_uri='master:fin.fin.exports:/q3_invoices.csv', field='amount', operator='gt', value='1000').",
-      "version": "1.3.2",
+      "toolClassName": "DataManipulationTool",
+      "displayName": "Data Ops",
+      "description": "Reshape, filter, and diff tabular records (a list of objects). One tool driven by `operation`:\n\n- `select` / `rename` / `sort` / `dedupe` / `groupby` reshape via pandas (use `spec`).\n- `filter` keeps rows where `field` `operator` `value` (eq/ne/gt/gte/lt/lte/contains/startswith/regex/in/is_null/not_null).\n- `compare` diffs two record sets matched on `key`, reporting added/removed/changed rows.\n\nWhen to use: Any time the user asks to pick columns, rename, sort, drop duplicates, summarize/count/sum by group, subset/where-clause records, or diff/reconcile two snapshots.\n\nHow to discover inputs: If records live in AIDP storage and the user hasn't named the path, FIRST call CatalogFileTool(operation='list', ...) or WorkspaceFileTool(operation='list', ...) to locate the file, then pass it as `source_uri` (for compare use `left_uri`/`right_uri`). Prefer the URI form (`master:cat.sch.vol:/file.csv` or `workspace:/path/file.json`) over inline `data`/`left`/`right`.\n\nHow to communicate: Report the resulting counts (rows kept, added/removed/changed) and show a few sample rows. Do not echo the entire table.\n\nExamples: total revenue by region -> operation='groupby', source_uri='workspace:/exports/orders.csv', spec='{\"by\":[\"region\"],\"agg\":{\"revenue\":\"sum\"}}'. Invoices over $1000 -> operation='filter', source_uri='master:fin.fin.exports:/q3.csv', field='amount', operator='gt', value='1000'. Diff two snapshots -> operation='compare', left_uri='workspace:/snap/a.json', right_uri='workspace:/snap/b.json', key='customer_id'.",
+      "version": "2.0.0",
       "schema": [
+        {
+          "name": "operation",
+          "type": "string",
+          "description": "What to do. `select` keeps columns, `rename` relabels fields, `sort` orders rows, `dedupe` drops duplicates, `groupby` aggregates (all use `spec`). `filter` keeps rows matching `field`/`operator`/`value`. `compare` diffs `left`/`right` record sets on `key`.",
+          "enum": [
+            "select",
+            "rename",
+            "sort",
+            "dedupe",
+            "groupby",
+            "filter",
+            "compare"
+          ],
+          "default": "filter",
+          "examples": [
+            "filter",
+            "groupby",
+            "compare",
+            "select"
+          ]
+        },
         {
           "name": "data",
           "type": "string",
-          "description": "Inline records to filter, as a JSON array of objects. Use only when records are small and already in hand; for files in AIDP storage use `source_uri` instead. Ignored when `source_uri` is set. Example: `[{\"amount\":1200,\"status\":\"open\"},{\"amount\":50,\"status\":\"closed\"}]`.",
+          "description": "Inline records for reshape/filter operations, as a JSON array of objects. Use only for small in-hand data; for stored files use `source_uri`. Ignored when `source_uri` is set, and unused by `compare` (which uses `left`/`right`). Example: `[{\"amount\":1200,\"status\":\"open\"}]`.",
           "default": "",
           "examples": [
             "[{\"id\":1,\"amount\":1200,\"status\":\"open\"},{\"id\":2,\"amount\":50,\"status\":\"closed\"}]",
-            "[{\"name\":\"Acme\",\"region\":\"NA\"},{\"name\":\"Globex\",\"region\":\"EU\"}]"
+            "[{\"region\":\"NA\",\"revenue\":100},{\"region\":\"EU\",\"revenue\":80}]"
+          ]
+        },
+        {
+          "name": "spec",
+          "type": "string",
+          "description": "Parameters for reshape operations (select/rename/sort/dedupe/groupby) as a JSON object string: select=`{\"columns\":[\"a\",\"b\"]}`, rename=`{\"map\":{\"old\":\"new\"}}`, sort=`{\"by\":[\"field\"],\"ascending\":true}`, dedupe=`{\"subset\":[\"id\"]}`, groupby=`{\"by\":[\"region\"],\"agg\":{\"revenue\":\"sum\"}}`. Ignored by filter/compare.",
+          "default": "",
+          "examples": [
+            "{\"columns\":[\"id\",\"name\",\"region\"]}",
+            "{\"by\":[\"region\"],\"agg\":{\"revenue\":\"sum\",\"orders\":\"count\"}}",
+            "{\"by\":[\"created_at\"],\"ascending\":false}"
           ]
         },
         {
           "name": "field",
           "type": "string",
-          "description": "The record field name to test on each row. Must exist on the input objects. Example: `amount`, `status`, `customer.name`.",
-          "default": "amount",
+          "description": "[filter] The record field to test on each row. Must exist on the input objects. Example: `amount`, `status`, `name`.",
+          "default": "",
           "examples": [
             "amount",
             "status",
@@ -32,7 +64,7 @@
         {
           "name": "operator",
           "type": "string",
-          "description": "The comparison to apply. Use `eq`/`ne` for equality, `gt`/`gte`/`lt`/`lte` for numeric or date ordering, `contains`/`startswith` for substring, `regex` for pattern match, `in` when `value` is a JSON array, `is_null`/`not_null` for presence checks (no `value` needed).",
+          "description": "[filter] The comparison to apply. `eq`/`ne` equality, `gt`/`gte`/`lt`/`lte` numeric/date ordering, `contains`/`startswith` substring, `regex` pattern, `in` (value is a JSON array), `is_null`/`not_null` presence (no `value` needed).",
           "enum": [
             "eq",
             "ne",
@@ -57,8 +89,8 @@
         {
           "name": "value",
           "type": "string",
-          "description": "The value to compare each record's field against. Strings are compared as-is; numbers and booleans are coerced. For `in`, pass a JSON array string like `[\"open\",\"pending\"]`. Not needed for `is_null` / `not_null`.",
-          "default": "1000",
+          "description": "[filter] The value to compare each record's `field` against. Strings compared as-is; numbers/booleans coerced. For `in`, pass a JSON array string like `[\"open\",\"pending\"]`. Not needed for `is_null` / `not_null`.",
+          "default": "",
           "examples": [
             "1000",
             "open",
@@ -66,43 +98,114 @@
           ]
         },
         {
+          "name": "left",
+          "type": "string",
+          "description": "[compare] Inline left/old/baseline record set as a JSON array of objects. Use only for small in-hand data; for stored files use `left_uri`. Ignored when `left_uri` or a paired `source_uri` is set.",
+          "default": "",
+          "examples": [
+            "[{\"id\":1,\"name\":\"Acme\",\"status\":\"active\"}]"
+          ]
+        },
+        {
+          "name": "right",
+          "type": "string",
+          "description": "[compare] Inline right/new/current record set as a JSON array of objects. Use only for small in-hand data; for stored files use `right_uri`. Ignored when `right_uri` or a paired `source_uri` is set.",
+          "default": "",
+          "examples": [
+            "[{\"id\":1,\"name\":\"Acme Inc\",\"status\":\"active\"}]"
+          ]
+        },
+        {
+          "name": "key",
+          "type": "string",
+          "description": "[compare] The field used to match rows across the two sets. Rows on one side only become `added`/`removed`; matched rows with differing fields become `changed`. Example: `customer_id`, `sku`, `id`.",
+          "default": "",
+          "examples": [
+            "customer_id",
+            "sku",
+            "id"
+          ]
+        },
+        {
           "name": "source_uri",
           "type": "string",
-          "description": "Fully-qualified AIDP URI to read input records from. Overrides the inline `data` field. Format: `master:<catalog>.<schema>.<volume>:/<path>` for catalog volumes or `workspace:/<path>` for the user workspace. File extension drives parsing: `.json`, `.jsonl`, or `.csv`. Prefer this URI form over inline `data` for any non-trivial dataset.",
-          "default": "master:fin_catalog.fin_schema.exports:/q3_invoices.csv",
+          "description": "AIDP URI to read input records from (reshape/filter), overriding inline `data`. For `compare`, a single paired document `{\"left\":[...],\"right\":[...]}`. Format: `master:<catalog>.<schema>.<volume>:/<path>` or `workspace:/<path>`. Extension drives parsing: `.json`, `.jsonl`, `.csv`.",
+          "default": "",
           "examples": [
-            "master:fin_catalog.fin_schema.exports:/q3_invoices.csv",
-            "workspace:/uploads/orders.jsonl",
-            "master:construction_catalog.construction_schema.construction_documents:/inventory.json"
+            "master:fin_catalog.fin_schema.exports:/orders.csv",
+            "workspace:/uploads/customers.jsonl"
+          ]
+        },
+        {
+          "name": "left_uri",
+          "type": "string",
+          "description": "[compare] AIDP URI to read the left/old record set from. Takes precedence over `source_uri` and inline `left`. Same URI grammar; extension drives parsing (`.json`/`.jsonl`/`.csv`).",
+          "default": "",
+          "examples": [
+            "workspace:/snapshots/customers_2026-06-15.json",
+            "master:fin_catalog.fin_schema.exports:/baseline.csv"
+          ]
+        },
+        {
+          "name": "right_uri",
+          "type": "string",
+          "description": "[compare] AIDP URI to read the right/new record set from. Takes precedence over `source_uri` and inline `right`. Same URI grammar; extension drives parsing (`.json`/`.jsonl`/`.csv`).",
+          "default": "",
+          "examples": [
+            "workspace:/snapshots/customers_2026-06-16.json",
+            "master:fin_catalog.fin_schema.exports:/current.csv"
           ]
         },
         {
           "name": "dest_uri",
           "type": "string",
-          "description": "Optional AIDP URI to write the filter result to. Same URI grammar as `source_uri` (`master:cat.sch.vol:/path` or `workspace:/path`). Extension drives serialization: `.json` writes the full envelope, `.jsonl`/`.csv` writes only the matched rows. The structured envelope is still returned to the caller. Optional; omit to keep results in-memory only.",
-          "default": "workspace:/exports/filtered_invoices.csv",
+          "description": "Optional AIDP URI to write the result to. Same URI grammar (`master:cat.sch.vol:/path` or `workspace:/path`). `.json` writes the full envelope; `.jsonl`/`.csv` writes the row list (reshaped/matched rows, or the `changed` rows for compare). The structured envelope is still returned to the caller.",
+          "default": "",
           "examples": [
-            "workspace:/exports/filtered_invoices.csv",
-            "master:fin_catalog.fin_schema.exports:/q3_open_invoices.jsonl",
+            "workspace:/exports/result.csv",
+            "master:fin_catalog.fin_schema.exports:/out.jsonl",
             "workspace:/scratch/result.json"
           ]
         }
       ],
       "conf": {
-        "max_results": 1000
+        "max_rows": 5000,
+        "max_results": 1000,
+        "tolerance": 1e-09
       },
       "_confDescriptions": {
-        "max_results": "Cap on the number of matching records returned. Prevents oversized payloads back to the agent.",
+        "max_rows": "Cap on rows returned after a reshape operation (select/rename/sort/dedupe/groupby). Protects the agent context from large result sets.",
+        "max_results": "Cap on matching records returned by `filter`.",
+        "tolerance": "[compare] Numeric equality tolerance for float field comparisons. Values within this delta are treated as equal (set 0 for strict equality).",
         "source_uri": "Optional AIDP URI to read input records from instead of the inline 'data' field. Supports master:<catalog>.<schema>.<volume>:/<path> and workspace:/<path>.",
-        "dest_uri": "Optional AIDP URI to write the filter result to. Extension (.json/.jsonl/.csv) controls the serialization."
+        "dest_uri": "Optional AIDP URI to write the result to. Extension (.json/.jsonl/.csv) controls the serialization."
       },
       "_uiHints": {
         "conf": {
+          "max_rows": {
+            "inputStyle": "singleline"
+          },
           "max_results": {
+            "inputStyle": "singleline"
+          },
+          "tolerance": {
             "inputStyle": "singleline"
           }
         },
         "schema": {
+          "operation": {
+            "kind": "enum",
+            "values": [
+              "select",
+              "rename",
+              "sort",
+              "dedupe",
+              "groupby",
+              "filter",
+              "compare"
+            ],
+            "inputStyle": "singleline"
+          },
           "operator": {
             "kind": "enum",
             "values": [
@@ -124,119 +227,20 @@
           "data": {
             "inputStyle": "multiline"
           },
+          "spec": {
+            "inputStyle": "singleline"
+          },
           "field": {
             "inputStyle": "singleline"
           },
           "value": {
             "inputStyle": "singleline"
           },
-          "source_uri": {
-            "inputStyle": "singleline"
-          },
-          "dest_uri": {
-            "inputStyle": "singleline"
-          }
-        }
-      }
-    },
-    {
-      "toolClassName": "CompareTool",
-      "displayName": "Compare Datasets",
-      "description": "Diffs two record sets matched on a key field and reports `added`, `removed`, and `changed` rows with old/new values per field.\n\nWhen to use: Use when the user asks to compare, diff, reconcile, find changes, or detect drift between two snapshots (yesterday vs. today, baseline vs. current, source vs. target).\n\nHow to discover inputs: If the snapshots live in AIDP storage and the user hasn't named the paths, FIRST call CatalogFileTool(operation='list', source_uri='master:cat.sch.vol:/') or WorkspaceFileTool(operation='list', ...) to locate them, then pass `left_uri` and `right_uri`. Prefer the URI form (`master:cat.sch.vol:/file.json` or `workspace:/path/file.csv`) over inline `left`/`right`.\n\nHow to communicate: Report the counts (added/removed/changed) and show a handful of representative changed rows. Don't dump every row.\n\nExample: user says 'diff yesterday's customers against today's'. CompareTool(left_uri='workspace:/snapshots/customers_2026-06-15.json', right_uri='workspace:/snapshots/customers_2026-06-16.json', key='customer_id').",
-      "version": "1.3.2",
-      "schema": [
-        {
-          "name": "left",
-          "type": "string",
-          "description": "Inline left/old/baseline record set as a JSON array of objects. Use only for small in-hand data; for stored files use `left_uri`. Ignored when `left_uri` or a paired `source_uri` is set. Example: `[{\"id\":1,\"name\":\"Acme\"}]`.",
-          "default": "",
-          "examples": [
-            "[{\"id\":1,\"name\":\"Acme\",\"status\":\"active\"}]",
-            "[{\"sku\":\"A1\",\"price\":10},{\"sku\":\"A2\",\"price\":20}]"
-          ]
-        },
-        {
-          "name": "right",
-          "type": "string",
-          "description": "Inline right/new/current record set as a JSON array of objects. Use only for small in-hand data; for stored files use `right_uri`. Ignored when `right_uri` or a paired `source_uri` is set. Example: `[{\"id\":1,\"name\":\"Acme Inc\"}]`.",
-          "default": "",
-          "examples": [
-            "[{\"id\":1,\"name\":\"Acme Inc\",\"status\":\"active\"}]",
-            "[{\"sku\":\"A1\",\"price\":12},{\"sku\":\"A3\",\"price\":30}]"
-          ]
-        },
-        {
-          "name": "key",
-          "type": "string",
-          "description": "The field name used to match rows across the two sets. Rows present on one side only become `added` or `removed`; rows on both sides with differing other fields become `changed`. Example: `customer_id`, `sku`, `id`.",
-          "default": "customer_id",
-          "examples": [
-            "customer_id",
-            "sku",
-            "id"
-          ]
-        },
-        {
-          "name": "source_uri",
-          "type": "string",
-          "description": "Fully-qualified AIDP URI to a single JSON document of the form `{\"left\":[...],\"right\":[...]}`. Format: `master:<catalog>.<schema>.<volume>:/<path>` or `workspace:/<path>`. Use this when both snapshots are bundled into one file; otherwise use `left_uri`/`right_uri` for split inputs.",
-          "default": "workspace:/diffs/customers_paired.json",
-          "examples": [
-            "workspace:/diffs/customers_paired.json",
-            "master:fin_catalog.fin_schema.exports:/snapshot_pair.json"
-          ]
-        },
-        {
-          "name": "left_uri",
-          "type": "string",
-          "description": "Fully-qualified AIDP URI to read the left/old record set from. Takes precedence over both `source_uri` and inline `left`. Same URI grammar as the other URIs (`master:cat.sch.vol:/path` or `workspace:/path`). File extension drives parsing: `.json`, `.jsonl`, `.csv`. Prefer this URI form over inline `left` for any non-trivial dataset.",
-          "default": "workspace:/snapshots/customers_2026-06-15.json",
-          "examples": [
-            "workspace:/snapshots/customers_2026-06-15.json",
-            "master:fin_catalog.fin_schema.exports:/baseline.csv"
-          ]
-        },
-        {
-          "name": "right_uri",
-          "type": "string",
-          "description": "Fully-qualified AIDP URI to read the right/new record set from. Takes precedence over both `source_uri` and inline `right`. Same URI grammar (`master:cat.sch.vol:/path` or `workspace:/path`). File extension drives parsing: `.json`, `.jsonl`, `.csv`. Prefer this URI form over inline `right`.",
-          "default": "workspace:/snapshots/customers_2026-06-16.json",
-          "examples": [
-            "workspace:/snapshots/customers_2026-06-16.json",
-            "master:fin_catalog.fin_schema.exports:/current.csv"
-          ]
-        },
-        {
-          "name": "dest_uri",
-          "type": "string",
-          "description": "Optional AIDP URI to write the diff output to. Same URI form (`master:cat.sch.vol:/path` or `workspace:/path`). `.json` writes the full envelope (`added`/`removed`/`changed`/`summary`); `.jsonl`/`.csv` writes only the `changed` rows. The structured envelope is still returned to the caller. Optional; omit to keep results in-memory only.",
-          "default": "workspace:/diffs/customer_diff.json",
-          "examples": [
-            "workspace:/diffs/customer_diff.json",
-            "master:fin_catalog.fin_schema.exports:/diff_2026-06-16.jsonl"
-          ]
-        }
-      ],
-      "conf": {
-        "tolerance": 1e-09
-      },
-      "_confDescriptions": {
-        "tolerance": "Numeric equality tolerance for float field comparisons. Values within this delta are treated as equal.",
-        "source_uri": "Optional AIDP URI to a paired {left, right} JSON document. Use left_uri/right_uri instead for split inputs.",
-        "dest_uri": "Optional AIDP URI to write the diff output to. Extension (.json/.jsonl/.csv) controls the serialization."
-      },
-      "_uiHints": {
-        "conf": {
-          "tolerance": {
-            "inputStyle": "singleline"
-          }
-        },
-        "schema": {
           "left": {
-            "inputStyle": "singleline"
+            "inputStyle": "multiline"
           },
           "right": {
-            "inputStyle": "singleline"
+            "inputStyle": "multiline"
           },
           "key": {
             "inputStyle": "singleline"
@@ -248,115 +252,6 @@
             "inputStyle": "singleline"
           },
           "right_uri": {
-            "inputStyle": "singleline"
-          },
-          "dest_uri": {
-            "inputStyle": "singleline"
-          }
-        }
-      }
-    },
-    {
-      "toolClassName": "DataManipulationTool",
-      "displayName": "Manipulate Data",
-      "description": "Reshapes tabular records via `select`, `rename`, `sort`, `dedupe`, or `groupby` aggregation.\n\nWhen to use: Use when the user asks to pick columns, rename fields, sort, drop duplicates, summarize, count by group, sum/avg by category, or otherwise restructure data between flow steps. Pair with FilterTool when both subsetting and reshaping are needed.\n\nHow to discover inputs: If records live in AIDP storage and the user hasn't named the path, FIRST call CatalogFileTool(operation='list', source_uri='master:cat.sch.vol:/') or WorkspaceFileTool(operation='list', ...) to locate the file, then pass it as `source_uri`. Prefer the URI form (`master:cat.sch.vol:/file.csv` or `workspace:/path/file.json`) over inline `data`.\n\nHow to communicate: Report the resulting row/column count and show a few sample rows. Do not echo the entire reshaped table.\n\nExample: user says 'total revenue by region from the orders export'. DataManipulationTool(source_uri='workspace:/exports/orders.csv', operation='groupby', spec='{\"by\":[\"region\"],\"agg\":{\"revenue\":\"sum\"}}').",
-      "version": "1.3.2",
-      "schema": [
-        {
-          "name": "data",
-          "type": "string",
-          "description": "Inline records to reshape, as a JSON array of objects. Use only for small in-hand data; for stored files use `source_uri`. Ignored when `source_uri` is set. Example: `[{\"region\":\"NA\",\"revenue\":100}]`.",
-          "default": "",
-          "examples": [
-            "[{\"region\":\"NA\",\"revenue\":100},{\"region\":\"EU\",\"revenue\":80}]",
-            "[{\"id\":1,\"name\":\"Acme\"},{\"id\":2,\"name\":\"Globex\"}]"
-          ]
-        },
-        {
-          "name": "operation",
-          "type": "string",
-          "description": "The reshape action. Use `select` to keep a subset of columns, `rename` to relabel fields, `sort` to order rows, `dedupe` to drop duplicate rows, `groupby` to aggregate by one or more keys.",
-          "enum": [
-            "select",
-            "rename",
-            "sort",
-            "dedupe",
-            "groupby"
-          ],
-          "default": "select",
-          "examples": [
-            "select",
-            "groupby",
-            "sort"
-          ]
-        },
-        {
-          "name": "spec",
-          "type": "string",
-          "description": "Operation parameters as a JSON object string. Shape depends on `operation`: select=`{\"columns\":[\"a\",\"b\"]}`, rename=`{\"map\":{\"old\":\"new\"}}`, sort=`{\"by\":[\"field\"],\"ascending\":true}`, dedupe=`{\"subset\":[\"id\"]}`, groupby=`{\"by\":[\"region\"],\"agg\":{\"revenue\":\"sum\"}}`. Always pass valid JSON.",
-          "default": "",
-          "examples": [
-            "{\"columns\":[\"id\",\"name\",\"region\"]}",
-            "{\"by\":[\"region\"],\"agg\":{\"revenue\":\"sum\",\"orders\":\"count\"}}",
-            "{\"by\":[\"created_at\"],\"ascending\":false}"
-          ]
-        },
-        {
-          "name": "source_uri",
-          "type": "string",
-          "description": "Fully-qualified AIDP URI to read input records from. Overrides the inline `data` field. Format: `master:<catalog>.<schema>.<volume>:/<path>` for catalog volumes or `workspace:/<path>` for the user workspace. File extension drives parsing: `.json`, `.jsonl`, or `.csv`. Prefer this URI form over inline `data` for any non-trivial dataset.",
-          "default": "master:fin_catalog.fin_schema.exports:/orders.csv",
-          "examples": [
-            "master:fin_catalog.fin_schema.exports:/orders.csv",
-            "workspace:/uploads/customers.jsonl",
-            "master:construction_catalog.construction_schema.construction_documents:/inventory.json"
-          ]
-        },
-        {
-          "name": "dest_uri",
-          "type": "string",
-          "description": "Optional AIDP URI to write the reshaped rows to. Same URI grammar as `source_uri` (`master:cat.sch.vol:/path` or `workspace:/path`). `.json` writes the full envelope; `.jsonl`/`.csv` writes only the reshaped rows. The structured envelope is still returned to the caller. Optional; omit to keep results in-memory only.",
-          "default": "workspace:/exports/revenue_by_region.csv",
-          "examples": [
-            "workspace:/exports/revenue_by_region.csv",
-            "master:fin_catalog.fin_schema.exports:/orders_dedup.jsonl",
-            "workspace:/scratch/reshape.json"
-          ]
-        }
-      ],
-      "conf": {
-        "max_rows": 5000
-      },
-      "_confDescriptions": {
-        "max_rows": "Cap on rows returned after the operation. Protects the agent context from large result sets.",
-        "source_uri": "Optional AIDP URI to read input records from instead of the inline 'data' field. Supports master:<catalog>.<schema>.<volume>:/<path> and workspace:/<path>.",
-        "dest_uri": "Optional AIDP URI to write the reshaped rows to. Extension (.json/.jsonl/.csv) controls the serialization."
-      },
-      "_uiHints": {
-        "conf": {
-          "max_rows": {
-            "inputStyle": "singleline"
-          }
-        },
-        "schema": {
-          "operation": {
-            "kind": "enum",
-            "values": [
-              "select",
-              "rename",
-              "sort",
-              "dedupe",
-              "groupby"
-            ],
-            "inputStyle": "singleline"
-          },
-          "data": {
-            "inputStyle": "multiline"
-          },
-          "spec": {
-            "inputStyle": "singleline"
-          },
-          "source_uri": {
             "inputStyle": "singleline"
           },
           "dest_uri": {

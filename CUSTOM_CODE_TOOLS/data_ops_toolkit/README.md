@@ -2,6 +2,11 @@
 
 Filter records, diff two datasets, and reshape data (group-by/sort/dedupe via pandas).
 
+A single `DataManipulationTool` drives all of this via an `operation` parameter
+(`select` / `rename` / `sort` / `dedupe` / `groupby` / `filter` / `compare`).
+Filter and compare were previously separate tools; they are now operations on
+the one tool so an agent sees a single data-ops function.
+
 Built on the AIDP Custom Tools framework. Each tool class is registered with
 `@CustomToolBase.register` and configured in `tool_config.json`.
 

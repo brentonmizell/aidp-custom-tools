@@ -1,16 +1,20 @@
 """
 Text Utils Toolkit
 ==================
-  TemplateRenderTool - render a Jinja2 template against variables
-  RegexTool          - extract / replace / split text with a regex
-  JsonTransformTool  - pull/reshape fields out of JSON with JSONPath
+A single TextUtilTool driven by `operation`:
 
-v1.2.0: Every tool now accepts optional source_uri / dest_uri to read input
-from (and write output to) an AIDP master volume or workspace path. The legacy
-inline parameters (template/text/data) remain fully supported; source_uri,
-when provided, overrides the inline value for that input. dest_uri, when
-provided, writes the primary text output to the named URI in addition to
-returning it in the envelope.
+  operation=template - render a Jinja2 template against variables
+  operation=regex    - match / search / findall / sub / split text with a regex
+  operation=json     - pull/reshape fields out of JSON with JSONPath
+
+Formerly three tools (TemplateRenderTool + RegexTool + JsonTransformTool); they
+are now operations on one tool so an agent sees a single text-utility function.
+
+Every operation accepts optional source_uri / dest_uri to read input from (and
+write output to) an AIDP master volume or workspace path. The inline parameters
+(template/text/data) remain fully supported; source_uri, when provided,
+overrides the inline value for that input. dest_uri, when provided, writes the
+primary output to the named URI in addition to returning it in the envelope.
 """
 
 import json
@@ -150,24 +154,44 @@ def _write_text_to_uri(uri, text, conf, context_vars):
 
 
 # --------------------------------------------------------------------------- #
-# Template renderer
+# TextUtilTool - one tool, three operations (template / regex / json).
 # --------------------------------------------------------------------------- #
 @CustomToolBase.register
-class TemplateRenderTool(CustomToolBase):
-    """Render a Jinja2 template with a dict of variables. Use to build prompts,
-    payloads, emails, or any text from flow variables. Autoescaping is
-    configurable via conf.autoescape (off by default; turn it on for HTML).
+class TextUtilTool(CustomToolBase):
+    """Text utilities: render Jinja2 templates, run regexes, and extract/reshape
+    JSON with JSONPath. Driven by `operation`:
 
-    URI inputs (optional):
-      source_uri - read the template body from a master:/workspace: URI
-                   (overrides the inline `template` param when provided)
-      dest_uri   - write the rendered text to a master:/workspace: URI
-                   (in addition to returning it in the response envelope)
+      template - render `template` (or source_uri) against `variables`
+      regex    - run `pattern` against `text` (mode match/search/findall/sub/split)
+      json     - pull/reshape `data` with a JSONPath `path` or `mapping`
+
+    Every operation accepts optional source_uri / dest_uri for AIDP volume /
+    workspace I/O.
     """
+
+    _MODE_ALIASES = {"extract": "findall", "replace": "sub"}
+    _VALID_MODES = {"match", "search", "findall", "sub", "split"}
 
     @classmethod
     def _execute_tool(cls, conf, runtime_params, **context_vars):
-        debug("TemplateRenderTool: start")
+        op = (runtime_params.get("operation") or "").strip().lower()
+        if op == "template":
+            return cls._op_template(conf, runtime_params, context_vars)
+        if op == "regex":
+            return cls._op_regex(conf, runtime_params, context_vars)
+        if op in ("json", "jsonpath", "json_transform"):
+            return cls._op_json(conf, runtime_params, context_vars)
+        return DebugLog.embed(_err(
+            f"unknown operation {op!r}; expected template / regex / json",
+            error_type="InvalidInput"))
+
+    @staticmethod
+    def _op_template(conf, runtime_params, context_vars):
+        """Render a Jinja2 template with a dict of variables. Autoescaping is
+        configurable via conf.autoescape (off by default; turn it on for HTML).
+        source_uri overrides inline `template`; dest_uri writes the rendered
+        text in addition to returning it in the envelope."""
+        debug("TextUtil[template]: start")
 
         source_uri = _norm_uri(runtime_params.get("source_uri"))
         dest_uri = _norm_uri(runtime_params.get("dest_uri"))
@@ -248,33 +272,15 @@ class TemplateRenderTool(CustomToolBase):
 
         return DebugLog.embed(_ok(data, **legacy))
 
-
-# --------------------------------------------------------------------------- #
-# Regex
-# --------------------------------------------------------------------------- #
-@CustomToolBase.register
-class RegexTool(CustomToolBase):
-    """Run a regex against text. Supported modes:
-      match   - re.match (anchored at start), returns first match or null
-      search  - re.search, returns first match anywhere or null
-      findall - all matches with groups (default)
-      sub     - replace all matches with `replacement`
-      split   - split text on the pattern
-    Legacy aliases: extract->findall, replace->sub.
-
-    URI inputs (optional):
-      source_uri - read the haystack text from a master:/workspace: URI
-                   (overrides the inline `text` param when provided)
-      dest_uri   - write the match results as JSON to a master:/workspace: URI
-                   (in addition to returning them in the response envelope)
-    """
-
-    _MODE_ALIASES = {"extract": "findall", "replace": "sub"}
-    _VALID_MODES = {"match", "search", "findall", "sub", "split"}
-
+    # --------------------------------------------------------------------- #
+    # Regex - operation="regex". Modes: match / search / findall (default) /
+    # sub / split. Legacy aliases: extract->findall, replace->sub.
+    #   source_uri overrides inline `text`; dest_uri writes results as JSON.
+    # --------------------------------------------------------------------- #
     @classmethod
-    def _execute_tool(cls, conf, runtime_params, **context_vars):
-        debug("RegexTool: start")
+    def _op_regex(cls, conf, runtime_params, context_vars):
+        """Run a regex against text (mode: match/search/findall/sub/split)."""
+        debug("TextUtil[regex]: start")
 
         source_uri = _norm_uri(runtime_params.get("source_uri"))
         dest_uri = _norm_uri(runtime_params.get("dest_uri"))
@@ -404,27 +410,16 @@ class RegexTool(CustomToolBase):
 
         return DebugLog.embed(_ok(data, **legacy))
 
-
-# --------------------------------------------------------------------------- #
-# JSON transform (JSONPath)
-# --------------------------------------------------------------------------- #
-@CustomToolBase.register
-class JsonTransformTool(CustomToolBase):
-    """Extract or reshape JSON using JSONPath expressions. Pass a single 'path'
-    to pull one value/list, or a 'mapping' object to build a new shape
-    ({'out_field': '$.json.path'}). Use to pluck fields out of an API response
-    before handing them to the next step.
-
-    URI inputs (optional):
-      source_uri - read the input JSON from a master:/workspace: URI
-                   (overrides the inline `data` param when provided)
-      dest_uri   - write the transformed JSON output to a master:/workspace: URI
-                   (in addition to returning it in the response envelope)
-    """
-
-    @classmethod
-    def _execute_tool(cls, conf, runtime_params, **context_vars):
-        debug("JsonTransformTool: start")
+    # --------------------------------------------------------------------- #
+    # JSON transform (JSONPath) - operation="json". Pass a single `path` to
+    # pull one value/list, or a `mapping` object to build a new shape
+    # ({'out_field': '$.json.path'}). source_uri overrides inline `data`;
+    # dest_uri writes the transformed JSON output.
+    # --------------------------------------------------------------------- #
+    @staticmethod
+    def _op_json(conf, runtime_params, context_vars):
+        """Extract or reshape JSON using JSONPath (`path` or `mapping`)."""
+        debug("TextUtil[json]: start")
 
         source_uri = _norm_uri(runtime_params.get("source_uri"))
         dest_uri = _norm_uri(runtime_params.get("dest_uri"))

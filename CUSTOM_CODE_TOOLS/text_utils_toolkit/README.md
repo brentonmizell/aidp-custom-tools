@@ -2,6 +2,11 @@
 
 Jinja2 template rendering, regex extract/replace, and JSONPath transforms.
 
+A single `TextUtilTool` drives all three via an `operation` parameter
+(`template` / `regex` / `json`). These were previously three separate tools;
+they are now operations on the one tool so an agent sees a single text-utility
+function.
+
 Built on the AIDP Custom Tools framework. Each tool class is registered with
 `@CustomToolBase.register` and configured in `tool_config.json`.
 

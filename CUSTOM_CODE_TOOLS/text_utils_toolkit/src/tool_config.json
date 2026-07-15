@@ -1,18 +1,34 @@
 {
   "displayName": "Text Utils Toolkit",
-  "description": "Template rendering, regex, and JSONPath transforms.",
+  "description": "Template rendering, regex, and JSONPath transforms in a single text-utility tool.",
   "tools": [
     {
-      "toolClassName": "TemplateRenderTool",
-      "displayName": "Render Template",
-      "description": "Renders a Jinja2 template into a final string using a variable dictionary, optionally reading the template from a file and/or writing the result back to a file.\n\nWhen to use: Use when the user asks to build a prompt, email body, message, HTML page, SQL statement, or any text that fills placeholders with runtime values. Also use when the user wants to merge a stored template file with fresh data.\n\nHow to discover inputs: If the user references a stored template but hasn't given the path, FIRST call CatalogFileTool(operation='list', source_uri='master:<catalog>.<schema>.<volume>:/') or CatalogBrowserTool to find it. Prefer the unified `source_uri` / `dest_uri` URIs over any split catalog/schema/volume fields.\n\nHow to communicate: Return the rendered text verbatim in a fenced block; if it was also written to `dest_uri`, mention the destination path in one short line.\n\nExample: {template:'Hi {{ name }}, you have {{ count }} items.', variables:'{\"name\":\"Ada\",\"count\":3}'} -> 'Hi Ada, you have 3 items.'",
-      "version": "1.3.2",
+      "toolClassName": "TextUtilTool",
+      "displayName": "Text Utils",
+      "description": "Text utilities in one tool, driven by `operation`:\n\n- `template` renders a Jinja2 `template` against `variables` (build prompts, emails, SQL, HTML).\n- `regex` runs `pattern` against `text` with `mode` match/search/findall/sub/split (extract emails/ids/dates, clean/rewrite/split text).\n- `json` extracts/reshapes JSON via a JSONPath `path` (single value/list) or `mapping` (`{out_field: $.json.path}`).\n\nWhen to use: Any time the user asks to fill placeholders, pattern-match/extract/replace in text, or pluck/reshape fields out of a JSON blob.\n\nHow to discover inputs: If the input lives in a file and the path isn't given, FIRST call CatalogFileTool(operation='list', source_uri=...) or CatalogBrowserTool to locate it, then set `source_uri`. Every operation accepts `source_uri` (read input) and `dest_uri` (persist output); prefer these over inline `template`/`text`/`data` for stored files.\n\nHow to communicate: Return the rendered text / match list / extracted JSON verbatim in a fenced block; for large result sets summarize the count and show the first few. If output was written to `dest_uri`, mention the path in one line.\n\nExamples: operation='template', template='Hi {{ name }}', variables='{\"name\":\"Ada\"}'. operation='regex', text='a@x.com, b@y.org', pattern='[\\w.]+@[\\w.]+', mode='findall'. operation='json', data='{\"items\":[{\"id\":1},{\"id\":2}]}', path='$.items[*].id'.",
+      "version": "2.0.0",
       "schema": [
+        {
+          "name": "operation",
+          "type": "string",
+          "description": "Which utility to run. `template` renders Jinja2, `regex` runs a regular expression, `json` extracts/reshapes JSON with JSONPath.",
+          "enum": [
+            "template",
+            "regex",
+            "json"
+          ],
+          "default": "template",
+          "examples": [
+            "template",
+            "regex",
+            "json"
+          ]
+        },
         {
           "name": "template",
           "type": "string",
-          "description": "Inline Jinja2 template body, e.g. `Hello {{ name }}, you have {{ count }} items.`. Required unless `source_uri` is provided; ignored when `source_uri` is set.",
-          "default": "Hi {{ name }}, you have {{ count }} items.",
+          "description": "[template] Inline Jinja2 template body, e.g. `Hello {{ name }}, you have {{ count }} items.`. Required for operation=template unless `source_uri` is provided; ignored when `source_uri` is set.",
+          "default": "",
           "examples": [
             "Hi {{ name }}, you have {{ count }} items.",
             "Subject: {{ subject }}\nBody:\n{{ body }}",
@@ -22,8 +38,8 @@
         {
           "name": "variables",
           "type": "string",
-          "description": "JSON object whose keys are the Jinja2 variable names, e.g. `{\"name\":\"Ada\",\"count\":3}`. Required; pass `{}` for templates with no variables.",
-          "default": "{\"name\":\"Ada\",\"count\":3}",
+          "description": "[template] JSON object whose keys are the Jinja2 variable names, e.g. `{\"name\":\"Ada\",\"count\":3}`. Pass `{}` for templates with no variables.",
+          "default": "",
           "examples": [
             "{\"name\":\"Ada\",\"count\":3}",
             "{\"subject\":\"Welcome\",\"body\":\"Thanks for signing up\"}",
@@ -31,30 +47,117 @@
           ]
         },
         {
+          "name": "text",
+          "type": "string",
+          "description": "[regex] Inline haystack text the regex runs against. Required for operation=regex unless `source_uri` is provided; ignored when `source_uri` is set.",
+          "default": "",
+          "examples": [
+            "Contact: a@x.com or b@y.org",
+            "Order #12345 shipped on 2026-06-15"
+          ]
+        },
+        {
+          "name": "pattern",
+          "type": "string",
+          "description": "[regex] Python regular expression, e.g. `[\\w.]+@[\\w.]+` for emails or `\\d{4}-\\d{2}-\\d{2}` for ISO dates. Required for operation=regex. Use capture groups for `\\1`-style backrefs in `replacement`.",
+          "default": "",
+          "examples": [
+            "[\\w.]+@[\\w.]+",
+            "\\d{4}-\\d{2}-\\d{2}",
+            "Order #(\\d+)"
+          ]
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "enum": [
+            "match",
+            "search",
+            "findall",
+            "sub",
+            "split"
+          ],
+          "default": "findall",
+          "description": "[regex] The regex operation. `match` anchors at the start, `search` finds the first hit anywhere, `findall` returns all hits (default), `sub` replaces, `split` breaks the text on the pattern. Legacy aliases `extract`->`findall` and `replace`->`sub` still work.",
+          "examples": [
+            "findall",
+            "sub",
+            "search"
+          ]
+        },
+        {
+          "name": "replacement",
+          "type": "string",
+          "description": "[regex] Replacement string used only when `mode='sub'`. Supports backrefs like `\\1` referencing capture groups in `pattern`, e.g. `redacted-\\1`.",
+          "default": "",
+          "examples": [
+            "REDACTED",
+            "order-\\1",
+            ""
+          ]
+        },
+        {
+          "name": "data",
+          "type": "string",
+          "description": "[json] Inline JSON document, as a JSON string like `{\"items\":[{\"id\":1}]}`. Required for operation=json unless `source_uri` is provided; ignored when `source_uri` is set.",
+          "default": "",
+          "examples": [
+            "{\"items\":[{\"id\":1},{\"id\":2}]}",
+            "{\"user\":{\"name\":\"Ada\",\"email\":\"ada@x.com\"}}"
+          ]
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "description": "[json] Single JSONPath expression evaluated against the input, e.g. `$.items[*].id`. Use this OR `mapping`, not both.",
+          "default": "",
+          "examples": [
+            "$.items[*].id",
+            "$.user.email",
+            "$..price"
+          ]
+        },
+        {
+          "name": "mapping",
+          "type": "string",
+          "description": "[json] JSON object of `{output_field: jsonpath}` pairs used to assemble a new shape, e.g. `{\"name\":\"$.user.name\",\"email\":\"$.user.email\"}`. Use this OR `path`, not both.",
+          "default": "",
+          "examples": [
+            "{\"name\":\"$.user.name\",\"email\":\"$.user.email\"}",
+            "{\"ids\":\"$.items[*].id\",\"total\":\"$.total\"}"
+          ]
+        },
+        {
           "name": "source_uri",
           "type": "string",
-          "description": "Fully-qualified URI of a stored template file. Format: `master:<catalog>.<schema>.<volume>:/<path>` for catalog volumes or `workspace:/<path>` for the user workspace. Optional; when set it overrides the inline `template` field. Prefer this URI form over legacy split catalog/schema/volume fields.",
-          "default": "master:marketing_catalog.email_schema.templates_volume:/welcome_email.j2",
+          "description": "AIDP URI to read the operation's input from (template body / regex haystack / JSON document), overriding the inline field. Format: `master:<catalog>.<schema>.<volume>:/<path>` or `workspace:/<path>`.",
+          "default": "",
           "examples": [
             "master:marketing_catalog.email_schema.templates_volume:/welcome_email.j2",
-            "workspace:/prompts/system_prompt.j2",
-            "marketing_catalog.email_schema.templates_volume:/welcome_email.j2"
+            "workspace:/inputs/report.txt",
+            "workspace:/inputs/response.json"
           ]
         },
         {
           "name": "dest_uri",
           "type": "string",
-          "description": "Fully-qualified destination URI to persist the rendered text. Same URI grammar as `source_uri` (`master:cat.sch.vol:/path` or `workspace:/path`). Optional; when omitted, the rendered text is only returned in the response envelope.",
-          "default": "master:marketing_catalog.email_schema.outbox_volume:/welcome_ada.txt",
+          "description": "Optional AIDP URI to persist the primary output (rendered text / match results as JSON / transformed JSON). Same URI grammar as `source_uri`. The result is still returned in the response envelope.",
+          "default": "",
           "examples": [
-            "master:marketing_catalog.email_schema.outbox_volume:/welcome_ada.txt",
-            "workspace:/exports/rendered_prompt.txt"
+            "workspace:/exports/rendered_prompt.txt",
+            "workspace:/exports/regex_hits.json",
+            "master:api_catalog.responses_schema.extracts_volume:/order_ids.json"
           ]
         }
       ],
       "conf": {
         "autoescape": false,
-        "strict": false
+        "strict": false,
+        "ignore_case": false,
+        "multiline": false,
+        "max_matches": 500,
+        "max_input_bytes": 1048576,
+        "max_results": 1000
       },
       "_uiHints": {
         "conf": {
@@ -73,116 +176,7 @@
               "false"
             ],
             "inputStyle": "singleline"
-          }
-        },
-        "schema": {
-          "template": {
-            "inputStyle": "multiline"
           },
-          "variables": {
-            "inputStyle": "singleline"
-          },
-          "source_uri": {
-            "inputStyle": "singleline"
-          },
-          "dest_uri": {
-            "inputStyle": "singleline"
-          }
-        }
-      },
-      "_confDescriptions": {
-        "autoescape": "Jinja2 autoescape toggle. true escapes HTML-sensitive chars in output; false (default) leaves them as-is.",
-        "strict": "If true, undefined template variables raise an error. If false (default), they render as empty strings.",
-        "source_uri": "Optional input URI for the template body. Accepts master:<catalog>.<schema>.<volume>:/<path>, workspace:/<path>, or the bare <catalog>.<schema>.<volume>:/<path> alias. When set, overrides the inline 'template' parameter.",
-        "dest_uri": "Optional output URI for the rendered text. Accepts the same URI formats as source_uri. Writing the destination does not suppress the rendered text in the response envelope."
-      }
-    },
-    {
-      "toolClassName": "RegexTool",
-      "displayName": "Regex Extract/Replace",
-      "description": "Runs a Python regular expression against text to match, search, find all hits, substitute, or split, optionally reading the haystack from a file and writing results to one.\n\nWhen to use: Use when the user asks to extract emails, ids, phone numbers, codes, or any structured fragment from free text, OR to clean / rewrite / split text via pattern. Supports `match`, `search`, `findall` (default), `sub`, and `split` modes; legacy `extract` and `replace` aliases still resolve.\n\nHow to discover inputs: If the user names a file rather than pasting text, set `source_uri` instead of `text`. If they only name a folder, FIRST call CatalogFileTool(operation='list', source_uri=...) to pick the file. Prefer `source_uri` / `dest_uri` over split catalog/schema/volume fields.\n\nHow to communicate: Return the match list (or rewritten text) verbatim; for large result sets summarize the count and show the first few.\n\nExample: {text:'a@x.com, b@y.org', pattern:'[\\w.]+@[\\w.]+', mode:'findall'} -> ['a@x.com','b@y.org'].",
-      "version": "1.3.2",
-      "schema": [
-        {
-          "name": "text",
-          "type": "string",
-          "description": "Inline haystack text the regex runs against, e.g. `Contact: a@x.com or b@y.org`. Required unless `source_uri` is provided; ignored when `source_uri` is set.",
-          "default": "Contact: a@x.com or b@y.org",
-          "examples": [
-            "Contact: a@x.com or b@y.org",
-            "Order #12345 shipped on 2026-06-15",
-            "Line one\nLine two\nLine three"
-          ]
-        },
-        {
-          "name": "pattern",
-          "type": "string",
-          "description": "Python regular expression, e.g. `[\\w.]+@[\\w.]+` to grab emails or `\\d{4}-\\d{2}-\\d{2}` for ISO dates. Required. Use capture groups for `\\1`-style backrefs in `replacement`.",
-          "default": "[\\w.]+@[\\w.]+",
-          "examples": [
-            "[\\w.]+@[\\w.]+",
-            "\\d{4}-\\d{2}-\\d{2}",
-            "Order #(\\d+)"
-          ]
-        },
-        {
-          "name": "mode",
-          "type": "string",
-          "enum": [
-            "match",
-            "search",
-            "findall",
-            "sub",
-            "split"
-          ],
-          "default": "findall",
-          "description": "The regex operation. Use `match` to anchor at the start, `search` for the first hit anywhere, `findall` for all hits (default), `sub` to replace, `split` to break the text on the pattern. Legacy aliases `extract` -> `findall` and `replace` -> `sub` still work.",
-          "examples": [
-            "findall",
-            "sub",
-            "search"
-          ]
-        },
-        {
-          "name": "replacement",
-          "type": "string",
-          "description": "Replacement string used only when `mode='sub'`. Supports backrefs like `\\1` referencing capture groups in `pattern`, e.g. `redacted-\\1`. Required for `sub`; ignored otherwise.",
-          "default": "REDACTED",
-          "examples": [
-            "REDACTED",
-            "order-\\1",
-            ""
-          ]
-        },
-        {
-          "name": "source_uri",
-          "type": "string",
-          "description": "Fully-qualified URI to read the haystack text from instead of `text`. Format: `master:<catalog>.<schema>.<volume>:/<path>` or `workspace:/<path>`. Optional; when set it overrides the inline `text` field. Prefer this URI form over legacy split catalog/schema/volume fields.",
-          "default": "master:logs_catalog.app_schema.raw_logs_volume:/2026-06-15.log",
-          "examples": [
-            "master:logs_catalog.app_schema.raw_logs_volume:/2026-06-15.log",
-            "workspace:/inputs/report.txt",
-            "logs_catalog.app_schema.raw_logs_volume:/2026-06-15.log"
-          ]
-        },
-        {
-          "name": "dest_uri",
-          "type": "string",
-          "description": "Fully-qualified destination URI to persist the match results as pretty JSON (or rewritten text for `sub`). Same URI grammar as `source_uri` (`master:cat.sch.vol:/path` or `workspace:/path`). Optional; results are still returned in the response envelope.",
-          "default": "master:logs_catalog.app_schema.extracts_volume:/emails.json",
-          "examples": [
-            "master:logs_catalog.app_schema.extracts_volume:/emails.json",
-            "workspace:/exports/regex_hits.json"
-          ]
-        }
-      ],
-      "conf": {
-        "ignore_case": false,
-        "multiline": false,
-        "max_matches": 500
-      },
-      "_uiHints": {
-        "conf": {
           "ignore_case": {
             "kind": "enum",
             "values": [
@@ -201,9 +195,24 @@
           },
           "max_matches": {
             "inputStyle": "singleline"
+          },
+          "max_input_bytes": {
+            "inputStyle": "singleline"
+          },
+          "max_results": {
+            "inputStyle": "singleline"
           }
         },
         "schema": {
+          "operation": {
+            "kind": "enum",
+            "values": [
+              "template",
+              "regex",
+              "json"
+            ],
+            "inputStyle": "singleline"
+          },
           "mode": {
             "kind": "enum",
             "values": [
@@ -215,6 +224,12 @@
             ],
             "inputStyle": "singleline"
           },
+          "template": {
+            "inputStyle": "multiline"
+          },
+          "variables": {
+            "inputStyle": "singleline"
+          },
           "text": {
             "inputStyle": "multiline"
           },
@@ -224,97 +239,6 @@
           "replacement": {
             "inputStyle": "singleline"
           },
-          "source_uri": {
-            "inputStyle": "singleline"
-          },
-          "dest_uri": {
-            "inputStyle": "singleline"
-          }
-        }
-      },
-      "_confDescriptions": {
-        "ignore_case": "Case-insensitive matching (re.IGNORECASE). Default false.",
-        "multiline": "Multiline mode (re.MULTILINE): ^ and $ match at line boundaries. Default false.",
-        "max_matches": "Cap on number of matches returned by findall/split to prevent runaway output. Default 500.",
-        "source_uri": "Optional input URI for the haystack text. Accepts master:<catalog>.<schema>.<volume>:/<path>, workspace:/<path>, or the bare <catalog>.<schema>.<volume>:/<path> alias. When set, overrides the inline 'text' parameter.",
-        "dest_uri": "Optional output URI for the match results (serialized as pretty JSON). Accepts the same URI formats as source_uri. Writing the destination does not suppress results in the response envelope."
-      }
-    },
-    {
-      "toolClassName": "JsonTransformTool",
-      "displayName": "JSON Transform",
-      "description": "Extracts values from a JSON document using a JSONPath expression, or reshapes it into a new object via a field->path mapping, optionally reading and writing from URIs.\n\nWhen to use: Use when the user asks to pull specific fields out of an API response, file, or upstream tool output, or to flatten / rename / pick a subset of a larger JSON blob. Pass EITHER `path` (single expression) OR `mapping` (multi-field reshape), never both.\n\nHow to discover inputs: If the JSON lives in a file and the path isn't given, FIRST call CatalogFileTool(operation='list', source_uri=...) to locate it, then set `source_uri` here. Prefer `source_uri` / `dest_uri` over legacy split catalog/schema/volume fields.\n\nHow to communicate: Return the extracted values inline as JSON; for large arrays summarize the count and show a few sample entries.\n\nExample: {data:'{\"items\":[{\"id\":1},{\"id\":2}]}', path:'$.items[*].id'} -> [1,2].",
-      "version": "1.3.2",
-      "schema": [
-        {
-          "name": "data",
-          "type": "string",
-          "description": "Inline JSON document, either as a JSON string like `{\"items\":[{\"id\":1}]}` or a stringified object/array. Required unless `source_uri` is provided; ignored when `source_uri` is set.",
-          "default": "{\"items\":[{\"id\":1},{\"id\":2}]}",
-          "examples": [
-            "{\"items\":[{\"id\":1},{\"id\":2}]}",
-            "{\"user\":{\"name\":\"Ada\",\"email\":\"ada@x.com\"}}",
-            "[{\"a\":1},{\"a\":2},{\"a\":3}]"
-          ]
-        },
-        {
-          "name": "path",
-          "type": "string",
-          "description": "Single JSONPath expression evaluated against the input, e.g. `$.items[*].id` to pull every item id. Use this OR `mapping`, not both. Optional when `mapping` is set.",
-          "default": "$.items[*].id",
-          "examples": [
-            "$.items[*].id",
-            "$.user.email",
-            "$..price"
-          ]
-        },
-        {
-          "name": "mapping",
-          "type": "string",
-          "description": "JSON object of `{output_field: jsonpath}` pairs used to assemble a new shape, e.g. `{\"name\":\"$.user.name\",\"email\":\"$.user.email\"}`. Use this OR `path`, not both. Optional when `path` is set.",
-          "default": "{\"name\":\"$.user.name\",\"email\":\"$.user.email\"}",
-          "examples": [
-            "{\"name\":\"$.user.name\",\"email\":\"$.user.email\"}",
-            "{\"ids\":\"$.items[*].id\",\"total\":\"$.total\"}",
-            "{\"first_price\":\"$.items[0].price\"}"
-          ]
-        },
-        {
-          "name": "source_uri",
-          "type": "string",
-          "description": "Fully-qualified URI to read the input JSON from instead of `data`. Format: `master:<catalog>.<schema>.<volume>:/<path>` or `workspace:/<path>`. Optional; when set it overrides the inline `data` field. Prefer this URI form over legacy split catalog/schema/volume fields.",
-          "default": "master:api_catalog.responses_schema.payloads_volume:/orders_2026-06-15.json",
-          "examples": [
-            "master:api_catalog.responses_schema.payloads_volume:/orders_2026-06-15.json",
-            "workspace:/inputs/response.json",
-            "api_catalog.responses_schema.payloads_volume:/orders_2026-06-15.json"
-          ]
-        },
-        {
-          "name": "dest_uri",
-          "type": "string",
-          "description": "Fully-qualified destination URI to persist the transformed JSON (pretty-printed). Same URI grammar as `source_uri` (`master:cat.sch.vol:/path` or `workspace:/path`). Optional; result is still returned in the response envelope.",
-          "default": "master:api_catalog.responses_schema.extracts_volume:/order_ids.json",
-          "examples": [
-            "master:api_catalog.responses_schema.extracts_volume:/order_ids.json",
-            "workspace:/exports/transformed.json"
-          ]
-        }
-      ],
-      "conf": {
-        "max_input_bytes": 1048576,
-        "max_results": 1000
-      },
-      "_uiHints": {
-        "conf": {
-          "max_input_bytes": {
-            "inputStyle": "singleline"
-          },
-          "max_results": {
-            "inputStyle": "singleline"
-          }
-        },
-        "schema": {
           "data": {
             "inputStyle": "multiline"
           },
@@ -333,10 +257,15 @@
         }
       },
       "_confDescriptions": {
-        "max_input_bytes": "Cap on input JSON size in bytes; oversized input is rejected. Default 1048576 (1 MiB).",
-        "max_results": "Cap on number of JSONPath matches returned to prevent runaway output. Default 1000.",
-        "source_uri": "Optional input URI for the JSON document. Accepts master:<catalog>.<schema>.<volume>:/<path>, workspace:/<path>, or the bare <catalog>.<schema>.<volume>:/<path> alias. When set, overrides the inline 'data' parameter.",
-        "dest_uri": "Optional output URI for the transformed JSON (pretty-printed). Accepts the same URI formats as source_uri. Writing the destination does not suppress the result in the response envelope."
+        "autoescape": "[template] Jinja2 autoescape toggle. true escapes HTML-sensitive chars; false (default) leaves them as-is.",
+        "strict": "[template] If true, undefined template variables raise an error. If false (default), they render as empty strings.",
+        "ignore_case": "[regex] Case-insensitive matching (re.IGNORECASE). Default false.",
+        "multiline": "[regex] Multiline mode (re.MULTILINE): ^ and $ match at line boundaries. Default false.",
+        "max_matches": "[regex] Cap on matches returned by findall/split to prevent runaway output. Default 500.",
+        "max_input_bytes": "[json] Cap on input JSON size in bytes; oversized input is rejected. Default 1048576 (1 MiB).",
+        "max_results": "[json] Cap on JSONPath matches returned to prevent runaway output. Default 1000.",
+        "source_uri": "Optional input URI. Accepts master:<catalog>.<schema>.<volume>:/<path>, workspace:/<path>, or the bare <catalog>.<schema>.<volume>:/<path> alias. When set, overrides the inline input parameter for the chosen operation.",
+        "dest_uri": "Optional output URI for the primary result. Accepts the same URI formats as source_uri. Writing the destination does not suppress the result in the response envelope."
       }
     }
   ]
