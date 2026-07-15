@@ -1,16 +1,21 @@
 # AIDP Select AI Toolkit
 
-Two-tool pair for natural-language-to-SQL against Oracle Autonomous Database via
-`DBMS_CLOUD_AI` and `DBMS_CLOUD_AI_AGENT`. No MCP layer, no extra microservice -
-the agent talks directly to ADB through `oracledb`, and Select AI does the
-NL-to-SQL translation server-side.
+Full coverage of Oracle [Select AI](https://docs.oracle.com/en-us/iaas/autonomous-database-serverless/doc/select-ai-about.html)
+(`DBMS_CLOUD_AI` / `DBMS_CLOUD_AI_AGENT`) against Oracle Autonomous Database:
+natural-language-to-SQL, chat, synthetic data, and RAG. No MCP layer, no extra
+microservice - the agent talks directly to ADB through `oracledb`, and Select
+AI does the work server-side.
 
 ## What's in the box
 
 | Tool | When to call | What it does |
 |---|---|---|
-| `SelectAIProvisionTool` | **Once** per `(connection, schema, table list, model)` combo. Re-runnable, hash-checked. | Connects to ADB, creates the `AIDP_NL2SQL_PROFILES` audit table on first run, then either no-ops (config hash matches), creates (no row), or drops+recreates (hash mismatch or `force_recreate=true`) the Select AI profile via `DBMS_CLOUD_AI.CREATE_PROFILE` and the agent tool via `DBMS_CLOUD_AI_AGENT.CREATE_TOOL`. |
-| `NL2SQLTool` | **Every** agent turn that needs data from the bound tables. | Calls `SELECT DBMS_CLOUD_AI.GENERATE(:prompt, :profile_name, :action) FROM dual`. Supports `RUNSQL`, `SHOWSQL`, `NARRATE`, `EXPLAINSQL`. For `RUNSQL` the tool performs a two-step guard - it first asks for `SHOWSQL`, refuses anything whose leading keyword isn't `SELECT`/`WITH`, then executes the validated SQL itself so the result rows come back structured. |
+| `SelectAIProvisionTool` | **Once** per `(connection, schema, table list, model)` combo. Re-runnable, hash-checked. | Connects to ADB, creates the `AIDP_NL2SQL_PROFILES` audit table on first run, then either no-ops (config hash matches), creates (no row), or drops+recreates (hash mismatch or `force_recreate=true`) the Select AI profile via `DBMS_CLOUD_AI.CREATE_PROFILE` and the agent tool via `DBMS_CLOUD_AI_AGENT.CREATE_TOOL`. Passes through the documented profile attributes (`temperature`, `max_tokens`, `conversation`, `constraints`, `annotations`, `object_list_mode`, `embedding_model`, `region`, ...). |
+| `NL2SQLTool` | **Every** agent turn that needs data from the bound tables. | Calls `SELECT DBMS_CLOUD_AI.GENERATE(:prompt, :profile_name, :action, :params) FROM dual`. Supports the full action set `RUNSQL`, `SHOWSQL`, `EXPLAINSQL`, `NARRATE`, `CHAT`, `SUMMARIZE`, `TRANSLATE`, optionally threaded through a `conversation_id`. For `RUNSQL` the tool performs a two-step guard - it first asks for `SHOWSQL`, refuses anything whose leading keyword isn't `SELECT`/`WITH`, then executes the validated SQL itself so the result rows come back structured. |
+| `CatalogMapTool` | When the agent needs to discover what data exists. | Walks the AIDP data lake (catalogs -> schemas -> tables / volumes / knowledge bases) and returns a nested tree + text summary; volumes carry a `/Volumes/<catalog>/<schema>/<volume>` location so the agent can hand the user a file path. Uses the standard 5-key AIDP credential. |
+| `ConversationTool` | Start / end a multi-turn chat session. | `op=create` mints a conversation (`DBMS_CLOUD_AI.CREATE_CONVERSATION`) and returns a `conversation_id` to pass to `NL2SQLTool`; `op=delete` drops it. Requires the profile to have `conversation=true`. |
+| `SyntheticDataTool` | Seed a table/schema with realistic fake data. | `DBMS_CLOUD_AI.GENERATE_SYNTHETIC_DATA` in single-table (`object_name` + `record_count`) or multi-table (`object_list` JSON) mode. **Write-gated** behind `confirm=true`. |
+| `VectorIndexTool` | Stand up RAG over object-store documents. | `op=create` builds a vector index (`DBMS_CLOUD_AI.CREATE_VECTOR_INDEX`) over a `location` and links it to a profile; `op=delete` drops it. |
 
 ## When to use this vs. a generic NL2SQL toolkit
 

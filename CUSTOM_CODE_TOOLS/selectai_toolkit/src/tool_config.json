@@ -1,6 +1,6 @@
 {
   "displayName": "AIDP Select AI Toolkit",
-  "description": "Natural-language-to-SQL on an Oracle Autonomous Database using Select AI (DBMS_CLOUD_AI). Two-tool pair: SelectAIProvisionTool sets up the NL2SQL profile once on the target ADB, NL2SQLTool turns user questions into SQL and runs them on every agent turn. This is NL2SQL ONLY \u2014 for plain SQL execution against an Oracle catalog, use AIDP's first-party SQL Tool (catalogType=EXTERNAL).",
+  "description": "Full Oracle Select AI (DBMS_CLOUD_AI) coverage on an Oracle Autonomous Database: natural-language-to-SQL, chat, synthetic data, and RAG. SelectAIProvisionTool sets up the profile once on the target ADB; NL2SQLTool turns user questions into SQL/answers each turn (RUNSQL/SHOWSQL/EXPLAINSQL/NARRATE/CHAT/SUMMARIZE/TRANSLATE); CatalogMapTool discovers catalogs/schemas/tables; ConversationTool threads multi-turn chat; SyntheticDataTool populates tables with generated rows; VectorIndexTool builds RAG vector indexes. For plain SQL execution against an Oracle catalog, use AIDP's first-party SQL Tool (catalogType=EXTERNAL).",
   "tools": [
     {
       "toolClassName": "SelectAIProvisionTool",
@@ -74,6 +74,20 @@
         "credential_name": "OCI$RESOURCE_PRINCIPAL",
         "compartment_id": "",
         "region": "us-ashburn-1",
+        "temperature": "",
+        "max_tokens": "",
+        "seed": "",
+        "conversation": "",
+        "conversation_length": "",
+        "constraints": "",
+        "annotations": "",
+        "enforce_object_list": "",
+        "object_list_mode": "",
+        "case_sensitive_values": "",
+        "include_comments": "",
+        "additional_instructions": "",
+        "embedding_model": "",
+        "provider_endpoint": "",
         "timeout": 60,
         "auth_mode": "resource_principal",
         "tenancy_ocid": "",
@@ -183,6 +197,20 @@
         "credential_name": "Oracle DB credential used by Select AI to call OCI GenAI. Default `OCI$RESOURCE_PRINCIPAL` (auto-created by `ENABLE_RESOURCE_PRINCIPAL`).",
         "compartment_id": "OCI compartment OCID for GenAI inference. OCI Console \u2192 Identity & Security \u2192 Compartments.",
         "region": "OCI region. Auto-filled from aidp-deploy.config.json.",
+        "temperature": "Select AI attribute: LLM sampling temperature (0-2). Leave blank for the provider default.",
+        "max_tokens": "Select AI attribute: max output tokens for GENERATE. Blank = provider default.",
+        "seed": "Select AI attribute: integer seed for reproducible generations. Blank = none.",
+        "conversation": "Select AI attribute (true/false): enable conversation/chat history for this profile. Required before NL2SQLTool/ConversationTool can thread turns.",
+        "conversation_length": "Select AI attribute: number of prior turns to retain when conversation=true.",
+        "constraints": "Select AI attribute (true/false): send column NOT NULL / check / FK constraints to the LLM to improve accuracy.",
+        "annotations": "Select AI attribute (true/false): include table/column annotations (data-dictionary metadata) in the prompt.",
+        "enforce_object_list": "Select AI attribute (true/false): restrict the model to ONLY the tables in object_list (blocks queries against other tables).",
+        "object_list_mode": "Select AI attribute: 'automated' or 'strict' \u2014 how the object_list is applied.",
+        "case_sensitive_values": "Select AI attribute (true/false): treat literal values in the prompt as case-sensitive when generating SQL.",
+        "include_comments": "Select AI `comments` attribute (true/false): send table/column comments to the LLM. Defaults on (helps NL2SQL). Distinct from the free-text `comments` provision param.",
+        "additional_instructions": "Select AI attribute: extra free-text system instructions appended to every prompt for this profile.",
+        "embedding_model": "Select AI attribute: embedding model id (used with vector_index_name for RAG).",
+        "provider_endpoint": "Select AI attribute: override inference endpoint host for the provider.",
         "timeout": "Connection + query timeout in seconds.",
         "auth_mode": "OCI auth flavor for any ADB-adjacent OCI calls. `resource_principal` is the default (works inside AIDP compute).",
         "tenancy_ocid": "OCI tenancy OCID. Auto-filled from ~/.oci/config.",
@@ -223,19 +251,32 @@
         {
           "name": "action",
           "type": "string",
-          "description": "Which DBMS_CLOUD_AI action to invoke. `RUNSQL` runs the generated SQL and returns rows. `SHOWSQL` returns the SQL string only. `NARRATE` returns a natural-language summary. `EXPLAINSQL` returns annotated SQL. Default `RUNSQL`.",
+          "description": "Which DBMS_CLOUD_AI.GENERATE action to invoke. `RUNSQL` runs the generated SQL and returns rows (guarded read-only). `SHOWSQL` returns the SQL string only. `EXPLAINSQL` returns annotated SQL. `NARRATE` returns a natural-language answer with data. `CHAT` sends the prompt to the LLM as general chat (no schema grounding). `SUMMARIZE` summarizes the prompt/text. `TRANSLATE` translates it. Default `RUNSQL`.",
           "enum": [
             "RUNSQL",
             "SHOWSQL",
+            "EXPLAINSQL",
             "NARRATE",
-            "EXPLAINSQL"
+            "CHAT",
+            "SUMMARIZE",
+            "TRANSLATE"
           ],
           "default": "RUNSQL",
           "examples": [
             "RUNSQL",
             "NARRATE",
             "SHOWSQL",
-            "EXPLAINSQL"
+            "CHAT"
+          ]
+        },
+        {
+          "name": "conversation_id",
+          "type": "string",
+          "description": "Optional. A conversation id from ConversationTool(op=create). Pass it on each turn to thread chat history so the model sees prior context. Requires the profile to have conversation enabled (SelectAIProvisionTool conversation=true).",
+          "default": "",
+          "examples": [
+            "",
+            "12345"
           ]
         },
         {
@@ -257,7 +298,9 @@
         "password": "",
         "wallet_b64": "",
         "wallet_password": "",
+        "default_profile_name": "",
         "default_action": "RUNSQL",
+        "conversation_id": "",
         "max_rows": 100,
         "safety_check": true,
         "timeout": 60,
@@ -302,8 +345,11 @@
             "values": [
               "RUNSQL",
               "SHOWSQL",
+              "EXPLAINSQL",
               "NARRATE",
-              "EXPLAINSQL"
+              "CHAT",
+              "SUMMARIZE",
+              "TRANSLATE"
             ],
             "inputStyle": "singleline"
           },
@@ -339,9 +385,15 @@
             "values": [
               "RUNSQL",
               "SHOWSQL",
+              "EXPLAINSQL",
               "NARRATE",
-              "EXPLAINSQL"
+              "CHAT",
+              "SUMMARIZE",
+              "TRANSLATE"
             ],
+            "inputStyle": "singleline"
+          },
+          "conversation_id": {
             "inputStyle": "singleline"
           }
         }
@@ -423,6 +475,448 @@
             "inputStyle": "singleline"
           }
         }
+      }
+    },
+    {
+      "toolClassName": "ConversationTool",
+      "displayName": "Select AI Conversation",
+      "description": "Manage a Select AI conversation (chat history) via DBMS_CLOUD_AI.CREATE_CONVERSATION / DROP_CONVERSATION so NL2SQLTool can thread multi-turn chat.\n\nWhen to use: Call op=create ONCE at the start of a multi-turn NL2SQL session, then pass the returned conversation_id to NL2SQLTool on each following turn so the model remembers prior questions. Call op=delete to clean up. The profile must have conversation enabled (SelectAIProvisionTool conversation=true).\n\nHow to communicate: On create, report the conversation_id and tell the agent to reuse it. Uses the same ADB connection as NL2SQLTool.\n\nExample: ConversationTool(op='create', title='Sales Q&A') -> {conversation_id: '4021'}; then NL2SQLTool(profile_name='sales_nl2sql', conversation_id='4021', prompt='and by region?').",
+      "version": "1.0.0",
+      "schema": [
+        {
+          "name": "op",
+          "type": "string",
+          "description": "`create` mints a new conversation and returns its id; `delete` drops the conversation named by conversation_id. Default `create`.",
+          "enum": [
+            "create",
+            "delete"
+          ],
+          "default": "create",
+          "examples": [
+            "create",
+            "delete"
+          ]
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "description": "Optional short title stored on the conversation (op=create).",
+          "default": "",
+          "examples": [
+            "Sales Q&A",
+            "Incident triage"
+          ]
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "description": "Optional longer description stored on the conversation (op=create).",
+          "default": ""
+        },
+        {
+          "name": "conversation_id",
+          "type": "string",
+          "description": "Required for op=delete: the id returned by a prior op=create.",
+          "default": ""
+        }
+      ],
+      "conf": {
+        "aidp_catalog_key": "",
+        "conn_string": "",
+        "username": "",
+        "password": "",
+        "wallet_b64": "",
+        "wallet_password": "",
+        "default_op": "create",
+        "timeout": 60,
+        "aidp_credential_name": ""
+      },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
+      "_uiHints": {
+        "conf": {
+          "aidp_catalog_key": {
+            "kind": "dropdown",
+            "source": "catalogs",
+            "inputStyle": "singleline"
+          },
+          "password": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "wallet_b64": {
+            "kind": "secret",
+            "inputStyle": "multiline"
+          },
+          "wallet_password": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "default_op": {
+            "kind": "enum",
+            "values": [
+              "create",
+              "delete"
+            ],
+            "inputStyle": "singleline"
+          },
+          "aidp_credential_name": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "help": "Display name of a SECRET_TOKEN credential in AIDPs Credential Store holding DB connect info (username, password, connection_string, wallet_b64)."
+          }
+        },
+        "schema": {
+          "op": {
+            "kind": "enum",
+            "values": [
+              "create",
+              "delete"
+            ],
+            "inputStyle": "singleline"
+          },
+          "description": {
+            "inputStyle": "multiline"
+          }
+        }
+      },
+      "_confDescriptions": {
+        "aidp_catalog_key": "Preferred ADB connection source. AIDP Console → Catalogs. Leave blank if using explicit conn_string/username/password/wallet.",
+        "conn_string": "Fallback TNS alias or descriptor. Only use when aidp_catalog_key is blank.",
+        "username": "Fallback DB user.",
+        "password": "(secret) Fallback DB password.",
+        "wallet_b64": "(secret) Base64-encoded wallet zip.",
+        "wallet_password": "(secret) Wallet password.",
+        "default_op": "Op used when the runtime param `op` is blank. Default create.",
+        "timeout": "Connection + query timeout in seconds."
+      }
+    },
+    {
+      "toolClassName": "SyntheticDataTool",
+      "displayName": "Select AI Synthetic Data",
+      "description": "Populate Oracle ADB table(s) with LLM-generated synthetic rows via DBMS_CLOUD_AI.GENERATE_SYNTHETIC_DATA. WRITE operation — it INSERTs rows, so it is gated behind confirm=true.\n\nWhen to use: The user asks to fill a table with realistic fake/test data, or seed a demo schema. Single-table mode: pass object_name (+ owner_name, record_count, user_prompt). Multi-table mode: pass object_list, a JSON array of {\"owner\",\"name\",\"record_count\",\"user_prompt\"}. Always confirm the target and row count with the user before setting confirm=true.\n\nHow to communicate: State exactly which table(s) and how many rows will be created, get the user's OK, then run with confirm=true and report success.\n\nExample: SyntheticDataTool(profile_name='sales_nl2sql', object_name='CUSTOMERS', owner_name='SALES', record_count=200, user_prompt='realistic US customers', confirm=true).",
+      "version": "1.0.0",
+      "schema": [
+        {
+          "name": "profile_name",
+          "type": "string",
+          "description": "Select AI profile (from SelectAIProvisionTool) whose model generates the data. Required.",
+          "default": "",
+          "examples": [
+            "sales_nl2sql",
+            "constr_demo"
+          ]
+        },
+        {
+          "name": "object_name",
+          "type": "string",
+          "description": "Single-table mode: the table to fill. Ignored when object_list is provided.",
+          "default": "",
+          "examples": [
+            "CUSTOMERS",
+            "INCIDENT_REPORTS"
+          ]
+        },
+        {
+          "name": "owner_name",
+          "type": "string",
+          "description": "Schema that owns object_name (single-table mode). Uppercase Oracle schema.",
+          "default": "",
+          "examples": [
+            "SALES",
+            "ADMIN"
+          ]
+        },
+        {
+          "name": "record_count",
+          "type": "number",
+          "description": "How many rows to generate (single-table mode).",
+          "default": 100,
+          "examples": [
+            100,
+            500
+          ]
+        },
+        {
+          "name": "user_prompt",
+          "type": "string",
+          "description": "Optional guidance for the generated data, e.g. value ranges or realism hints (single-table mode).",
+          "default": "",
+          "examples": [
+            "realistic US customers with valid emails",
+            "orders from the last 90 days"
+          ]
+        },
+        {
+          "name": "object_list",
+          "type": "string",
+          "description": "Multi-table mode: JSON array of objects like [{\"owner\":\"SALES\",\"name\":\"CUSTOMERS\",\"record_count\":200,\"user_prompt\":\"...\"}]. When set, single-table params are ignored.",
+          "default": "",
+          "examples": [
+            "[{\"owner\":\"SALES\",\"name\":\"CUSTOMERS\",\"record_count\":200},{\"owner\":\"SALES\",\"name\":\"ORDERS\",\"record_count\":1000}]"
+          ]
+        },
+        {
+          "name": "params",
+          "type": "string",
+          "description": "Optional JSON string of DBMS_CLOUD_AI tuning params (e.g. {\"sample_rows\":5,\"table_statistics\":true,\"priority\":\"HIGH\"}).",
+          "default": ""
+        },
+        {
+          "name": "confirm",
+          "type": "boolean",
+          "description": "Must be true to actually INSERT rows. Safety gate against accidental data creation.",
+          "default": false,
+          "examples": [
+            false,
+            true
+          ]
+        }
+      ],
+      "conf": {
+        "aidp_catalog_key": "",
+        "conn_string": "",
+        "username": "",
+        "password": "",
+        "wallet_b64": "",
+        "wallet_password": "",
+        "default_profile_name": "",
+        "timeout": 120,
+        "aidp_credential_name": ""
+      },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
+      "_uiHints": {
+        "conf": {
+          "aidp_catalog_key": {
+            "kind": "dropdown",
+            "source": "catalogs",
+            "inputStyle": "singleline"
+          },
+          "password": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "wallet_b64": {
+            "kind": "secret",
+            "inputStyle": "multiline"
+          },
+          "wallet_password": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "aidp_credential_name": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "help": "Display name of a SECRET_TOKEN credential in AIDPs Credential Store holding DB connect info (username, password, connection_string, wallet_b64)."
+          }
+        },
+        "schema": {
+          "user_prompt": {
+            "inputStyle": "multiline"
+          },
+          "object_list": {
+            "inputStyle": "multiline"
+          },
+          "params": {
+            "inputStyle": "multiline"
+          }
+        }
+      },
+      "_confDescriptions": {
+        "aidp_catalog_key": "Preferred ADB connection source. AIDP Console → Catalogs. Leave blank if using explicit conn_string/username/password/wallet.",
+        "conn_string": "Fallback TNS alias or descriptor. Only use when aidp_catalog_key is blank.",
+        "username": "Fallback DB user.",
+        "password": "(secret) Fallback DB password.",
+        "wallet_b64": "(secret) Base64-encoded wallet zip.",
+        "wallet_password": "(secret) Wallet password.",
+        "default_profile_name": "Profile used when the runtime param profile_name is blank.",
+        "timeout": "Connection + query timeout in seconds (synthetic generation can be slow)."
+      }
+    },
+    {
+      "toolClassName": "VectorIndexTool",
+      "displayName": "Select AI Vector Index (RAG)",
+      "description": "Create or drop a Select AI vector index for retrieval-augmented generation via DBMS_CLOUD_AI.CREATE_VECTOR_INDEX / DROP_VECTOR_INDEX. Builds a vector store over documents in an object-store location and links it to a profile so GENERATE/NL2SQL can answer with retrieved context.\n\nWhen to use: The user wants the agent to answer from documents (PDFs, text) in object storage rather than only SQL tables. op=create with location + object_store_credential_name + profile_name + vector_db_provider (usually 'oracle'). op=delete removes the index. Vector index builds can take minutes; wait_for_completion=true blocks until done.\n\nHow to communicate: Confirm the object-store location and profile with the user, then report the index name and completion state.\n\nExample: VectorIndexTool(op='create', index_name='DOCS_IDX', vector_db_provider='oracle', location='https://objectstorage.../docs/', object_store_credential_name='OBJ_CRED', profile_name='docs_rag').",
+      "version": "1.0.0",
+      "schema": [
+        {
+          "name": "op",
+          "type": "string",
+          "description": "`create` builds the vector index; `delete` drops it. Default `create`.",
+          "enum": [
+            "create",
+            "delete"
+          ],
+          "default": "create",
+          "examples": [
+            "create",
+            "delete"
+          ]
+        },
+        {
+          "name": "index_name",
+          "type": "string",
+          "description": "Name of the vector index. Required for both create and delete.",
+          "default": "",
+          "examples": [
+            "DOCS_IDX",
+            "POLICY_KB_IDX"
+          ]
+        },
+        {
+          "name": "profile_name",
+          "type": "string",
+          "description": "Select AI profile the index is attached to (create). Required attribute.",
+          "default": "",
+          "examples": [
+            "docs_rag"
+          ]
+        },
+        {
+          "name": "location",
+          "type": "string",
+          "description": "Object-store URI holding the source documents (create). Required attribute.",
+          "default": "",
+          "examples": [
+            "https://objectstorage.us-ashburn-1.oraclecloud.com/n/ns/b/bucket/o/docs/"
+          ]
+        },
+        {
+          "name": "object_store_credential_name",
+          "type": "string",
+          "description": "DBMS_CLOUD credential that can read the object-store location (create).",
+          "default": "",
+          "examples": [
+            "OBJ_CRED"
+          ]
+        },
+        {
+          "name": "vector_db_provider",
+          "type": "string",
+          "description": "Vector store provider for the index (create). Usually 'oracle'. Required attribute.",
+          "default": "oracle",
+          "examples": [
+            "oracle"
+          ]
+        },
+        {
+          "name": "attributes",
+          "type": "string",
+          "description": "Optional JSON blob of any additional CREATE_VECTOR_INDEX attributes (vector_dimension, vector_distance_metric, chunk_size, chunk_overlap, similarity_threshold, match_limit, refresh_rate, pipeline_name, ...). Convenience params above are merged on top.",
+          "default": ""
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "description": "Optional description stored on the index (create).",
+          "default": ""
+        },
+        {
+          "name": "wait_for_completion",
+          "type": "boolean",
+          "description": "When true (default), block until the index build finishes; when false, return immediately and let it build in the background.",
+          "default": true,
+          "examples": [
+            true,
+            false
+          ]
+        }
+      ],
+      "conf": {
+        "aidp_catalog_key": "",
+        "conn_string": "",
+        "username": "",
+        "password": "",
+        "wallet_b64": "",
+        "wallet_password": "",
+        "default_op": "create",
+        "vector_db_provider": "oracle",
+        "object_store_credential_name": "",
+        "vector_dimension": "",
+        "vector_distance_metric": "",
+        "chunk_size": "",
+        "chunk_overlap": "",
+        "similarity_threshold": "",
+        "match_limit": "",
+        "timeout": 120,
+        "aidp_credential_name": ""
+      },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
+      "_uiHints": {
+        "conf": {
+          "aidp_catalog_key": {
+            "kind": "dropdown",
+            "source": "catalogs",
+            "inputStyle": "singleline"
+          },
+          "password": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "wallet_b64": {
+            "kind": "secret",
+            "inputStyle": "multiline"
+          },
+          "wallet_password": {
+            "kind": "secret",
+            "inputStyle": "singleline"
+          },
+          "default_op": {
+            "kind": "enum",
+            "values": [
+              "create",
+              "delete"
+            ],
+            "inputStyle": "singleline"
+          },
+          "aidp_credential_name": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "help": "Display name of a SECRET_TOKEN credential in AIDPs Credential Store holding DB connect info (username, password, connection_string, wallet_b64)."
+          }
+        },
+        "schema": {
+          "op": {
+            "kind": "enum",
+            "values": [
+              "create",
+              "delete"
+            ],
+            "inputStyle": "singleline"
+          },
+          "location": {
+            "inputStyle": "singleline"
+          },
+          "attributes": {
+            "inputStyle": "multiline"
+          },
+          "description": {
+            "inputStyle": "multiline"
+          }
+        }
+      },
+      "_confDescriptions": {
+        "aidp_catalog_key": "Preferred ADB connection source. AIDP Console → Catalogs. Leave blank if using explicit conn_string/username/password/wallet.",
+        "conn_string": "Fallback TNS alias or descriptor. Only use when aidp_catalog_key is blank.",
+        "username": "Fallback DB user.",
+        "password": "(secret) Fallback DB password.",
+        "wallet_b64": "(secret) Base64-encoded wallet zip.",
+        "wallet_password": "(secret) Wallet password.",
+        "default_op": "Op used when the runtime param `op` is blank. Default create.",
+        "vector_db_provider": "Default vector store provider merged into attributes when the runtime param is blank. Usually 'oracle'.",
+        "object_store_credential_name": "Default DBMS_CLOUD credential for reading the object-store location.",
+        "vector_dimension": "Optional default: embedding vector dimension.",
+        "vector_distance_metric": "Optional default: distance metric (e.g. COSINE, EUCLIDEAN, DOT).",
+        "chunk_size": "Optional default: document chunk size (tokens/chars).",
+        "chunk_overlap": "Optional default: overlap between chunks.",
+        "similarity_threshold": "Optional default: minimum similarity for a match.",
+        "match_limit": "Optional default: max chunks retrieved per query.",
+        "timeout": "Connection + query timeout in seconds (index builds can be slow)."
       }
     }
   ]

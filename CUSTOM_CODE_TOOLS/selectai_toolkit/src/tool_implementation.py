@@ -1,21 +1,34 @@
 """
 AIDP Select AI Toolkit
 ======================
-Two-tool pair for natural-language-to-SQL against Oracle Autonomous Database
-via DBMS_CLOUD_AI (no MCP, no extra services).
+Full coverage of Oracle Select AI (DBMS_CLOUD_AI) against Oracle Autonomous
+Database — natural-language-to-SQL, chat, RAG, and synthetic data — with no
+MCP and no extra services. See:
+https://docs.oracle.com/en-us/iaas/autonomous-database-serverless/doc/select-ai-about.html
 
   SelectAIProvisionTool  - creates / updates the Select AI profile + agent tool
                            once per (connection, schema, table list, model).
                            Idempotent via a sha256 hash stored in an audit
-                           table (AIDP_NL2SQL_PROFILES, auto-created).
+                           table (AIDP_NL2SQL_PROFILES, auto-created). Passes
+                           through the documented CREATE_PROFILE attributes
+                           (temperature, max_tokens, conversation, constraints,
+                           object_list_mode, embedding_model, region, ...).
   NL2SQLTool             - per-turn worker. Runs
-                              SELECT DBMS_CLOUD_AI.GENERATE(:prompt,:profile,:action)
-                              FROM dual
-                           for one of RUNSQL / SHOWSQL / NARRATE / EXPLAINSQL.
+                              SELECT DBMS_CLOUD_AI.GENERATE(
+                                  :prompt,:profile,:action,:params) FROM dual
+                           for the full action set RUNSQL / SHOWSQL /
+                           EXPLAINSQL / NARRATE / CHAT / SUMMARIZE / TRANSLATE,
+                           optionally threaded through a conversation_id.
                            RUNSQL is guarded: the generated SQL is first
                            fetched via SHOWSQL, parsed, and rejected unless
                            its leading keyword (after comments/whitespace) is
                            SELECT or WITH.
+  CatalogMapTool         - walks the AIDP data lake so the agent can find a
+                           catalog/schema/table and hand the user file paths.
+  ConversationTool       - CREATE/DROP_CONVERSATION for multi-turn chat.
+  SyntheticDataTool      - GENERATE_SYNTHETIC_DATA (single + multi table);
+                           write-gated behind confirm=true.
+  VectorIndexTool        - CREATE/DROP_VECTOR_INDEX for RAG.
 
 Connection sourcing (preferred -> fallback):
   1. ``catalog_key`` runtime/conf -> aidp_io.get_connection_data(catalog_key)
@@ -151,9 +164,63 @@ END;"""
 
 _GENERATE_SQL = (
     "SELECT DBMS_CLOUD_AI.GENERATE("
-    "prompt => :prompt, profile_name => :pn, action => :action) "
+    "prompt => :prompt, profile_name => :pn, action => :action, "
+    "params => :params) "
     "FROM DUAL"
 )
+
+# DBMS_CLOUD_AI.GENERATE action set (per Oracle Select AI docs). RUNSQL keeps
+# the two-step read-only guard; the rest are single GENERATE calls.
+_GENERATE_ACTIONS = ("RUNSQL", "SHOWSQL", "EXPLAINSQL", "NARRATE", "CHAT",
+                     "SUMMARIZE", "TRANSLATE")
+
+# Create a conversation (chat history). Function form returns the id.
+_CREATE_CONVERSATION_FN = (
+    "SELECT DBMS_CLOUD_AI.CREATE_CONVERSATION(attributes => :attr) FROM DUAL"
+)
+_DROP_CONVERSATION_PLSQL = """\
+BEGIN
+  BEGIN
+    DBMS_CLOUD_AI.DROP_CONVERSATION(conversation_id => :cid, force => TRUE);
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+END;"""
+
+# Synthetic data generation (single table + multi-table via object_list).
+_SYNTHETIC_SINGLE_PLSQL = """\
+BEGIN
+  DBMS_CLOUD_AI.GENERATE_SYNTHETIC_DATA(
+    profile_name => :pn,
+    object_name  => :obj,
+    owner_name   => :own,
+    record_count => :rc,
+    user_prompt  => :up,
+    params       => :params);
+END;"""
+_SYNTHETIC_MULTI_PLSQL = """\
+BEGIN
+  DBMS_CLOUD_AI.GENERATE_SYNTHETIC_DATA(
+    profile_name => :pn,
+    object_list  => :ol,
+    params       => :params);
+END;"""
+
+# RAG vector index.
+_CREATE_VECTOR_INDEX_PLSQL = """\
+BEGIN
+  DBMS_CLOUD_AI.CREATE_VECTOR_INDEX(
+    index_name          => :idx,
+    attributes          => :attr,
+    description         => :descr,
+    wait_for_completion => :wait);
+END;"""
+_DROP_VECTOR_INDEX_PLSQL = """\
+BEGIN
+  BEGIN
+    DBMS_CLOUD_AI.DROP_VECTOR_INDEX(index_name => :idx, force => TRUE);
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+END;"""
 
 # Allow leading line comments (--...), block comments (/* ... */ including
 # hints like /*+ ... */), and arbitrary whitespace before the first keyword.
@@ -349,13 +416,36 @@ def _compute_hash(profile_name, tool_name, target_schema, tables_list,
     return digest, payload
 
 
+# DBMS_CLOUD_AI.CREATE_PROFILE attributes we pass through from conf/runtime,
+# grouped by JSON type so we coerce correctly. (Oracle Select AI docs.)
+# NOTE: the Select AI boolean `comments` attribute is handled separately via
+# `include_comments` so it never collides with the free-text `comments`
+# provision param (which is the agent-tool description / hash input).
+_PROFILE_BOOL_ATTRS = ("enforce_object_list", "constraints",
+                       "annotations", "conversation", "case_sensitive_values")
+_PROFILE_NUM_ATTRS = ("temperature", "max_tokens", "conversation_length", "seed")
+_PROFILE_STR_ATTRS = ("object_list_mode", "additional_instructions", "role",
+                      "region", "provider_endpoint", "embedding_model",
+                      "vector_index_name", "oci_apiformat", "oci_compartment_id",
+                      "azure_resource_name", "azure_deployment_name",
+                      "source_language", "target_language")
+
+
+def _as_sql_bool(v):
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    return "true" if str(v).strip().lower() in ("1", "true", "yes", "on") else "false"
+
+
 def _build_profile_attributes(provider, llm_model_id, target_schema,
-                              tables_list, credential_name):
+                              tables_list, credential_name, extra=None):
     """Build the JSON ``attributes`` blob DBMS_CLOUD_AI.CREATE_PROFILE expects.
 
     ``object_list`` is the per-table catalog Select AI uses to constrain
-    prompts (huge prompts otherwise). ``comments`` is left as a string
-    ``"true"`` to match the documented DBMS_CLOUD_AI parameter shape.
+    prompts. ``extra`` carries the documented optional attributes (comments,
+    constraints, temperature, max_tokens, conversation, role, etc.) collected
+    from conf/runtime — see _PROFILE_*_ATTRS. Bools are emitted as string
+    "true"/"false" to match the DBMS_CLOUD_AI parameter shape.
     """
     obj_list = [{"owner": (target_schema or "").upper(), "name": t}
                 for t in tables_list]
@@ -363,11 +453,55 @@ def _build_profile_attributes(provider, llm_model_id, target_schema,
         "provider": provider,
         "model": llm_model_id,
         "object_list": obj_list,
-        "comments": "true",
     }
     if credential_name:
         attr["credential_name"] = credential_name
+
+    extra = extra or {}
+    # Select AI `comments` (send column/table comments to the LLM) defaults on
+    # here because it materially helps NL2SQL accuracy. Override via
+    # `include_comments` (conf/runtime) without colliding with the free-text
+    # `comments` provision param.
+    inc = extra.get("include_comments")
+    attr["comments"] = _as_sql_bool(inc) if inc not in (None, "") else "true"
+    for k in _PROFILE_BOOL_ATTRS:
+        if k in extra and extra[k] not in (None, ""):
+            attr[k] = _as_sql_bool(extra[k])
+    for k in _PROFILE_NUM_ATTRS:
+        if k in extra and extra[k] not in (None, ""):
+            try:
+                attr[k] = float(extra[k]) if k == "temperature" else int(extra[k])
+            except (TypeError, ValueError):
+                pass
+    for k in _PROFILE_STR_ATTRS:
+        if k in extra and str(extra[k] or "").strip():
+            attr[k] = str(extra[k]).strip()
+    # stop_tokens is a JSON array; accept a list or a JSON string.
+    st = extra.get("stop_tokens")
+    if st:
+        if isinstance(st, str):
+            try:
+                st = json.loads(st)
+            except json.JSONDecodeError:
+                st = [s.strip() for s in st.split(",") if s.strip()]
+        if isinstance(st, list) and st:
+            attr["stop_tokens"] = st
     return json.dumps(attr)
+
+
+def _collect_profile_extra(rp, conf):
+    """Gather the documented optional profile attributes from runtime params
+    (preferred) then conf, so provisioning can pass them to CREATE_PROFILE."""
+    keys = (_PROFILE_BOOL_ATTRS + _PROFILE_NUM_ATTRS + _PROFILE_STR_ATTRS
+            + ("stop_tokens", "include_comments"))
+    out = {}
+    for k in keys:
+        v = rp.get(k)
+        if v in (None, ""):
+            v = get_cfg(conf, k, "")
+        if v not in (None, ""):
+            out[k] = v
+    return out
 
 
 def _build_agent_tool_attributes(profile_name):
@@ -646,8 +780,10 @@ class SelectAIProvisionTool(CustomToolBase):
                                                profile_name=profile_name)
 
             # ---- 3c) create profile + agent tool ---- #
+            profile_extra = _collect_profile_extra(runtime_params or {}, conf)
             profile_attr_json = _build_profile_attributes(
                 provider, llm_model_id, target_schema, tables_list, credential_name,
+                extra=profile_extra,
             )
             tool_attr_json = _build_agent_tool_attributes(profile_name)
             descr = (comments.strip() if comments else
@@ -808,6 +944,14 @@ class NL2SQLTool(CustomToolBase):
         )
         safety_check = bool(get_cfg(conf, "safety_check", True))
 
+        # Conversation (chat history): pass a conversation_id through GENERATE's
+        # params so Select AI threads prompts. Use StartConversationTool to mint
+        # one, or pass an existing conversation_id.
+        conversation_id = (rp.get("conversation_id")
+                           or get_cfg(conf, "conversation_id", "")).strip()
+        gen_params = (json.dumps({"conversation_id": conversation_id})
+                      if conversation_id else None)
+
         # ---- validation ---- #
         if not profile_name:
             return DebugLog.embed(fail(
@@ -816,10 +960,10 @@ class NL2SQLTool(CustomToolBase):
         if not str(prompt).strip():
             return DebugLog.embed(fail("prompt is required",
                                        error_type="ValueError"))
-        if action not in ("RUNSQL", "SHOWSQL", "NARRATE", "EXPLAINSQL"):
+        if action not in _GENERATE_ACTIONS:
             return DebugLog.embed(fail(
-                f"unknown action {action!r}; "
-                f"expected RUNSQL / SHOWSQL / NARRATE / EXPLAINSQL",
+                f"unknown action {action!r}; expected one of "
+                f"{' / '.join(_GENERATE_ACTIONS)}",
                 error_type="ValueError"))
 
         debug("NL2SQLTool start",
@@ -842,7 +986,8 @@ class NL2SQLTool(CustomToolBase):
                     with conn.cursor() as cur:
                         cur.execute(
                             _GENERATE_SQL,
-                            prompt=str(prompt), pn=profile_name, action="SHOWSQL",
+                            prompt=str(prompt), pn=profile_name, action="showsql",
+                            params=gen_params,
                         )
                         row = cur.fetchone()
                         generated_sql = (_coerce_value(row[0]) if row else "") or ""
@@ -888,12 +1033,14 @@ class NL2SQLTool(CustomToolBase):
                       truncated=truncated)
                 return DebugLog.embed(ok(payload, **payload))
 
-            # ---- SHOWSQL / NARRATE / EXPLAINSQL: single GENERATE call ---- #
+            # ---- SHOWSQL / EXPLAINSQL / NARRATE / CHAT / SUMMARIZE /
+            #      TRANSLATE: single GENERATE call ---- #
             try:
                 with conn.cursor() as cur:
                     cur.execute(
                         _GENERATE_SQL,
-                        prompt=str(prompt), pn=profile_name, action=action,
+                        prompt=str(prompt), pn=profile_name,
+                        action=action.lower(), params=gen_params,
                     )
                     row = cur.fetchone()
                     text = (_coerce_value(row[0]) if row else "") or ""
@@ -907,6 +1054,8 @@ class NL2SQLTool(CustomToolBase):
                 "profile_name": profile_name,
                 "result": text,
             }
+            if conversation_id:
+                payload["conversation_id"] = conversation_id
             if action in ("SHOWSQL", "EXPLAINSQL"):
                 payload["sql"] = text
                 payload["read_only"] = _is_read_only(text)
@@ -961,3 +1110,380 @@ class CatalogMapTool(CustomToolBase):
             return DebugLog.embed(ok(result, **result))
         except Exception as e:
             return DebugLog.embed(fail(str(e), type(e).__name__))
+
+
+# --------------------------------------------------------------------------- #
+# Tool 4: ConversationTool - Select AI chat history (CREATE/DROP_CONVERSATION)
+# --------------------------------------------------------------------------- #
+@CustomToolBase.register
+class ConversationTool(CustomToolBase):
+    """Manage a Select AI conversation so NL2SQLTool can thread multi-turn
+    chat (DBMS_CLOUD_AI.CREATE_CONVERSATION / DROP_CONVERSATION).
+
+    op=create (default) mints a conversation and returns ``conversation_id``;
+    pass that id to NL2SQLTool(conversation_id=...) on subsequent turns so the
+    model sees prior context. The profile must have ``conversation`` enabled
+    (SelectAIProvisionTool with conversation=true). op=delete drops it.
+
+    Auth/connection are identical to NL2SQLTool (catalog binding preferred,
+    explicit DSN fallback).
+    """
+
+    @classmethod
+    def _validate_config(cls, conf, runtime_params=None, **context_vars):
+        return None
+
+    @classmethod
+    def _execute_tool(cls, conf, runtime_params, **context_vars):
+        rp = runtime_params or {}
+        op = ((rp.get("op") or "").strip()
+              or get_cfg(conf, "default_op", "create")).lower()
+        catalog_key = ((rp.get("catalog_key") or "").strip()
+                       or get_cfg(conf, "catalog_key", ""))
+
+        if op not in ("create", "delete"):
+            return DebugLog.embed(fail(
+                f"unknown op {op!r}; expected create / delete",
+                error_type="ValueError"))
+
+        conversation_id = (rp.get("conversation_id") or "").strip()
+        if op == "delete" and not conversation_id:
+            return DebugLog.embed(fail(
+                "conversation_id is required for op=delete",
+                error_type="ValueError"))
+
+        debug("ConversationTool start", op=op,
+              has_id=bool(conversation_id), via_catalog=bool(catalog_key))
+
+        try:
+            conn = _open_connection(catalog_key, conf, rp, context_vars)
+        except Exception as e:
+            debug_error("ConversationTool connect failure", error=str(e))
+            return _ora_error_envelope(e)
+
+        try:
+            if op == "delete":
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute(_DROP_CONVERSATION_PLSQL, cid=conversation_id)
+                    conn.commit()
+                except Exception as e:
+                    debug_error("DROP_CONVERSATION failed", error=str(e))
+                    return _ora_error_envelope(e, stage="drop_conversation",
+                                               conversation_id=conversation_id)
+                payload = {"op": "delete", "conversation_id": conversation_id,
+                           "deleted": True}
+                return DebugLog.embed(ok(payload, **payload))
+
+            # op == create
+            attrs = {}
+            title = (rp.get("title") or "").strip()
+            description = (rp.get("description") or "").strip()
+            if title:
+                attrs["title"] = title
+            if description:
+                attrs["description"] = description
+            attr_json = json.dumps(attrs) if attrs else None
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(_CREATE_CONVERSATION_FN, attr=attr_json)
+                    row = cur.fetchone()
+                    new_id = (_coerce_value(row[0]) if row else "") or ""
+                conn.commit()
+            except Exception as e:
+                debug_error("CREATE_CONVERSATION failed", error=str(e))
+                return _ora_error_envelope(e, stage="create_conversation")
+
+            payload = {"op": "create", "conversation_id": str(new_id),
+                       "title": title, "description": description}
+            debug("ConversationTool created", conversation_id=str(new_id))
+            return DebugLog.embed(ok(payload, **payload))
+        except Exception as e:  # pragma: no cover - safety net
+            debug_error("ConversationTool unexpected failure", error=str(e))
+            return _ora_error_envelope(e)
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+# --------------------------------------------------------------------------- #
+# Tool 5: SyntheticDataTool - DBMS_CLOUD_AI.GENERATE_SYNTHETIC_DATA
+# --------------------------------------------------------------------------- #
+@CustomToolBase.register
+class SyntheticDataTool(CustomToolBase):
+    """Populate table(s) with LLM-generated synthetic rows via
+    DBMS_CLOUD_AI.GENERATE_SYNTHETIC_DATA.
+
+    Two modes:
+      * single  - object_name (+ owner_name, record_count, user_prompt) inserts
+                  rows into one table.
+      * multi   - object_list (JSON array of {"owner","name","record_count",
+                  "user_prompt"}) drives several tables in one call; pass it
+                  verbatim as the ``object_list`` param.
+
+    This is a WRITE operation (it INSERTs rows), so it is gated behind an
+    explicit ``confirm=true`` runtime param to avoid accidental data creation.
+    ``params`` is an optional JSON string of documented tuning knobs
+    (sample_rows, table_statistics, priority, comments, etc.).
+    """
+
+    @classmethod
+    def _validate_config(cls, conf, runtime_params=None, **context_vars):
+        return None
+
+    @classmethod
+    def _execute_tool(cls, conf, runtime_params, **context_vars):
+        rp = runtime_params or {}
+        profile_name = ((rp.get("profile_name") or "").strip()
+                        or get_cfg(conf, "default_profile_name", ""))
+        object_list = rp.get("object_list") or ""
+        object_name = (rp.get("object_name") or "").strip()
+        owner_name = (rp.get("owner_name") or "").strip()
+        user_prompt = rp.get("user_prompt") or None
+        params = rp.get("params") or None
+        catalog_key = ((rp.get("catalog_key") or "").strip()
+                       or get_cfg(conf, "catalog_key", ""))
+
+        record_count = None
+        rc_raw = rp.get("record_count")
+        if rc_raw not in (None, ""):
+            try:
+                record_count = int(rc_raw)
+            except (TypeError, ValueError):
+                return DebugLog.embed(fail(
+                    "record_count must be an integer",
+                    error_type="ValueError"))
+
+        confirm = str(rp.get("confirm", "")).strip().lower() in (
+            "1", "true", "yes", "on")
+
+        # ---- validation ---- #
+        if not profile_name:
+            return DebugLog.embed(fail(
+                "profile_name is required (or set default_profile_name in conf)",
+                error_type="ValueError"))
+        multi = bool(str(object_list).strip())
+        if not multi and not object_name:
+            return DebugLog.embed(fail(
+                "provide either object_name (single table) or object_list "
+                "(JSON array for multiple tables)",
+                error_type="ValueError"))
+        if not confirm:
+            return DebugLog.embed(fail(
+                "SyntheticDataTool INSERTs rows; pass confirm=true to proceed",
+                error_type="ConfirmationRequired"))
+
+        # object_list may arrive as a JSON string or a Python list; normalize
+        # to a JSON string for the CLOB bind.
+        object_list_json = None
+        if multi:
+            if isinstance(object_list, (list, dict)):
+                object_list_json = json.dumps(object_list)
+            else:
+                s = str(object_list).strip()
+                try:
+                    json.loads(s)  # validate
+                    object_list_json = s
+                except json.JSONDecodeError:
+                    return DebugLog.embed(fail(
+                        "object_list must be valid JSON (array of "
+                        "{owner,name,record_count,user_prompt})",
+                        error_type="ValueError"))
+
+        debug("SyntheticDataTool start", profile=profile_name,
+              mode="multi" if multi else "single",
+              object_name=object_name or None, record_count=record_count,
+              via_catalog=bool(catalog_key))
+
+        try:
+            conn = _open_connection(catalog_key, conf, rp, context_vars)
+        except Exception as e:
+            debug_error("SyntheticDataTool connect failure", error=str(e))
+            return _ora_error_envelope(e, profile_name=profile_name)
+
+        try:
+            try:
+                with conn.cursor() as cur:
+                    if multi:
+                        cur.execute(_SYNTHETIC_MULTI_PLSQL,
+                                    pn=profile_name, ol=object_list_json,
+                                    params=params)
+                    else:
+                        cur.execute(_SYNTHETIC_SINGLE_PLSQL,
+                                    pn=profile_name, obj=object_name,
+                                    own=(owner_name or None), rc=record_count,
+                                    up=user_prompt, params=params)
+                conn.commit()
+            except Exception as e:
+                debug_error("GENERATE_SYNTHETIC_DATA failed", error=str(e))
+                return _ora_error_envelope(e, profile_name=profile_name,
+                                           stage="generate_synthetic_data")
+
+            payload = {
+                "profile_name": profile_name,
+                "mode": "multi" if multi else "single",
+                "object_name": object_name or None,
+                "owner_name": owner_name or None,
+                "record_count": record_count,
+                "generated": True,
+            }
+            debug("SyntheticDataTool done", profile=profile_name,
+                  mode=payload["mode"])
+            return DebugLog.embed(ok(payload, **payload))
+        except Exception as e:  # pragma: no cover - safety net
+            debug_error("SyntheticDataTool unexpected failure", error=str(e))
+            return _ora_error_envelope(e, profile_name=profile_name)
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+# --------------------------------------------------------------------------- #
+# Tool 6: VectorIndexTool - Select AI RAG (CREATE/DROP_VECTOR_INDEX)
+# --------------------------------------------------------------------------- #
+@CustomToolBase.register
+class VectorIndexTool(CustomToolBase):
+    """Create or drop a Select AI vector index for RAG
+    (DBMS_CLOUD_AI.CREATE_VECTOR_INDEX / DROP_VECTOR_INDEX).
+
+    op=create builds a vector store over documents in an object-store
+    ``location`` and links it to a profile so NL2SQLTool/GENERATE can answer
+    with retrieval-augmented context. Supply the index attributes either as a
+    ready ``attributes`` JSON blob or via the convenience params
+    (profile_name, location, object_store_credential_name, vector_db_provider,
+    and any extra tuning keys merged from ``attributes``). op=delete drops it.
+
+    Auth/connection are identical to NL2SQLTool.
+    """
+
+    _VINDEX_STR_KEYS = ("vector_db_provider", "location",
+                        "object_store_credential_name", "profile_name",
+                        "vector_distance_metric", "pipeline_name",
+                        "refresh_rate")
+    _VINDEX_NUM_KEYS = ("vector_dimension", "chunk_size", "chunk_overlap",
+                        "similarity_threshold", "match_limit")
+
+    @classmethod
+    def _validate_config(cls, conf, runtime_params=None, **context_vars):
+        return None
+
+    @classmethod
+    def _execute_tool(cls, conf, runtime_params, **context_vars):
+        rp = runtime_params or {}
+        op = ((rp.get("op") or "").strip()
+              or get_cfg(conf, "default_op", "create")).lower()
+        index_name = (rp.get("index_name") or "").strip()
+        catalog_key = ((rp.get("catalog_key") or "").strip()
+                       or get_cfg(conf, "catalog_key", ""))
+
+        if op not in ("create", "delete"):
+            return DebugLog.embed(fail(
+                f"unknown op {op!r}; expected create / delete",
+                error_type="ValueError"))
+        if not index_name:
+            return DebugLog.embed(fail("index_name is required",
+                                       error_type="ValueError"))
+
+        debug("VectorIndexTool start", op=op, index_name=index_name,
+              via_catalog=bool(catalog_key))
+
+        try:
+            conn = _open_connection(catalog_key, conf, rp, context_vars)
+        except Exception as e:
+            debug_error("VectorIndexTool connect failure", error=str(e))
+            return _ora_error_envelope(e)
+
+        try:
+            if op == "delete":
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute(_DROP_VECTOR_INDEX_PLSQL, idx=index_name)
+                    conn.commit()
+                except Exception as e:
+                    debug_error("DROP_VECTOR_INDEX failed", error=str(e))
+                    return _ora_error_envelope(e, stage="drop_vector_index",
+                                               index_name=index_name)
+                payload = {"op": "delete", "index_name": index_name,
+                           "deleted": True}
+                return DebugLog.embed(ok(payload, **payload))
+
+            # op == create - assemble attributes
+            attrs = {}
+            raw = rp.get("attributes")
+            if raw:
+                if isinstance(raw, dict):
+                    attrs.update(raw)
+                else:
+                    try:
+                        attrs.update(json.loads(str(raw)))
+                    except json.JSONDecodeError:
+                        return DebugLog.embed(fail(
+                            "attributes must be valid JSON",
+                            error_type="ValueError"))
+            # convenience params override / fill the blob
+            for k in cls._VINDEX_STR_KEYS:
+                v = rp.get(k)
+                if v in (None, ""):
+                    v = get_cfg(conf, k, "")
+                if str(v or "").strip():
+                    attrs[k] = str(v).strip()
+            for k in cls._VINDEX_NUM_KEYS:
+                v = rp.get(k)
+                if v in (None, ""):
+                    v = get_cfg(conf, k, "")
+                if v not in (None, ""):
+                    try:
+                        attrs[k] = int(v)
+                    except (TypeError, ValueError):
+                        try:
+                            attrs[k] = float(v)
+                        except (TypeError, ValueError):
+                            pass
+
+            missing = [k for k in ("vector_db_provider", "location",
+                                   "profile_name") if not attrs.get(k)]
+            if missing:
+                return DebugLog.embed(fail(
+                    "vector index attributes missing required key(s): "
+                    + ", ".join(missing)
+                    + " (supply via attributes JSON or convenience params)",
+                    error_type="ValueError"))
+
+            description = (rp.get("description") or "").strip() or None
+            wait = str(rp.get("wait_for_completion", "true")).strip().lower() \
+                not in ("0", "false", "no", "off")
+            attr_json = json.dumps(attrs)
+
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(_CREATE_VECTOR_INDEX_PLSQL,
+                                idx=index_name, attr=attr_json,
+                                descr=description, wait=wait)
+                conn.commit()
+            except Exception as e:
+                debug_error("CREATE_VECTOR_INDEX failed", error=str(e))
+                return _ora_error_envelope(e, stage="create_vector_index",
+                                           index_name=index_name)
+
+            payload = {
+                "op": "create",
+                "index_name": index_name,
+                "profile_name": attrs.get("profile_name"),
+                "location": attrs.get("location"),
+                "wait_for_completion": wait,
+                "created": True,
+            }
+            debug("VectorIndexTool created", index_name=index_name)
+            return DebugLog.embed(ok(payload, **payload))
+        except Exception as e:  # pragma: no cover - safety net
+            debug_error("VectorIndexTool unexpected failure", error=str(e))
+            return _ora_error_envelope(e, index_name=index_name)
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass

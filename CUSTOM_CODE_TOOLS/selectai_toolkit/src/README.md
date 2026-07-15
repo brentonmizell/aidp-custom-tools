@@ -6,17 +6,31 @@ full picture.
 
 ## What this toolkit does
 
-Two AIDP custom tools that together turn natural-language questions into rows
-from an Oracle Autonomous Database:
+Six AIDP custom tools giving full [Oracle Select AI](https://docs.oracle.com/en-us/iaas/autonomous-database-serverless/doc/select-ai-about.html)
+coverage (`DBMS_CLOUD_AI`) against an Oracle Autonomous Database - NL2SQL,
+chat, synthetic data, and RAG:
 
 - **`SelectAIProvisionTool`** - one-time (per config) setup. Creates a
   `DBMS_CLOUD_AI` profile and a `DBMS_CLOUD_AI_AGENT` tool that bind a set of
   tables and an LLM model into a reusable Select AI artifact. Writes a row to
-  an audit table so re-runs are no-ops when nothing changed.
+  an audit table so re-runs are no-ops when nothing changed. Passes through the
+  documented profile attributes (`temperature`, `max_tokens`, `conversation`,
+  `constraints`, `annotations`, `object_list_mode`, `embedding_model`, ...).
 - **`NL2SQLTool`** - runs every agent turn. Calls
-  `SELECT DBMS_CLOUD_AI.GENERATE(:prompt, :profile, :action) FROM dual` and
-  returns rows / SQL / narration depending on the action. Enforces a
-  `SELECT`/`WITH` only policy in Python before executing.
+  `SELECT DBMS_CLOUD_AI.GENERATE(:prompt, :profile, :action, :params) FROM dual`
+  and returns rows / SQL / narration / chat depending on the action
+  (`RUNSQL`, `SHOWSQL`, `EXPLAINSQL`, `NARRATE`, `CHAT`, `SUMMARIZE`,
+  `TRANSLATE`), optionally threaded through a `conversation_id`. Enforces a
+  `SELECT`/`WITH` only policy in Python before executing `RUNSQL`.
+- **`CatalogMapTool`** - walks the AIDP data lake (catalogs -> schemas ->
+  tables / volumes / knowledge bases) so the agent can find data and hand the
+  user file paths. Uses the standard 5-key AIDP credential.
+- **`ConversationTool`** - `CREATE_CONVERSATION` / `DROP_CONVERSATION` for
+  multi-turn chat; returns a `conversation_id` for `NL2SQLTool`.
+- **`SyntheticDataTool`** - `GENERATE_SYNTHETIC_DATA` (single + multi-table);
+  write-gated behind `confirm=true`.
+- **`VectorIndexTool`** - `CREATE_VECTOR_INDEX` / `DROP_VECTOR_INDEX` for RAG
+  over object-store documents.
 
 All database I/O is direct `oracledb`; there is no MCP server and no extra
 service to deploy.
