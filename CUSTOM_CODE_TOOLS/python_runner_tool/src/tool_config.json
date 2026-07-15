@@ -275,6 +275,105 @@
         "api_version": "AIDP REST API version. Auto-filled (default 20260430).",
         "service_path": "Auto-derived from api_version (20240831->dataLakes, 20260430->aiDataPlatforms). Only set if AIDP exposes a custom path."
       }
+    },
+    {
+      "toolClassName": "RunWorkflowTool",
+      "displayName": "Run AIDP Workflow",
+      "description": "Run an AIDP workflow (Job) and return its outcome. op=run starts a job run and (wait=true) polls to completion; op=status checks a run by run_key; op=list discovers job keys. Auth + data_lake_ocid + region come from the standard 5-key credential (conf.credential_name); set workspace_key in conf.",
+      "version": "1.0.0",
+      "schema": [
+        {
+          "name": "op",
+          "type": "string",
+          "enum": [
+            "run",
+            "status",
+            "list"
+          ],
+          "default": "run",
+          "description": "run = start a job run and (by default) wait for it to finish. status = check an existing run by run_key. list = list jobs to discover job_key."
+        },
+        {
+          "name": "job_key",
+          "type": "string",
+          "description": "For op=run: the Job to run (use op=list to discover keys). Falls back to conf.job_key."
+        },
+        {
+          "name": "run_key",
+          "type": "string",
+          "description": "For op=status: the job run key returned by a prior op=run."
+        },
+        {
+          "name": "wait",
+          "type": "boolean",
+          "default": true,
+          "description": "For op=run: poll until the run finishes (default true). false returns the run_key immediately so the agent can check later with op=status."
+        },
+        {
+          "name": "workspace_key",
+          "type": "string",
+          "description": "Optional override of the workspace. Falls back to conf.workspace_key."
+        }
+      ],
+      "conf": {
+        "credential_name": "",
+        "aidp_endpoint": "",
+        "data_lake_ocid": "",
+        "region": "us-ashburn-1",
+        "workspace_key": "",
+        "job_key": "",
+        "oci_config_profile": "DEFAULT",
+        "wait": true,
+        "max_wait_seconds": 300,
+        "poll_seconds": 5,
+        "http_timeout": 30
+      },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
+      "_uiHints": {
+        "conf": {
+          "credential_name": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "help": "Standard 5-key credential (tenancy/user/fingerprint/private_key/data_lake_ocid). Region inferred; data_lake_ocid pulled from the bundle."
+          },
+          "aidp_endpoint": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "help": "Optional \u2014 derived from the region as https://aidp.<region>.oci.oraclecloud.com when empty."
+          },
+          "data_lake_ocid": {
+            "kind": "dropdown",
+            "source": "dataLakes",
+            "help": "Optional \u2014 comes from the credential bundle."
+          },
+          "region": {
+            "kind": "dropdown",
+            "source": "regions",
+            "help": "Optional \u2014 inferred from data_lake_ocid."
+          },
+          "workspace_key": {
+            "kind": "input",
+            "inputStyle": "singleline"
+          },
+          "job_key": {
+            "kind": "input",
+            "inputStyle": "singleline"
+          },
+          "max_wait_seconds": {
+            "kind": "input"
+          },
+          "poll_seconds": {
+            "kind": "input"
+          }
+        },
+        "schema": {
+          "op": {
+            "kind": "enum"
+          }
+        }
+      }
     }
   ]
 }

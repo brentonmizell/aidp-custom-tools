@@ -816,3 +816,170 @@ def _nb_err(e):
         except Exception:
             pass
     return err(detail, type(e).__name__ if not isinstance(e, str) else "ToolError")
+
+
+# --------------------------------------------------------------------------- #
+# Workflow (AIDP job) runner
+# --------------------------------------------------------------------------- #
+
+# lifecycleState values that mean the run is finished.
+_JOB_TERMINAL = {"SUCCEEDED", "SUCCESS", "FAILED", "FAILURE", "CANCELED",
+                 "CANCELLED", "STOPPED", "ABORTED", "SKIPPED"}
+
+
+@CustomToolBase.register
+class RunWorkflowTool(CustomToolBase):
+    """Run an AIDP workflow (Job) and return its outcome.
+
+    Operations (op):
+      run   (default) — start a job run (POST /jobRuns) and, if wait=true,
+                        poll GET /jobRuns/{runKey} until the run reaches a
+                        terminal lifecycleState (or max_wait_seconds elapses,
+                        in which case it returns the running run key so the
+                        agent can check later with op=status).
+      status          — GET /jobRuns/{runKey} for an existing run.
+      list            — GET /jobs to discover job keys + names.
+
+    Jobs are workspace-scoped on the 20240831/dataLakes surface:
+      {endpoint}/20240831/dataLakes/{lake}/workspaces/{workspaceKey}/jobs
+      {endpoint}/20240831/dataLakes/{lake}/workspaces/{workspaceKey}/jobRuns
+
+    Auth + connection use the standard 5-key credential (conf.credential_name):
+    signer from the bundle, data_lake_ocid + inferred region from the bundle.
+    workspace_key is workspace-specific — set it in conf.
+    """
+
+    @classmethod
+    def _execute_tool(cls, conf, runtime_params, **context_vars):
+        debug("RunWorkflowTool._execute_tool start")
+        from .utils.oci_signer import get_auth_provider, make_signed_request
+
+        rp = runtime_params or {}
+        op = (rp.get("op") or "run").lower()
+
+        # Standard credential model: lake + region from the credential bundle.
+        region = ""
+        try:
+            from .utils.credential_resolver import enrich_conf_from_bundle, resolve_region
+            conf = enrich_conf_from_bundle(conf)
+            region = resolve_region(conf_region=get_cfg(conf, "region", ""))
+        except ImportError:
+            region = get_cfg(conf, "region", "")
+
+        lake = (get_cfg(conf, "lake_ocid", "") or get_cfg(conf, "data_lake_ocid", ""))
+        endpoint = (get_cfg(conf, "aidp_endpoint", "").rstrip("/")
+                    or (f"https://aidp.{region}.oci.oraclecloud.com" if region else ""))
+        workspace_key = (rp.get("workspace_key") or get_cfg(conf, "workspace_key", "")
+                         or get_cfg(conf, "workspace_id", ""))
+        credential_name = get_cfg(conf, "credential_name", "")
+        oci_profile = get_cfg(conf, "oci_config_profile", "DEFAULT")
+        timeout = get_cfg(conf, "http_timeout", 30)
+
+        if not (endpoint and lake and workspace_key):
+            return DebugLog.embed(err(
+                "aidp_endpoint (or region), data_lake_ocid, and workspace_key "
+                "are required. data_lake_ocid + region come from the credential "
+                "bundle; set workspace_key in conf.", "ValidationError"))
+
+        base = (f"{endpoint}/20240831/dataLakes/{_quote(lake, safe='')}"
+                f"/workspaces/{_quote(workspace_key, safe='')}")
+
+        try:
+            signer = get_auth_provider(oci_profile, credential_name=credential_name)
+        except Exception as e:
+            return DebugLog.embed(err(f"could not initialize OCI signer: {e}", "AuthError"))
+
+        try:
+            if op == "list":
+                resp = make_signed_request(signer, "GET", f"{base}/jobs", timeout=timeout)
+                items = (resp.json() or {}).get("items", [])
+                jobs = [{"key": j.get("key"), "name": j.get("name") or j.get("displayName"),
+                         "lifecycleState": j.get("lifecycleState")} for j in items]
+                return DebugLog.embed(ok({"operation": "list", "count": len(jobs),
+                                          "jobs": jobs}))
+
+            if op == "status":
+                run_key = (rp.get("run_key") or "").strip()
+                if not run_key:
+                    return DebugLog.embed(err("run_key is required for op=status",
+                                              "ValidationError"))
+                resp = make_signed_request(signer, "GET",
+                                           f"{base}/jobRuns/{_quote(run_key, safe='')}",
+                                           timeout=timeout)
+                return DebugLog.embed(ok(cls._summarize_run(resp.json(), run_key)))
+
+            # op == "run"
+            job_key = (rp.get("job_key") or get_cfg(conf, "job_key", "")).strip()
+            if not job_key:
+                return DebugLog.embed(err("job_key is required for op=run (use "
+                                          "op=list to discover job keys)",
+                                          "ValidationError"))
+            body = json.dumps({"jobKey": job_key})
+            resp = make_signed_request(signer, "POST", f"{base}/jobRuns", body=body,
+                                       timeout=timeout)
+            run = resp.json() or {}
+            run_key = run.get("key") or run.get("runKey") or run.get("jobRunKey")
+            if not run_key:
+                return DebugLog.embed(ok({"operation": "run", "status": "started",
+                                          "note": "job run started but no run key "
+                                                  "was returned", "raw": run}))
+            debug(f"RunWorkflowTool: started job {job_key} run {run_key}")
+
+            wait = rp.get("wait", get_cfg(conf, "wait", True))
+            if isinstance(wait, str):
+                wait = wait.strip().lower() in ("1", "true", "yes", "on")
+            if not wait:
+                return DebugLog.embed(ok({"operation": "run", "status": "started",
+                                          "run_key": run_key, "job_key": job_key,
+                                          "note": "wait=false — check with op=status"}))
+
+            # Poll to completion (bounded).
+            import time
+            max_wait = int(get_cfg(conf, "max_wait_seconds", 300))
+            poll_every = max(2, int(get_cfg(conf, "poll_seconds", 5)))
+            waited = 0
+            last = run
+            while waited < max_wait:
+                time.sleep(poll_every)
+                waited += poll_every
+                r = make_signed_request(signer, "GET",
+                                        f"{base}/jobRuns/{_quote(run_key, safe='')}",
+                                        timeout=timeout)
+                last = r.json() or {}
+                state = str(last.get("lifecycleState") or "").upper()
+                if state in _JOB_TERMINAL:
+                    out = cls._summarize_run(last, run_key)
+                    out["operation"] = "run"
+                    out["job_key"] = job_key
+                    out["waited_seconds"] = waited
+                    return DebugLog.embed(ok(out))
+            # Timed out waiting — hand back the run key.
+            out = cls._summarize_run(last, run_key)
+            out.update({"operation": "run", "job_key": job_key,
+                        "status": "running",
+                        "note": f"still running after {max_wait}s — check with "
+                                f"op=status and run_key={run_key}"})
+            return DebugLog.embed(ok(out))
+        except Exception as e:
+            return DebugLog.embed(_nb_err(e))
+
+    @staticmethod
+    def _summarize_run(run, run_key):
+        run = run or {}
+        state = str(run.get("lifecycleState") or "").upper()
+        tasks = run.get("taskToTaskRunMap") or run.get("tasks") or {}
+        task_states = {}
+        if isinstance(tasks, dict):
+            for name, tr in tasks.items():
+                if isinstance(tr, dict):
+                    task_states[name] = tr.get("lifecycleState")
+        return {
+            "run_key": run.get("key") or run_key,
+            "lifecycleState": state,
+            "succeeded": state in ("SUCCEEDED", "SUCCESS"),
+            "timeCreated": run.get("timeCreated"),
+            "timeStarted": run.get("timeStarted"),
+            "timeFinished": run.get("timeFinished") or run.get("timeEnded"),
+            "task_states": task_states,
+            "lifecycleStateDetails": run.get("lifecycleStateDetails"),
+        }
