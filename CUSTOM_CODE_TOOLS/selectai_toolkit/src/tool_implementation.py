@@ -922,3 +922,42 @@ class NL2SQLTool(CustomToolBase):
                 conn.close()
             except Exception:
                 pass
+
+
+@CustomToolBase.register
+class CatalogMapTool(CustomToolBase):
+    """Discover the AIDP data landscape so the Select AI agent can find a
+    catalog / schema / table to query and hand the user file locations.
+
+    Walks the whole Master catalog (catalogs -> schemas -> tables/volumes/
+    knowledge bases) and returns a nested tree + a readable text summary.
+    Volumes include a `location` (/Volumes/<catalog>/<schema>/<volume>) so
+    the agent can give the user a file path. Pass catalog_key (a catalog
+    NAME) to scope to one catalog; omit to map the whole data lake.
+
+    Auth + connection use the standard 5-key AIDP credential
+    (conf.credential_name): signer + data_lake_ocid + inferred region from
+    the bundle. This is the same walk the aidp_catalog_toolkit exposes,
+    bundled here so a Select AI flow doesn't need a second tool to explore.
+    """
+
+    @classmethod
+    def _execute_tool(cls, conf, runtime_params, **context_vars):
+        debug("CatalogMapTool._execute_tool start")
+        try:
+            only_catalog = (runtime_params.get("catalog_key")
+                            or get_cfg(conf, "catalog_key", "")).strip()
+            timeout = get_cfg(conf, "http_timeout", 30)
+            try:
+                from .utils.aidp_discovery import map_data_lake
+            except ImportError as ex:
+                return DebugLog.embed(fail(
+                    f"aidp_discovery not bundled: {ex}", "ConfigError"))
+            result = map_data_lake(conf, get_cfg, only_catalog, timeout)
+            if not result.get("ok"):
+                return DebugLog.embed(fail(
+                    result.get("error", "map failed"),
+                    result.get("error_type", "ToolError")))
+            return DebugLog.embed(ok(result, **result))
+        except Exception as e:
+            return DebugLog.embed(fail(str(e), type(e).__name__))

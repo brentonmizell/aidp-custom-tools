@@ -364,6 +364,66 @@
         "private_key_content": "(secret) PEM private key \u2014 only needed when auth_mode=user_principal.",
         "pass_phrase": "(secret) Private key passphrase."
       }
+    },
+    {
+      "toolClassName": "CatalogMapTool",
+      "displayName": "Catalog Map",
+      "description": "Discover the AIDP data landscape so the agent can find a catalog/schema/table to query and hand the user file locations. Walks catalogs -> schemas -> tables/volumes/knowledge bases and returns a nested tree + text summary; volumes include a /Volumes/<catalog>/<schema>/<volume> location. Pass catalog_key (a NAME) to scope, or omit to map everything. Uses the standard 5-key AIDP credential (conf.credential_name).",
+      "version": "1.0.0",
+      "schema": [
+        {
+          "name": "catalog_key",
+          "type": "string",
+          "description": "Optional. A catalog NAME (e.g. construction_catalog) to scope the walk to one catalog. Omit to map every catalog in the data lake."
+        }
+      ],
+      "conf": {
+        "credential_name": "",
+        "data_lake_ocid": "",
+        "region": "us-ashburn-1",
+        "catalog_key": "",
+        "api_version": "20260430",
+        "service_path": "aiDataPlatforms",
+        "http_timeout": 30
+      },
+      "auth": {
+        "authType": "OCI_RESOURCE_PRINCIPAL"
+      },
+      "_uiHints": {
+        "conf": {
+          "credential_name": {
+            "kind": "input",
+            "inputStyle": "singleline",
+            "help": "Standard 5-key AIDP credential (tenancy/user/fingerprint/private_key/data_lake_ocid). Region inferred; data_lake_ocid pulled from the bundle."
+          },
+          "data_lake_ocid": {
+            "kind": "dropdown",
+            "source": "dataLakes",
+            "help": "Optional \u2014 comes from the credential bundle."
+          },
+          "region": {
+            "kind": "dropdown",
+            "source": "regions",
+            "help": "Optional \u2014 inferred from data_lake_ocid."
+          },
+          "catalog_key": {
+            "kind": "dropdown",
+            "source": "catalogs",
+            "help": "Optional \u2014 scope the walk to one catalog."
+          },
+          "api_version": {
+            "kind": "readonly"
+          },
+          "service_path": {
+            "kind": "readonly"
+          }
+        },
+        "schema": {
+          "catalog_key": {
+            "inputStyle": "singleline"
+          }
+        }
+      }
     }
   ]
 }
